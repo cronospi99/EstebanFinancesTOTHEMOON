@@ -453,6 +453,27 @@ export function useExpectedYield() {
   }, [accounts, fxRate])
 }
 
+/**
+ * Cashback recibido en una cuenta, en total y en el mes en curso.
+ *
+ * Sale de los propios movimientos en vez de un contador aparte: así no puede
+ * desincronizarse si se borra o edita un movimiento.
+ */
+export function useCashback(accountId?: string) {
+  const { transactions } = useFinance()
+  return useMemo(() => {
+    const mes = monthKey()
+    let total = 0, esteMes = 0
+    for (const t of transactions) {
+      if (t.categoryId !== 'cashback' || t.type !== 'income') continue
+      if (accountId && t.accountId !== accountId) continue
+      total += t.amount
+      if (monthKey(t.occurredAt) === mes) esteMes += t.amount
+    }
+    return { total, esteMes }
+  }, [transactions, accountId])
+}
+
 export function useMonthSummary(month = monthKey()) {
   const { transactions } = useFinance()
   return useMemo(() => {
@@ -539,6 +560,7 @@ const rowToAccount = (r: Row): Account => ({
   balance: Number(r.balance), currency: r.currency, color: r.color,
   apy: r.apy != null ? Number(r.apy) : undefined,
   pockets: Array.isArray(r.pockets) ? r.pockets : [],
+  creditLimit: r.credit_limit != null ? Number(r.credit_limit) : undefined,
   installments: r.installments ?? undefined,
   installmentsPaid: r.installments_paid ?? undefined,
 })
@@ -546,6 +568,7 @@ const accountToRow = (a: Account) => ({
   id: a.id, name: a.name, institution: a.institution, type: a.type,
   balance: a.balance, currency: a.currency, color: a.color,
   apy: a.apy ?? null, pockets: a.pockets ?? [],
+  credit_limit: a.creditLimit ?? null,
   installments: a.installments ?? null, installments_paid: a.installmentsPaid ?? null,
 })
 const accountPatchToRow = (p: Partial<Account>) => {
@@ -558,6 +581,7 @@ const accountPatchToRow = (p: Partial<Account>) => {
   if (p.color !== undefined) r.color = p.color
   if (p.apy !== undefined) r.apy = p.apy
   if (p.pockets !== undefined) r.pockets = p.pockets
+  if (p.creditLimit !== undefined) r.credit_limit = p.creditLimit
   if (p.installments !== undefined) r.installments = p.installments
   if (p.installmentsPaid !== undefined) r.installments_paid = p.installmentsPaid
   return r

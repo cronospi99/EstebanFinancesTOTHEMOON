@@ -163,6 +163,9 @@ export default function ExpensesPage() {
                       {TYPE_LABEL[acc.type]}
                       {pockets > 0 && ` · ${pockets} bolsillo${pockets > 1 ? 's' : ''}`}
                       {acc.apy ? ` · ${formatPercent(acc.apy, false, 1)} E.A.` : ''}
+                      {acc.type === 'credit' && acc.creditLimit
+                        ? ` · ${formatMoney(Math.max(acc.creditLimit - Math.abs(Math.min(acc.balance, 0)), 0), acc.currency)} libre`
+                        : ''}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">

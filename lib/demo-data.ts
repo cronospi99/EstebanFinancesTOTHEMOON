@@ -27,7 +27,7 @@ export const DEMO_ACCOUNTS: Account[] = [
   {
     id: 'acc_rappicard', name: 'RappiCard', institution: 'RappiCard', type: 'credit',
     balance: -2_380_000, currency: 'COP', color: '#141414',
-    installments: 12, installmentsPaid: 4,
+    creditLimit: 8_000_000, installments: 12, installmentsPaid: 4,
   },
   {
     id: 'acc_littio', name: 'Littio USD', institution: 'Littio', type: 'savings',
@@ -62,6 +62,8 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   { id: 't16', accountId: 'acc_rappicard', categoryId: 'installment', amount: 198_000, type: 'expense', description: 'Cuota 4/12 — portátil', occurredAt: daysAgo(14, 9) },
   { id: 't17', accountId: 'acc_banco', categoryId: 'internet', amount: 89_900, type: 'expense', description: 'Claro Hogar', occurredAt: daysAgo(16, 17) },
   { id: 't18', accountId: 'acc_banco', categoryId: 'freelance', amount: 3_200_000, type: 'income', description: 'Proyecto freelance', occurredAt: daysAgo(18, 12) },
+  { id: 't19', accountId: 'acc_rappicard', categoryId: 'cashback', amount: 32_400, type: 'income', description: 'Cashback RappiCard', occurredAt: daysAgo(2, 10) },
+  { id: 't20', accountId: 'acc_lulo', categoryId: 'cashback', amount: 18_900, type: 'income', description: 'Cashback Lulo', occurredAt: daysAgo(10, 14) },
 ]
 
 export const DEMO_BUDGETS: Budget[] = [

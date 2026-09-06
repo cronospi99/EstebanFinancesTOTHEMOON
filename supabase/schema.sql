@@ -26,6 +26,7 @@ create table if not exists public.accounts (
   -- aparte porque no existen sin su cuenta y siempre se leen con ella.
   pockets     jsonb not null default '[]'::jsonb,
   -- Solo tarjetas de crédito.
+  credit_limit      numeric(16,2),
   installments      integer,
   installments_paid integer,
   created_at  timestamptz not null default now()
@@ -190,6 +191,7 @@ end $$;
 -- ===========================================================================
 alter table public.accounts     add column if not exists apy numeric(6,3);
 alter table public.accounts     add column if not exists pockets jsonb not null default '[]'::jsonb;
+alter table public.accounts     add column if not exists credit_limit numeric(16,2);
 alter table public.accounts     add column if not exists installments integer;
 alter table public.accounts     add column if not exists installments_paid integer;
 alter table public.transactions add column if not exists pocket_id text;
