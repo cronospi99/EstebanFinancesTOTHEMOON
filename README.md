@@ -54,6 +54,10 @@ arranca en **Modo Demo** con datos de ejemplo guardados en el navegador.
 Con RLS activo, la llave anónima **no** puede leer filas de otro usuario: la
 privacidad la garantiza la base de datos, no el cliente.
 
+`middleware.ts` completa el cuadro: refresca el token en cada petición —sin eso
+la sesión caduca y el móvil te expulsa— y redirige a `/login` a quien no tenga
+sesión. En Modo Demo no hace nada, para que la app siga usable sin configurar.
+
 ---
 
 ## Cotizaciones
@@ -132,6 +136,48 @@ npm run build      # build de producción
 npm run start      # servir el build
 npm run typecheck  # TypeScript sin emitir
 ```
+
+## Acceder desde el teléfono
+
+### Opción rápida: misma red Wi-Fi
+
+Sin desplegar nada, para probar en el móvil mientras desarrollas:
+
+```bash
+npm run dev -- -H 0.0.0.0
+```
+
+Abre `http://<IP-de-tu-computador>:3000` en el teléfono. Solo funciona en tu red
+y con el computador encendido. Sin HTTPS la PWA **no** es instalable.
+
+### Uso real: desplegar en Vercel
+
+El repositorio **puede seguir siendo privado**: Vercel despliega repos privados
+en el plan gratuito.
+
+1. [vercel.com/new](https://vercel.com/new) → importa el repositorio.
+2. Next.js se detecta solo; no hay que tocar la configuración de build.
+3. En **Environment Variables** añade lo mismo que tienes en `.env.local`:
+
+   | Variable | Valor |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | tu URL de Supabase |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | tu llave anónima |
+   | `ALPHA_VANTAGE_API_KEY` | opcional |
+
+4. Deploy. Obtienes una URL HTTPS que abre en cualquier lugar.
+
+Después, en Supabase → **Authentication → URL Configuration**, añade tu dominio
+de Vercel a *Site URL* y a *Redirect URLs* (`https://tu-app.vercel.app/auth/callback`),
+o el enlace mágico redirigirá a `localhost` y no podrás entrar desde el móvil.
+
+> **Sobre la privacidad al desplegar.** Con las llaves de Supabase configuradas,
+> `middleware.ts` exige sesión en todas las rutas: quien abra la URL sin haber
+> iniciado sesión solo ve `/login`. Sin llaves, la app queda en Modo Demo y es
+> pública para cualquiera que tenga el enlace — no despliegues así si no quieres
+> que se pueda entrar.
+
+---
 
 ## Instalar como app
 
