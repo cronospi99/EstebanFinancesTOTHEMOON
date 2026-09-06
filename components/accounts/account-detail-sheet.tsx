@@ -30,6 +30,9 @@ export function AccountDetailSheet({
   const [apyDraft, setApyDraft] = useState('')
   const [editPocket, setEditPocket] = useState<string | null>(null)
   const [pDraft, setPDraft] = useState({ name: '', balance: '', apy: '' })
+  const [editSaldo, setEditSaldo] = useState(false)
+  const [saldoDraft, setSaldoDraft] = useState('')
+  const [saldoNeg, setSaldoNeg] = useState(false)
   const [editCupo, setEditCupo] = useState(false)
   const [cupoDraft, setCupoDraft] = useState('')
 
@@ -69,12 +72,71 @@ export function AccountDetailSheet({
           </div>
         </div>
 
-        {/* Saldo */}
+        {/* Saldo, editable. El saldo real se desvía del calculado —una compra
+            que no se registró, un cobro del banco— y sin poder corregirlo a
+            mano la app deja de cuadrar con la realidad. */}
         <div className="mb-5 rounded-2xl border border-hairline bg-white/[0.04] p-4">
-          <p className="mb-1 text-[12px] text-label-secondary">Saldo total</p>
-          <p className={cn('tnum text-[30px] font-bold leading-none', total < 0 ? 'text-accent-red' : 'text-label')}>
-            {formatMoney(total, cur)}
-          </p>
+          {editSaldo ? (
+            <>
+              <p className="mb-2 text-[12px] text-label-secondary">
+                {pockets.length > 0 ? 'Saldo general (sin bolsillos)' : 'Saldo'}
+              </p>
+              <div className="mb-2 flex items-center gap-2">
+                <button
+                  onClick={() => { haptic(6); setSaldoNeg((n) => !n) }}
+                  aria-label={saldoNeg ? 'Cambiar a positivo' : 'Cambiar a negativo'}
+                  className={cn(
+                    'press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[18px] font-bold',
+                    saldoNeg ? 'border-transparent bg-accent-red text-white' : 'border-hairline text-label-secondary',
+                  )}
+                >
+                  −
+                </button>
+                <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2">
+                  <span className="text-[16px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
+                  <input
+                    autoFocus value={saldoDraft ? formatKeypad(saldoDraft) : ''} inputMode="decimal"
+                    onChange={(e) => setSaldoDraft(e.target.value.replace(/[^\d,]/g, ''))}
+                    placeholder="0"
+                    className="tnum w-full bg-transparent text-[20px] font-semibold text-label placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setEditSaldo(false)}
+                  className="press flex-1 rounded-xl border border-hairline py-2.5 text-[14px] text-label-secondary">
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    haptic([14, 30])
+                    const v = parseKeypad(saldoDraft)
+                    updateAccount(account.id, { balance: saldoNeg ? -v : v })
+                    setEditSaldo(false)
+                  }}
+                  className="press flex-1 rounded-xl bg-accent-blue py-2.5 text-[14px] font-semibold text-white">
+                  Guardar saldo
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={() => {
+                haptic(6)
+                setSaldoDraft(String(Math.abs(account.balance)).replace('.', ','))
+                setSaldoNeg(account.balance < 0)
+                setEditSaldo(true)
+              }}
+              className="w-full text-left"
+            >
+              <p className="mb-1 flex items-center gap-1.5 text-[12px] text-label-secondary">
+                Saldo total <Pencil size={11} className="text-label-tertiary" />
+              </p>
+              <p className={cn('tnum text-[30px] font-bold leading-none', total < 0 ? 'text-accent-red' : 'text-label')}>
+                {formatMoney(total, cur)}
+              </p>
+            </button>
+          )}
           {cur === 'USD' && (
             <p className="tnum mt-1 text-[13px] text-label-tertiary">≈ {formatMoney(total * fxRate)}</p>
           )}
