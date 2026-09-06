@@ -1,19 +1,31 @@
 /**
- * Service worker mínimo.
+ * Service worker.
  *
- * Estrategia: network-first con respaldo en caché. En una app de finanzas
- * mostrar un saldo desactualizado es peor que mostrar un error, así que la red
- * siempre gana; la caché solo entra cuando no hay conexión.
+ * Solo cachea recursos inmutables. La versión anterior cacheaba todo lo del
+ * mismo origen salvo /api/, y ese fue el origen del bloqueo tras navegar un
+ * rato: el App Router pide cargas RSC (…?_rsc=…) y, ante cualquier fallo de
+ * red, el respaldo `caches.match('/')` le devolvía un documento HTML en vez
+ * del payload esperado. El router se rompía y ningún botón respondía hasta
+ * recargar a mano. Tras un redespliegue era peor todavía, porque el HTML
+ * cacheado apuntaba a chunks de una compilación que ya no existe.
  *
- * Las llamadas a /api/ nunca se cachean: un precio viejo no debe fingir ser actual.
+ * Regla ahora: los documentos y las cargas RSC van SIEMPRE a la red, sin
+ * copia ni respaldo. Solo se guardan ficheros cuyo nombre lleva el hash del
+ * contenido, o que no cambian nunca.
  */
-const CACHE = 'finanzas-v1'
-const PRECACHE = ['/', '/gastos', '/inversiones', '/ajustes', '/manifest.webmanifest']
+const CACHE = 'finanzas-v2'
+
+/** Rutas cuyo contenido es inmutable o irrelevante para la coherencia del router. */
+const cacheable = (url) =>
+  url.pathname.startsWith('/_next/static/') ||   // nombre con hash de contenido
+  url.pathname.startsWith('/institutions/') ||   // logotipos
+  url.pathname === '/manifest.webmanifest' ||
+  /^\/(icon-\d+|apple-touch-icon)\.png$/.test(url.pathname)
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()),
-  )
+  // Entra en servicio de inmediato: si un usuario arrastra el SW anterior,
+  // esperar al cierre de todas las pestañas lo dejaría roto indefinidamente.
+  event.waitUntil(self.skipWaiting())
 })
 
 self.addEventListener('activate', (event) => {
@@ -30,15 +42,25 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
-  if (url.pathname.startsWith('/api/')) return
+
+  // Documentos y cargas del router: red y solo red. Sin excepciones.
+  const esDocumento = request.mode === 'navigate' || request.destination === 'document'
+  const esRSC = url.searchParams.has('_rsc') || request.headers.get('RSC') === '1'
+  if (esDocumento || esRSC || url.pathname.startsWith('/api/')) return
+
+  if (!cacheable(url)) return
 
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const copy = response.clone()
-        caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {})
-        return response
+    caches.match(request).then((hit) => {
+      if (hit) return hit
+      return fetch(request).then((res) => {
+        // Solo se guarda una respuesta buena y completa.
+        if (res.ok && res.status === 200 && res.type === 'basic') {
+          const copia = res.clone()
+          caches.open(CACHE).then((c) => c.put(request, copia)).catch(() => {})
+        }
+        return res
       })
-      .catch(() => caches.match(request).then((cached) => cached ?? caches.match('/'))),
+    }),
   )
 })
