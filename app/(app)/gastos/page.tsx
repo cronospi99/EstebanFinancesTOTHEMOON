@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
@@ -8,6 +9,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
 import { SpendDonut } from '@/components/expenses/spend-donut'
 import { TransactionList } from '@/components/expenses/transaction-list'
+import { AddAccountSheet } from '@/components/accounts/add-account-sheet'
 import { categoryById, CO_INSTITUTIONS } from '@/lib/categories'
 import { formatMoney, monthName } from '@/lib/format'
 import { useFinance, useMonthSummary, useSpendByCategory } from '@/lib/store'
@@ -21,6 +23,7 @@ const TYPE_LABEL: Record<AccountType, string> = {
 
 export default function ExpensesPage() {
   const [tab, setTab] = useState<'gastos' | 'cuentas'>('gastos')
+  const [addAccountOpen, setAddAccountOpen] = useState(false)
   const { accounts, transactions } = useFinance()
   const { expense, income, transactions: monthTx } = useMonthSummary()
   const byCategory = useSpendByCategory()
@@ -113,6 +116,15 @@ export default function ExpensesPage() {
           transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
           className="space-y-6"
         >
+          {!accounts.length && (
+            <Card className="p-8 text-center">
+              <p className="text-[15px] font-medium text-label">Aún no tienes cuentas</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
+                Crea la primera para poder registrar movimientos.
+              </p>
+            </Card>
+          )}
+
           <Card className="divide-y divide-hairline overflow-hidden">
             {accounts.map((acc) => (
               <div key={acc.id} className="flex items-center gap-3 px-4 py-3.5">
@@ -132,6 +144,15 @@ export default function ExpensesPage() {
             ))}
           </Card>
 
+          <button
+            onClick={() => setAddAccountOpen(true)}
+            className="press flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline
+                       bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue"
+          >
+            <Plus size={17} />
+            Añadir cuenta
+          </button>
+
           <section>
             <CardHeader title="Instituciones soportadas" />
             <div className="flex flex-wrap gap-2">
@@ -148,6 +169,8 @@ export default function ExpensesPage() {
           </section>
         </motion.div>
       )}
+
+      <AddAccountSheet open={addAccountOpen} onClose={() => setAddAccountOpen(false)} />
     </div>
   )
 }

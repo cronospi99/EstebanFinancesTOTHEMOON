@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
@@ -28,8 +29,15 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   // Preselección: la cuenta más usada y una categoría válida. Sin esto el
   // usuario tendría que tocar 3 cosas antes de poder teclear el monto.
+  //
+  // Se revalida contra la lista actual, no solo cuando está vacío: este sheet
+  // se monta antes de que el store cargue, así que llega a fijar un id de los
+  // datos demo. Si no se corrige al llegar las cuentas reales, el movimiento se
+  // guarda apuntando a una cuenta inexistente —el saldo no se descuenta y en
+  // Supabase el INSERT viola la clave foránea.
   useEffect(() => {
-    if (!accountId && accounts.length) setAccountId(accounts[0].id)
+    if (!accounts.length) return
+    if (!accounts.some((a) => a.id === accountId)) setAccountId(accounts[0].id)
   }, [accounts, accountId])
 
   useEffect(() => {
@@ -67,6 +75,28 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
 
     // Deja ver el check antes de cerrar: confirma sin robar tiempo.
     setTimeout(onClose, 620)
+  }
+
+  if (open && !accounts.length) {
+    return (
+      <Sheet open={open} onClose={onClose}>
+        <div className="px-5 pb-8 pt-4 text-center">
+          <h2 className="text-[17px] font-semibold text-label">Primero crea una cuenta</h2>
+          <p className="mx-auto mt-2 max-w-[260px] text-[14px] leading-relaxed text-label-secondary">
+            Todo movimiento pertenece a una cuenta, así que necesitas al menos una
+            antes de registrar gastos.
+          </p>
+          <Link
+            href="/gastos"
+            onClick={onClose}
+            className="mt-5 inline-flex h-[48px] items-center justify-center rounded-2xl bg-accent-blue
+                       px-6 text-[16px] font-semibold text-white shadow-glow"
+          >
+            Ir a Cuentas
+          </Link>
+        </div>
+      </Sheet>
+    )
   }
 
   return (
