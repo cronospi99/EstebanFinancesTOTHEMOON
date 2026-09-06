@@ -108,16 +108,17 @@ export interface Institution {
 export const CO_INSTITUTIONS: Institution[] = [
   // Banca tradicional
   { name: 'Bancolombia', color: '#FDDA24', fg: '#1A1A1A', short: 'BC', logo: 'bancolombia' },
-  { name: 'Davivienda', color: '#ED1C24', short: 'DV' },
-  { name: 'BBVA', color: '#004481', short: 'BB' },
-  { name: 'Banco de Bogotá', color: '#00489A', short: 'BdB' },
+  { name: 'Davivienda', color: '#ED1C24', short: 'DV', logo: 'davivienda' },
+  { name: 'BBVA', color: '#004481', short: 'BB', logo: 'bbva' },
+  { name: 'Banco de Bogotá', color: '#00489A', short: 'BdB', logo: 'banco-bogota' },
   { name: 'Scotiabank Colpatria', color: '#EC111A', short: 'SC' },
 
   // Neobancos y billeteras
   { name: 'Nequi', color: '#DA0081', short: 'N', logo: 'nequi' },
   { name: 'Daviplata', color: '#ED1C24', short: 'DP', logo: 'daviplata' },
+  { name: 'DaviBank', color: '#E30613', short: 'DB', logo: 'davibank' },
   { name: 'Nu', color: '#820AD1', short: 'nu', logo: 'nu' },
-  { name: 'Lulo Bank', color: '#00D1B0', fg: '#0A2B26', short: 'LB' },
+  { name: 'Lulo Bank', color: '#00D1B0', fg: '#0A2B26', short: 'LB', logo: 'lulo' },
   { name: 'Dale!', color: '#10395E', short: 'd!', logo: 'dale' },
   { name: 'Ualá', color: '#F2F2F7', fg: '#1B1B4B', short: 'uá', logo: 'uala' },
 
@@ -138,7 +139,7 @@ export const CO_INSTITUTIONS: Institution[] = [
   { name: 'Lemon Cash', color: '#0FD65C', fg: '#0A2B14', short: 'LC', logo: 'lemon-cash' },
   { name: 'Uphold', color: '#49CC68', fg: '#0A2B14', short: 'U', logo: 'uphold' },
 
-  { name: 'Efectivo', color: '#30D158', fg: '#0A2B14', short: '$' },
+  { name: 'Efectivo', color: '#30D158', fg: '#0A2B14', short: '$', logo: 'efectivo' },
 ]
 
 /** Busca una entidad por nombre; útil para reconstruir el badge desde una cuenta. */
