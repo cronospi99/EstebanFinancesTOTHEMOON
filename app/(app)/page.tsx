@@ -5,6 +5,7 @@ import { NetWorthCard } from '@/components/dashboard/net-worth-card'
 import { AccountsStrip } from '@/components/dashboard/accounts-strip'
 import { RecentTransactions } from '@/components/dashboard/recent-transactions'
 import { BudgetRings } from '@/components/dashboard/budget-rings'
+import { WealthDistribution } from '@/components/dashboard/wealth-distribution'
 import { DemoBanner } from '@/components/layout/demo-banner'
 import { monthName } from '@/lib/format'
 
@@ -39,6 +40,7 @@ export default function DashboardPage() {
       {[
         <NetWorthCard key="nw" />,
         <AccountsStrip key="acc" />,
+        <WealthDistribution key="dist" />,
         <BudgetRings key="bud" />,
         <RecentTransactions key="tx" />,
       ].map((child, i) => (
