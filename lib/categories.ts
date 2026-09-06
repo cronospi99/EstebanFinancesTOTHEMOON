@@ -30,8 +30,10 @@ export interface Institution {
   color: string
   /** Color del monograma. Blanco por defecto; se aclara en marcas claras. */
   fg?: string
-  /** Monograma de 1-3 caracteres, a falta del logotipo real. */
+  /** Monograma de 1-3 caracteres, usado cuando no hay logotipo. */
   short: string
+  /** Archivo en /public/institutions. Si falta, se dibuja el monograma. */
+  logo?: string
 }
 
 /**
@@ -51,27 +53,27 @@ export const CO_INSTITUTIONS: Institution[] = [
   { name: 'Scotiabank Colpatria', color: '#EC111A', short: 'SC' },
 
   // Neobancos y billeteras
-  { name: 'Nequi', color: '#DA0081', short: 'N' },
-  { name: 'Daviplata', color: '#ED1C24', short: 'DP' },
-  { name: 'Nu', color: '#820AD1', short: 'nu' },
+  { name: 'Nequi', color: '#DA0081', short: 'N', logo: 'nequi' },
+  { name: 'Daviplata', color: '#ED1C24', short: 'DP', logo: 'daviplata' },
+  { name: 'Nu', color: '#820AD1', short: 'nu', logo: 'nu' },
   { name: 'Lulo Bank', color: '#00D1B0', fg: '#0A2B26', short: 'LB' },
-  { name: 'Dale!', color: '#10395E', short: 'd!' },
-  { name: 'Ualá', color: '#F2F2F7', fg: '#1B1B4B', short: 'uá' },
+  { name: 'Dale!', color: '#10395E', short: 'd!', logo: 'dale' },
+  { name: 'Ualá', color: '#F2F2F7', fg: '#1B1B4B', short: 'uá', logo: 'uala' },
 
   // Rappi
   { name: 'RappiPay', color: '#FF441F', short: 'RP' },
-  { name: 'RappiCard', color: '#141414', short: 'RC' },
-  { name: 'Rappi', color: '#FF441F', short: 'R' },
+  { name: 'RappiCard', color: '#141414', short: 'RC', logo: 'rappicard' },
+  { name: 'Rappi', color: '#FF441F', short: 'R', logo: 'rappi' },
 
   // Pagos
-  { name: 'Bold', color: '#4B21C9', short: 'B' },
+  { name: 'Bold', color: '#4B21C9', short: 'B', logo: 'bold' },
 
   // Inversión y cripto
-  { name: 'Trii', color: '#00A868', short: 'tr' },
-  { name: 'Tyba', color: '#116466', short: 'ty' },
-  { name: 'Littio', color: '#1B2A4A', short: 'Li' },
-  { name: 'Lemon Cash', color: '#0FD65C', fg: '#0A2B14', short: 'LC' },
-  { name: 'Uphold', color: '#49CC68', fg: '#0A2B14', short: 'U' },
+  { name: 'Trii', color: '#00A868', short: 'tr', logo: 'trii' },
+  { name: 'Tyba', color: '#116466', short: 'ty', logo: 'tyba' },
+  { name: 'Littio', color: '#1B2A4A', short: 'Li', logo: 'littio' },
+  { name: 'Lemon Cash', color: '#0FD65C', fg: '#0A2B14', short: 'LC', logo: 'lemon-cash' },
+  { name: 'Uphold', color: '#49CC68', fg: '#0A2B14', short: 'U', logo: 'uphold' },
 
   { name: 'Efectivo', color: '#30D158', fg: '#0A2B14', short: '$' },
 ]
