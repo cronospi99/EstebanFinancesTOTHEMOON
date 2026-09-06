@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Safe areas del notch / home indicator en iPhone */
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --nav-h: 64px;
+  }
+
+  html {
+    background-color: #000;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-ink text-label font-sans antialiased;
+    /* Evita el "rubber band" horizontal en iOS */
+    overscroll-behavior-y: none;
+  }
+
+  /* Cifras financieras: SIEMPRE tabulares. Sin esto las columnas de números
+     "bailan" al actualizarse y se pierde la sensación de precisión. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1, 'cv01' 1;
+    letter-spacing: -0.02em;
+  }
+
+  /* Scrollbars fuera: en móvil no existen, en desktop distraen del look Apple */
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+}
+
+@layer components {
+  /* La tarjeta base: translucidez + blur. El truco Apple no es solo el blur,
+     es el borde superior claro de 1px que simula luz cayendo sobre el cristal. */
+  .glass {
+    @apply bg-ink-card border border-hairline backdrop-blur-2xl shadow-card;
+  }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Feedback táctil: en iOS los elementos se "hunden" levemente al tocarlos. */
+  .press {
+    @apply transition-transform duration-150 ease-ios active:scale-[0.97];
+  }
+}
+
+@layer utilities {
+  .pt-safe { padding-top: calc(var(--sat) + 0.5rem); }
+  .pb-safe { padding-bottom: var(--sab); }
+  /* Espacio para que el contenido no quede bajo la barra inferior */
+  .pb-nav { padding-bottom: calc(var(--nav-h) + var(--sab) + 1.5rem); }
+}
