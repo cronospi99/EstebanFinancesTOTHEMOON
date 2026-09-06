@@ -1,18 +1,22 @@
 'use client'
 
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { SpendDonut } from '@/components/expenses/spend-donut'
 import { TransactionList } from '@/components/expenses/transaction-list'
+import { AddAccountSheet } from '@/components/accounts/add-account-sheet'
+import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
 import { categoryById, CO_INSTITUTIONS } from '@/lib/categories'
-import { formatMoney, monthName } from '@/lib/format'
-import { useFinance, useMonthSummary, useSpendByCategory } from '@/lib/store'
+import { formatMoney, formatPercent, monthName } from '@/lib/format'
+import { accountTotal, useFinance, useMonthSummary, useSpendByCategory } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import type { AccountType } from '@/lib/types'
+import type { Account, AccountType } from '@/lib/types'
 
 const TYPE_LABEL: Record<AccountType, string> = {
   checking: 'Corriente', savings: 'Ahorros', credit: 'Crédito',
@@ -21,7 +25,9 @@ const TYPE_LABEL: Record<AccountType, string> = {
 
 export default function ExpensesPage() {
   const [tab, setTab] = useState<'gastos' | 'cuentas'>('gastos')
-  const { accounts, transactions } = useFinance()
+  const [addAccountOpen, setAddAccountOpen] = useState(false)
+  const [detail, setDetail] = useState<Account | null>(null)
+  const { accounts, transactions, fxRate } = useFinance()
   const { expense, income, transactions: monthTx } = useMonthSummary()
   const byCategory = useSpendByCategory()
 
@@ -113,24 +119,60 @@ export default function ExpensesPage() {
           transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
           className="space-y-6"
         >
+          {!accounts.length && (
+            <Card className="p-8 text-center">
+              <p className="text-[15px] font-medium text-label">Aún no tienes cuentas</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
+                Crea la primera para poder registrar movimientos.
+              </p>
+            </Card>
+          )}
+
           <Card className="divide-y divide-hairline overflow-hidden">
-            {accounts.map((acc) => (
-              <div key={acc.id} className="flex items-center gap-3 px-4 py-3.5">
-                <div className="h-10 w-10 shrink-0 rounded-xl" style={{ backgroundColor: `${acc.color}2E` }}>
-                  <div className="m-[11px] h-[18px] w-[18px] rounded-md" style={{ backgroundColor: acc.color }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-medium text-label">{acc.name}</div>
-                  <div className="truncate text-[12px] text-label-tertiary">
-                    {acc.institution} · {TYPE_LABEL[acc.type]}
+            {accounts.map((acc) => {
+              const total = accountTotal(acc)
+              const pockets = acc.pockets?.length ?? 0
+              return (
+                <button
+                  key={acc.id}
+                  onClick={() => setDetail(acc)}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-white/[0.04]"
+                >
+                  <InstitutionBadge institution={acc.institution} color={acc.color} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[15px] font-medium text-label">{acc.name}</span>
+                      {acc.currency === 'USD' && (
+                        <span className="shrink-0 rounded bg-white/[0.09] px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
+                      )}
+                    </div>
+                    <div className="truncate text-[12px] text-label-tertiary">
+                      {TYPE_LABEL[acc.type]}
+                      {pockets > 0 && ` · ${pockets} bolsillo${pockets > 1 ? 's' : ''}`}
+                      {acc.apy ? ` · ${formatPercent(acc.apy, false, 1)} E.A.` : ''}
+                    </div>
                   </div>
-                </div>
-                <div className={cn('tnum shrink-0 text-[15px] font-semibold', acc.balance < 0 ? 'text-accent-red' : 'text-label')}>
-                  {formatMoney(acc.balance)}
-                </div>
-              </div>
-            ))}
+                  <div className="shrink-0 text-right">
+                    <div className={cn('tnum text-[15px] font-semibold', total < 0 ? 'text-accent-red' : 'text-label')}>
+                      {formatMoney(total, acc.currency)}
+                    </div>
+                    {acc.currency === 'USD' && (
+                      <div className="tnum text-[11px] text-label-tertiary">≈ {formatMoney(total * fxRate)}</div>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
           </Card>
+
+          <button
+            onClick={() => setAddAccountOpen(true)}
+            className="press flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline
+                       bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue"
+          >
+            <Plus size={17} />
+            Añadir cuenta
+          </button>
 
           <section>
             <CardHeader title="Instituciones soportadas" />
@@ -138,9 +180,9 @@ export default function ExpensesPage() {
               {CO_INSTITUTIONS.map((inst) => (
                 <span
                   key={inst.name}
-                  className="flex items-center gap-1.5 rounded-pill border border-hairline px-3 py-1.5 text-[12px] text-label-secondary"
+                  className="flex items-center gap-2 rounded-pill border border-hairline py-1 pl-1 pr-3 text-[12px] text-label-secondary"
                 >
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: inst.color }} />
+                  <InstitutionBadge institution={inst.name} size="xs" />
                   {inst.name}
                 </span>
               ))}
@@ -148,6 +190,9 @@ export default function ExpensesPage() {
           </section>
         </motion.div>
       )}
+
+      <AddAccountSheet open={addAccountOpen} onClose={() => setAddAccountOpen(false)} />
+      <AccountDetailSheet account={detail} onClose={() => setDetail(null)} />
     </div>
   )
 }

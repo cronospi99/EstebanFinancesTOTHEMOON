@@ -1,14 +1,16 @@
 'use client'
 
-import { AnimatePresence, motion, type PanInfo } from 'framer-motion'
-import { useEffect } from 'react'
+import { AnimatePresence, motion, useDragControls, type PanInfo } from 'framer-motion'
+import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
  * Bottom sheet estilo iOS.
- * Dos detalles hacen que se sienta "nativo" y no como un modal web:
- *  1. La curva de salida es más rápida que la de entrada (spring, no tween).
- *  2. Arrastrar hacia abajo lo cierra, pero arrastrar hacia arriba topa (elastic 0).
+ *
+ * El arrastre se inicia solo desde la cabecera (el "grabber"), no desde todo
+ * el panel: con `drag` en el contenedor scrollable, cualquier intento de
+ * desplazar el contenido se interpretaba como arrastre y el contenido no se
+ * movía. Con el teclado del móvil abierto eso dejaba media hoja inalcanzable.
  */
 export function Sheet({
   open, onClose, children, className,
@@ -18,7 +20,9 @@ export function Sheet({
   children: React.ReactNode
   className?: string
 }) {
-  // Bloquea el scroll del fondo mientras el sheet está abierto.
+  const dragControls = useDragControls()
+  const scrollRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
@@ -28,7 +32,6 @@ export function Sheet({
     }
   }, [open])
 
-  // Cerrar con Escape (desktop).
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -37,7 +40,7 @@ export function Sheet({
   }, [open, onClose])
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
-    // Cierra por distancia O por velocidad: un "flick" corto también debe cerrar.
+    // Cierra por distancia O por velocidad: un "flick" corto también cierra.
     if (info.offset.y > 120 || info.velocity.y > 600) onClose()
   }
 
@@ -61,21 +64,35 @@ export function Sheet({
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 34, stiffness: 340, mass: 0.8 }}
             drag="y"
+            dragControls={dragControls}
+            dragListener={false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.55 }}
             onDragEnd={handleDragEnd}
             className={cn(
-              'fixed inset-x-0 bottom-0 z-50 rounded-t-sheet border-t border-hairline',
+              'fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col',
+              'rounded-t-sheet border-t border-hairline',
               'bg-[#141416]/85 backdrop-blur-sheet shadow-sheet',
-              'pb-safe max-h-[92dvh] overflow-y-auto',
               className,
             )}
           >
-            {/* Grabber: la barrita gris que invita a arrastrar */}
-            <div className="sticky top-0 z-10 flex justify-center pb-1 pt-2.5">
+            {/* Única zona de arrastre. touch-none evita que el navegador
+                interprete el gesto como scroll antes de que llegue a Framer. */}
+            <div
+              onPointerDown={(e) => dragControls.start(e)}
+              className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing"
+            >
               <div className="h-[5px] w-9 rounded-full bg-white/25" />
             </div>
-            {children}
+
+            {/* El contenido scrollea por su cuenta; con el teclado abierto,
+                scroll-pb deja aire para alcanzar el último campo. */}
+            <div
+              ref={scrollRef}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe [scrollbar-width:none]"
+            >
+              {children}
+            </div>
           </motion.div>
         </>
       )}

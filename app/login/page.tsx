@@ -24,9 +24,15 @@ export default function LoginPage() {
     haptic(10)
     setStatus('sending')
 
+    // Leemos `next` de la URL en el submit (y no con useSearchParams) para no
+    // obligar a envolver la página en un <Suspense> solo por esto.
+    const next = new URLSearchParams(window.location.search).get('next')
+    const callback = new URL('/auth/callback', window.location.origin)
+    if (next?.startsWith('/')) callback.searchParams.set('next', next)
+
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: callback.toString() },
     })
 
     if (error) {

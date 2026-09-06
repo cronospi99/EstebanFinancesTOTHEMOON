@@ -1,55 +1,66 @@
 /**
  * Formateo financiero para Colombia.
- * El peso no usa decimales en el día a día, así que los omitimos por defecto:
- * "$ 45.900" se lee mucho más rápido que "$ 45.900,00" en una lista de gastos.
+ *
+ * El peso no usa decimales en el día a día, así que se omiten cuando la cifra
+ * es redonda y se muestran solo si existen: "$ 45.900" pero "$ 45.900,50".
+ * En dólares siempre van los dos decimales, que ahí sí son significativos.
  */
+import type { Currency } from './types'
 
-const COP = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  maximumFractionDigits: 0,
-})
+const copInt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+const copDec = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const USD = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
+/** true si el valor tiene parte decimal significativa (más de un centavo). */
+const hasCents = (v: number) => Math.abs(v - Math.round(v)) > 0.004
 
-export function formatMoney(value: number, currency: 'COP' | 'USD' = 'COP') {
-  return currency === 'USD' ? USD.format(value) : COP.format(value)
+export function formatMoney(value: number, currency: Currency = 'COP') {
+  if (currency === 'USD') return usd.format(value)
+  return hasCents(value) ? copDec.format(value) : copInt.format(value)
 }
 
-/**
- * Versión compacta para titulares grandes: $ 12,4 M en lugar de $ 12.400.000.
- * Solo se usa cuando la cifra completa no cabe o compite con la jerarquía visual.
- */
-export function formatCompact(value: number, currency: 'COP' | 'USD' = 'COP') {
+export function formatCompact(value: number, currency: Currency = 'COP') {
   const abs = Math.abs(value)
   const sign = value < 0 ? '-' : ''
-  if (currency === 'USD') return `${sign}$${(abs / 1000).toFixed(1)}K`
+  if (currency === 'USD') {
+    if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}K`
+    return usd.format(value)
+  }
   if (abs >= 1_000_000_000) return `${sign}$ ${(abs / 1_000_000_000).toFixed(1).replace('.', ',')} MM`
   if (abs >= 1_000_000) return `${sign}$ ${(abs / 1_000_000).toFixed(1).replace('.', ',')} M`
   if (abs >= 1_000) return `${sign}$ ${Math.round(abs / 1000)} K`
   return formatMoney(value, currency)
 }
 
-/** Agrupa miles mientras el usuario teclea en el keypad: 45900 -> "45.900" */
-export function formatKeypad(digits: string) {
-  if (!digits) return '0'
-  return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(digits))
+/**
+ * Formatea lo que el usuario teclea, conservando la coma decimal a medio
+ * escribir: "45900," debe seguir mostrándose con la coma, no perderla al
+ * convertir a número.
+ */
+export function formatKeypad(raw: string) {
+  if (!raw) return '0'
+  const [ent, dec] = raw.split(',')
+  const entero = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(ent || '0'))
+  return dec === undefined ? entero : `${entero},${dec}`
 }
 
-export function formatPercent(value: number, withSign = true) {
+/** Convierte lo tecleado ("45.900,50" en crudo "45900,50") a número. */
+export const parseKeypad = (raw: string) => Number((raw || '0').replace(',', '.')) || 0
+
+/** Cantidad de activos: hasta 8 decimales, sin ceros de relleno. */
+export function formatQuantity(q: number) {
+  return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 8 }).format(q)
+}
+
+export function formatPercent(value: number, withSign = true, decimals = 2) {
   const sign = withSign && value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(2).replace('.', ',')} %`
+  return `${sign}${value.toFixed(decimals).replace('.', ',')} %`
 }
 
 export function formatDate(iso: string) {
   return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(new Date(iso))
 }
 
-/** "Hoy" / "Ayer" / "12 mar" — como la app de Salud de Apple agrupa por día. */
 export function formatDayLabel(iso: string) {
   const d = new Date(iso)
   const today = new Date()
@@ -68,3 +79,11 @@ export const monthKey = (d: Date | string = new Date()) => {
 
 export const monthName = (d: Date = new Date()) =>
   new Intl.DateTimeFormat('es-CO', { month: 'long' }).format(d)
+
+/**
+ * Rendimiento mensual equivalente a una tasa efectiva anual.
+ * (1 + EA)^(1/12) - 1, no EA/12: el interés compuesto no es lineal y dividir
+ * entre doce sobreestima el rendimiento.
+ */
+export const monthlyFromApy = (apyPercent: number) =>
+  Math.pow(1 + apyPercent / 100, 1 / 12) - 1

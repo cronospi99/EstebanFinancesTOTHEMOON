@@ -28,10 +28,15 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
         whileTap={{ scale: 0.9 }}
         transition={{ type: 'spring', damping: 18, stiffness: 500 }}
         aria-label="Registro rápido"
-        className="fixed left-1/2 z-30 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full
+        className="fixed left-1/2 z-30 flex h-14 w-14 items-center justify-center rounded-full
                    bg-gradient-to-b from-accent-blue to-[#0060DF] text-white shadow-glow
                    ring-[6px] ring-black/85"
-        style={{ bottom: 'calc(var(--sab) + 22px)' }}
+        // El centrado va aquí y no como clase (-translate-x-1/2) a propósito:
+        // whileTap escribe un `transform` en línea que reemplazaría al de la
+        // clase, y el botón saltaría media anchura a la derecha al tocarlo.
+        // Con `x` en el style, Framer compone traslación y escala en el mismo
+        // transform.
+        style={{ bottom: 'calc(var(--sab) + 22px)', x: '-50%' }}
       >
         <Plus size={26} strokeWidth={2.6} />
       </motion.button>

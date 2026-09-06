@@ -37,7 +37,13 @@ const config: Config = {
         },
       },
       fontFamily: {
+        // -apple-system primero en la cascada de respaldo entrega SF Pro real
+        // en iPhone, que es más fiel que Inter al look nativo.
         sans: ['var(--font-inter)', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'system-ui', 'sans-serif'],
+      },
+      letterSpacing: {
+        display: '-0.028em',
+        title: '-0.021em',
       },
       borderRadius: {
         // Radios "continuos" al estilo Apple: generosos, nunca cuadrados
@@ -46,9 +52,11 @@ const config: Config = {
         pill: '999px',
       },
       boxShadow: {
-        card: '0 1px 0 0 rgba(255,255,255,0.06) inset, 0 8px 32px -12px rgba(0,0,0,0.9)',
+        card: '0 1px 0 0 rgba(255,255,255,0.055) inset, 0 8px 32px -12px rgba(0,0,0,0.9)',
         sheet: '0 -8px 48px -8px rgba(0,0,0,0.85)',
-        glow: '0 8px 32px -8px rgba(10,132,255,0.45)',
+        // El resplandor del botón lleva también un anillo tenue: sin él, sobre
+        // negro puro, el degradado azul se recorta con un borde duro.
+        glow: '0 8px 28px -6px rgba(10,132,255,0.5), 0 0 0 0.5px rgba(255,255,255,0.12) inset',
       },
       backdropBlur: { xs: '2px', sheet: '28px' },
       transitionTimingFunction: {

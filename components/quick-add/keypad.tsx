@@ -4,42 +4,65 @@ import { motion } from 'framer-motion'
 import { Delete } from 'lucide-react'
 import { haptic } from '@/lib/utils'
 
-/**
- * Teclado numérico. La tecla "000" existe porque en pesos colombianos casi
- * todo se mide en miles: escribir 45.000 son 3 pulsaciones, no 5.
- */
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', 'del'] as const
+const ROWS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  [',', '0', 'del'],
+]
 
 export function Keypad({
-  onDigit, onDelete,
+  onDigit, onDelete, decimalDisabled,
 }: {
   onDigit: (d: string) => void
   onDelete: () => void
+  /** Bloquea la coma cuando ya hay uno o el importe no admite decimales. */
+  decimalDisabled?: boolean
 }) {
   return (
     <div className="grid grid-cols-3 gap-2">
-      {KEYS.map((key) => {
+      {ROWS.flat().map((key) => {
         const isDelete = key === 'del'
+        const isComma = key === ','
+        const disabled = isComma && decimalDisabled
         return (
           <motion.button
             key={key}
-            whileTap={{ scale: 0.94, backgroundColor: 'rgba(255,255,255,0.14)' }}
+            whileTap={disabled ? undefined : { scale: 0.94 }}
             transition={{ duration: 0.08 }}
+            disabled={disabled}
             onClick={() => {
+              if (disabled) return
               haptic(isDelete ? 12 : 7)
               isDelete ? onDelete() : onDigit(key)
             }}
-            // onPointerDown además de onClick: elimina el retardo de ~100ms
-            // que algunos navegadores móviles añaden antes del click.
-            aria-label={isDelete ? 'Borrar' : key}
-            className="flex h-[58px] items-center justify-center rounded-2xl bg-white/[0.06]
+            aria-label={isDelete ? 'Borrar' : isComma ? 'Coma decimal' : key}
+            className="flex h-[56px] items-center justify-center rounded-2xl bg-white/[0.06]
                        text-[26px] font-light tabular-nums text-label
-                       transition-colors active:bg-white/[0.14]"
+                       transition-colors active:bg-white/[0.14] disabled:opacity-30"
           >
             {isDelete ? <Delete size={23} strokeWidth={2} className="text-label-secondary" /> : key}
           </motion.button>
         )
       })}
     </div>
+  )
+}
+
+/**
+ * Atajo de miles. En pesos casi todo se mide en miles, así que "45" + este
+ * botón son dos toques en lugar de cinco. Va aparte del teclado para no
+ * quitarle sitio a la coma decimal.
+ */
+export function ThousandsKey({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={() => { if (!disabled) { haptic(7); onPress() } }}
+      disabled={disabled}
+      className="press rounded-pill border border-hairline px-3 py-1 text-[13px] font-semibold
+                 tabular-nums text-label-secondary disabled:opacity-30"
+    >
+      + 000
+    </button>
   )
 }

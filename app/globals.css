@@ -4,54 +4,108 @@
 
 @layer base {
   :root {
-    /* Safe areas del notch / home indicator en iPhone */
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --nav-h: 64px;
+    /* Una hairline real de iOS es de 1 píxel físico, no 1 CSS px: en pantallas
+       de 3x eso es 0,33 px. Sin esto los bordes se ven gruesos y "web". */
+    --hairline: 1px;
+  }
+  @media (min-resolution: 2dppx) {
+    :root { --hairline: 0.5px; }
+  }
+  @media (min-resolution: 3dppx) {
+    :root { --hairline: 0.33px; }
   }
 
   html {
     background-color: #000;
     -webkit-tap-highlight-color: transparent;
+    /* Evita que iOS agrande el texto al girar el teléfono. */
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-ink text-label font-sans antialiased;
-    /* Evita el "rubber band" horizontal en iOS */
     overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
-  /* Cifras financieras: SIEMPRE tabulares. Sin esto las columnas de números
+  /* Cifras financieras: siempre tabulares. Sin esto las columnas de números
      "bailan" al actualizarse y se pierde la sensación de precisión. */
   .tnum {
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum' 1, 'cv01' 1;
-    letter-spacing: -0.02em;
+    font-feature-settings: 'tnum' 1, 'cv01' 1, 'ss01' 1;
   }
 
-  /* Scrollbars fuera: en móvil no existen, en desktop distraen del look Apple */
+  /* Escala tipográfica: el tracking se cierra según crece el cuerpo, igual que
+     hace San Francisco al pasar de SF Text a SF Display. Un titular con el
+     mismo espaciado que el cuerpo se ve suelto y desmaquetado. */
+  h1, .t-display { letter-spacing: -0.028em; }
+  h2, .t-title   { letter-spacing: -0.021em; }
+  h3             { letter-spacing: -0.014em; }
+
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; }
+
+  /* Respeta a quien pide menos animación. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
-  /* La tarjeta base: translucidez + blur. El truco Apple no es solo el blur,
-     es el borde superior claro de 1px que simula luz cayendo sobre el cristal. */
+  /*
+   * Material de cristal. El efecto Apple no es solo el desenfoque: son tres
+   * capas superpuestas — el tinte translúcido, un borde muy tenue, y una
+   * línea clara de 1px arriba que simula la luz cayendo sobre el canto.
+   */
   .glass {
-    @apply bg-ink-card border border-hairline backdrop-blur-2xl shadow-card;
+    position: relative;
+    background-color: theme('colors.ink.card');
+    border: var(--hairline) solid theme('colors.hairline');
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.055) inset,
+      0 8px 32px -12px rgba(0, 0, 0, 0.9);
+  }
+
+  /* Separador con sangría, como las listas de iOS: arranca donde arranca el
+     texto, no en el borde de la tarjeta. */
+  .divide-inset > * + * {
+    border-top: var(--hairline) solid theme('colors.hairline');
+    margin-left: 60px;
+    padding-left: 0;
   }
 
   .no-scrollbar::-webkit-scrollbar { display: none; }
 
-  /* Feedback táctil: en iOS los elementos se "hunden" levemente al tocarlos. */
+  /* Feedback táctil: en iOS los elementos se hunden levemente al tocarlos. */
   .press {
-    @apply transition-transform duration-150 ease-ios active:scale-[0.97];
+    transition: transform 150ms cubic-bezier(0.32, 0.72, 0, 1), opacity 150ms;
+  }
+  .press:active { transform: scale(0.97); }
+
+  /* Realce especular sobre las tarjetas destacadas. */
+  .sheen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 42%);
+    pointer-events: none;
   }
 }
 
 @layer utilities {
   .pt-safe { padding-top: calc(var(--sat) + 0.5rem); }
   .pb-safe { padding-bottom: var(--sab); }
-  /* Espacio para que el contenido no quede bajo la barra inferior */
   .pb-nav { padding-bottom: calc(var(--nav-h) + var(--sab) + 1.5rem); }
+  /* Frenado de scroll al estilo iOS dentro de contenedores. */
+  .momentum { -webkit-overflow-scrolling: touch; }
 }
