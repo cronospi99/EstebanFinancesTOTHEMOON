@@ -129,5 +129,25 @@ end $$;
 --  Tiempo real (opcional)
 --  Permite que la app reciba cambios al instante en otros dispositivos.
 -- ===========================================================================
-alter publication supabase_realtime add table public.transactions;
-alter publication supabase_realtime add table public.accounts;
+-- Idempotente: volver a ejecutar este archivo no debe fallar con
+-- "table is already member of publication".
+do $$
+declare
+  t text;
+begin
+  -- En Supabase la publicación ya existe; fuera de Supabase puede no estar.
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    return;
+  end if;
+
+  foreach t in array array['transactions','accounts'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
