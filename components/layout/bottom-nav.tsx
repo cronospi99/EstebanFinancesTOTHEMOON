@@ -58,7 +58,7 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
                 onClick={() => haptic(6)}
                 style={{ gridColumnStart: col }}
                 className={cn(
-                  'flex flex-col items-center gap-[3px] py-1 transition-colors duration-200',
+                  'press-dim flex flex-col items-center gap-[3px] py-1 transition-colors duration-200',
                   active ? 'text-accent-blue' : 'text-label-tertiary',
                 )}
               >

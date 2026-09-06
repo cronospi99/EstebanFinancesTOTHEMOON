@@ -5,14 +5,16 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowDownRight, ArrowUpRight, Eye, EyeOff, TrendingUp, TriangleAlert } from 'lucide-react'
 import { BalanceChart } from './balance-chart'
+import { RangePicker } from './range-picker'
 import { Card } from '@/components/ui/card'
 import { formatMoney, formatPercent } from '@/lib/format'
-import { useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorthDetail } from '@/lib/store'
+import { RANGE_LABEL, useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorthDetail, type RangeKey } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 
 export function NetWorthCard() {
   const { total: netWorth, incompleto, sinConvertir } = useNetWorthDetail()
-  const series = useBalanceSeries(30)
+  const [range, setRange] = useState<RangeKey>('1M')
+  const series = useBalanceSeries(range)
   const { income, expense } = useMonthSummary()
   const { monthly, weightedApy } = useExpectedYield()
   const [hidden, setHidden] = useState(false)
@@ -53,7 +55,11 @@ export function NetWorthCard() {
           {positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
           {formatPercent(deltaPct)}
         </span>
-        <span className="text-[12px] text-label-tertiary">últimos 30 días</span>
+        <span className="text-[12px] text-label-tertiary">{RANGE_LABEL[range]}</span>
+      </div>
+
+      <div className="mb-2">
+        <RangePicker value={range} onChange={setRange} />
       </div>
 
       {incompleto && (

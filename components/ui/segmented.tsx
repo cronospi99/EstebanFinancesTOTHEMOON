@@ -28,7 +28,7 @@ export function Segmented<T extends string>({
               haptic(6)
               onChange(opt.value)
             }}
-            className="relative flex-1 rounded-pill px-3 py-1.5 text-[13px] font-medium transition-colors"
+            className="press relative flex-1 rounded-pill px-3 py-1.5 text-[13px] font-medium transition-colors"
           >
             {active && (
               <motion.span

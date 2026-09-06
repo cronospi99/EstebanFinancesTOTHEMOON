@@ -51,7 +51,7 @@ export function HoldingRow({
 
       <button
         onClick={onEdit}
-        className="relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3.5 text-left active:bg-white/[0.03]"
+        className="press-soft relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3.5 text-left active:bg-white/[0.03]"
       >
         <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[11px] font-bold tracking-tight text-label">
           {holding.symbol.replace('-USD', '').slice(0, 5)}

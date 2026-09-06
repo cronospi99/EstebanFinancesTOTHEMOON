@@ -1,4 +1,4 @@
-import type { Account, Budget, Holding, Transaction } from './types'
+import type { Account, Budget, Goal, Holding, Transaction } from './types'
 
 const daysAgo = (n: number, hour = 12) => {
   const d = new Date()
@@ -79,4 +79,10 @@ export const DEMO_HOLDINGS: Holding[] = [
   { id: 'h3', symbol: 'MSFT', name: 'Microsoft Corp.', quantity: 6.25, avgCost: 402.15, assetType: 'stock', currency: 'USD', accountId: 'acc_arq' },
   { id: 'h4', symbol: 'BTC-USD', name: 'Bitcoin', quantity: 0.0852, avgCost: 61_200, assetType: 'crypto', currency: 'USD', accountId: 'acc_littio' },
   { id: 'h5', symbol: 'NVDA', name: 'NVIDIA Corp.', quantity: 9, avgCost: 118.6, assetType: 'stock', currency: 'USD', accountId: 'acc_arq' },
+]
+
+export const DEMO_GOALS: Goal[] = [
+  { id: 'g1', name: 'Viaje a Japón', target: 12_000_000, saved: 2_400_000, currency: 'COP', deadline: '2027-03-01', color: '#40C8E0', accountId: 'acc_nequi', pocketId: 'p_viaje' },
+  { id: 'g2', name: 'Fondo de emergencia', target: 18_000_000, saved: 3_000_000, currency: 'COP', color: '#30D158', accountId: 'acc_nequi', pocketId: 'p_emergencia' },
+  { id: 'g3', name: 'Portátil nuevo', target: 6_500_000, saved: 1_200_000, currency: 'COP', deadline: '2026-12-15', color: '#BF5AF2' },
 ]

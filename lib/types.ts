@@ -60,6 +60,21 @@ export interface Budget {
   amount: number
 }
 
+/** Meta de ahorro: un objetivo con importe y, si se quiere, fecha límite. */
+export interface Goal {
+  id: string
+  name: string
+  target: number
+  saved: number
+  currency: Currency
+  /** ISO (solo día). Opcional: no toda meta tiene plazo. */
+  deadline?: string
+  color: string
+  /** Bolsillo donde vive el dinero, si está separado en uno. */
+  accountId?: string
+  pocketId?: string
+}
+
 export interface Holding {
   id: string
   symbol: string
