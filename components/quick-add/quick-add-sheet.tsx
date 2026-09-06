@@ -7,6 +7,7 @@ import { Check } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { Keypad } from './keypad'
 import { DEFAULT_CATEGORIES } from '@/lib/categories'
 import { formatKeypad } from '@/lib/format'
@@ -186,11 +187,11 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
                   setAccountId(acc.id)
                 }}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-pill border px-3 py-1.5 text-[12px] font-medium transition-all',
+                  'flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-all',
                   active ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
                 )}
               >
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: acc.color }} />
+                <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
                 {acc.name}
               </button>
             )

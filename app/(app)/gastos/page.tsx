@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { SpendDonut } from '@/components/expenses/spend-donut'
 import { TransactionList } from '@/components/expenses/transaction-list'
 import { AddAccountSheet } from '@/components/accounts/add-account-sheet'
@@ -128,9 +129,7 @@ export default function ExpensesPage() {
           <Card className="divide-y divide-hairline overflow-hidden">
             {accounts.map((acc) => (
               <div key={acc.id} className="flex items-center gap-3 px-4 py-3.5">
-                <div className="h-10 w-10 shrink-0 rounded-xl" style={{ backgroundColor: `${acc.color}2E` }}>
-                  <div className="m-[11px] h-[18px] w-[18px] rounded-md" style={{ backgroundColor: acc.color }} />
-                </div>
+                <InstitutionBadge institution={acc.institution} color={acc.color} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15px] font-medium text-label">{acc.name}</div>
                   <div className="truncate text-[12px] text-label-tertiary">
@@ -159,9 +158,9 @@ export default function ExpensesPage() {
               {CO_INSTITUTIONS.map((inst) => (
                 <span
                   key={inst.name}
-                  className="flex items-center gap-1.5 rounded-pill border border-hairline px-3 py-1.5 text-[12px] text-label-secondary"
+                  className="flex items-center gap-2 rounded-pill border border-hairline py-1 pl-1 pr-3 text-[12px] text-label-secondary"
                 >
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: inst.color }} />
+                  <InstitutionBadge institution={inst.name} size="xs" />
                   {inst.name}
                 </span>
               ))}

@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { CardHeader } from '@/components/ui/card'
+import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { formatMoney } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -41,7 +42,7 @@ export function AccountsStrip() {
               style={{ backgroundColor: acc.color }}
             />
             <div className="relative">
-              <div className="mb-3 h-6 w-6 rounded-md" style={{ backgroundColor: acc.color }} />
+              <InstitutionBadge institution={acc.institution} color={acc.color} size="sm" className="mb-3" />
               <div className="truncate text-[13px] font-semibold text-label">{acc.name}</div>
               <div className="mb-2.5 text-[11px] text-label-tertiary">{TYPE_LABEL[acc.type]}</div>
               <div

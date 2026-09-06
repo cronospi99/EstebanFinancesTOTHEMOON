@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Sheet } from '@/components/ui/sheet'
 import { CO_INSTITUTIONS } from '@/lib/categories'
+import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { formatKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { AccountType } from '@/lib/types'
@@ -71,11 +72,11 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
                   setInstitution(inst)
                 }}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-pill border px-3 py-2 text-[13px] font-medium transition-all',
+                  'flex shrink-0 items-center gap-2 rounded-pill border py-1.5 pl-1.5 pr-3.5 text-[13px] font-medium transition-all',
                   active ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
                 )}
               >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: inst.color }} />
+                <InstitutionBadge institution={inst.name} size="sm" />
                 {inst.name}
               </button>
             )
