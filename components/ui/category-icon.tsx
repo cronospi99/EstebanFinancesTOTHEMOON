@@ -2,6 +2,7 @@
 
 import {
   Award,
+  BadgePercent,
   Banknote,
   Bike,
   BookOpen,
@@ -53,7 +54,7 @@ import {
 import { cn } from '@/lib/utils'
 
 /** Mapa explícito (no dinámico) para que el bundler pueda hacer tree-shaking. */
-const ICONS: Record<string, LucideIcon> = { Award, Banknote, Bike, BookOpen, Briefcase, Building2, Car, ChartPie, Clapperboard, Coffee, CreditCard, Dumbbell, Ellipsis, Fuel, Gamepad2, Gift, GraduationCap, HandCoins, HeartPulse, Hotel, House, Landmark, Laptop, PawPrint, Percent, Pill, Plane, Popcorn, Receipt, Repeat, Scissors, ShieldCheck, Shirt, ShoppingBag, ShoppingCart, Smartphone, SquareParking, Ticket, TrainFront, TrendingUp, Undo2, UtensilsCrossed, Wallet, Wifi, Wine, Wrench, Zap }
+const ICONS: Record<string, LucideIcon> = { Award, BadgePercent, Banknote, Bike, BookOpen, Briefcase, Building2, Car, ChartPie, Clapperboard, Coffee, CreditCard, Dumbbell, Ellipsis, Fuel, Gamepad2, Gift, GraduationCap, HandCoins, HeartPulse, Hotel, House, Landmark, Laptop, PawPrint, Percent, Pill, Plane, Popcorn, Receipt, Repeat, Scissors, ShieldCheck, Shirt, ShoppingBag, ShoppingCart, Smartphone, SquareParking, Ticket, TrainFront, TrendingUp, Undo2, UtensilsCrossed, Wallet, Wifi, Wine, Wrench, Zap }
 
 export function CategoryIcon({
   icon, color, size = 'md', className,

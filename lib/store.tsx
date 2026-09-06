@@ -5,7 +5,8 @@ import { createClient, isSupabaseConfigured } from './supabase/client'
 import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
 import { monthKey, monthlyFromApy } from './format'
 import { useExchangeRate, type FxState } from './use-fx'
-import type { Account, Budget, Goal, Holding, Pocket, Transaction } from './types'
+import { useQuotes } from './use-quotes'
+import type { Account, Budget, Goal, Holding, Pocket, Quote, Transaction } from './types'
 import { uid } from './utils'
 
 const STORAGE_KEY = 'eftm.state.v2'
@@ -32,6 +33,10 @@ interface FinanceContextValue extends State {
   /** Tasa USD→COP vigente, con su procedencia. rate 0 = no se conoce. */
   fxRate: number
   fx: FxState & { refresh: () => Promise<void>; setManual: (r: number | null) => void }
+  /** Cotizaciones vivas de todas las posiciones, compartidas por toda la app. */
+  quotes: Record<string, Quote>
+  quotesLoading: boolean
+  refreshQuotes: () => Promise<void>
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   addAccount: (acc: Omit<Account, 'id'>) => Promise<void>
@@ -59,6 +64,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [synced, setSynced] = useState(false)
   const fx = useExchangeRate()
   const fxRate = fx.rate
+
+  // Las cotizaciones se piden aquí y no en la pantalla de inversiones para que
+  // el patrimonio del resumen use el valor de mercado real. Antes solo las
+  // conocía esa pantalla, así que el resumen ignoraba el portafolio entero.
+  const simbolos = useMemo(() => [...new Set(state.holdings.map((h) => h.symbol))], [state.holdings])
+  const { quotes, loading: quotesLoading, refresh: refreshQuotes } = useQuotes(simbolos)
 
   useEffect(() => {
     let cancelled = false
@@ -342,14 +353,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(
     () => ({
-      ...state, ready, synced, fxRate, fx,
+      ...state, ready, synced, fxRate, fx, quotes, quotesLoading, refreshQuotes,
       addTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
-    [state, ready, synced, fxRate, fx, addTransaction, deleteTransaction, addAccount,
+    [state, ready, synced, fxRate, fx, quotes, quotesLoading, refreshQuotes, addTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
   )
@@ -385,21 +396,66 @@ export function useAccountsInCOP() {
   )
 }
 
-/** Valor de mercado del portafolio en pesos. */
-export function useInvestmentsValue(quotes: Record<string, { price: number; stale?: boolean }> = {}) {
-  const { holdings, fxRate } = useFinance()
+/** Precio vigente de una posición: el de mercado si lo hay, si no el costo. */
+export function precioDe(h: Holding, quotes: Record<string, { price: number; stale?: boolean }>) {
+  const q = quotes[h.symbol]
+  const live = Boolean(q && !q.stale && q.price > 0)
+  return { precio: live ? q!.price : h.avgCost, live }
+}
+
+/**
+ * Valor del portafolio, en su moneda y en pesos.
+ *
+ * Se devuelven las dos cifras a propósito. Antes, sin tasa de cambio, las
+ * posiciones en dólares se descartaban y el portafolio aparecía en cero: "$0"
+ * se lee como "no tienes nada", que engaña más que no convertir. Ahora, si
+ * falta la tasa, la interfaz puede mostrar el total en dólares.
+ */
+export function useInvestmentsValue(quotesOverride?: Record<string, { price: number; stale?: boolean }>) {
+  const { holdings, fxRate, quotes: ctxQuotes } = useFinance()
+  const quotes = quotesOverride ?? ctxQuotes
   return useMemo(() => {
-    let value = 0, cost = 0
+    let usd = 0, cop = 0, costUsd = 0, costCop = 0, sinConvertir = 0
     for (const h of holdings) {
-      const q = quotes[h.symbol]
-      const live = Boolean(q && !q.stale && q.price > 0)
-      // Sin tasa, una posición en dólares no puede expresarse en pesos.
+      const { precio } = precioDe(h, quotes)
+      const valor = precio * h.quantity
+      const costo = h.avgCost * h.quantity
+      if (h.currency === 'USD') {
+        usd += valor
+        costUsd += costo
+        if (fxRate > 0) { cop += valor * fxRate; costCop += costo * fxRate }
+        else sinConvertir++
+      } else {
+        cop += valor
+        costCop += costo
+      }
+    }
+    const value = cop
+    const cost = costCop
+    return {
+      value, cost, usd, costUsd,
+      pnl: value - cost,
+      pnlPct: cost ? ((value - cost) / cost) * 100 : 0,
+      pnlUsd: usd - costUsd,
+      pnlPctUsd: costUsd ? ((usd - costUsd) / costUsd) * 100 : 0,
+      incompleto: sinConvertir > 0,
+    }
+  }, [holdings, quotes, fxRate])
+}
+
+/** Valor de mercado de las posiciones de una cuenta, en pesos. */
+export function useHoldingsValueByAccount() {
+  const { holdings, quotes, fxRate } = useFinance()
+  return useMemo(() => {
+    const mapa = new Map<string, number>()
+    for (const h of holdings) {
+      if (!h.accountId) continue
+      const { precio } = precioDe(h, quotes)
       const fx = h.currency === 'USD' ? fxRate : 1
       if (h.currency === 'USD' && fxRate <= 0) continue
-      value += (live ? q!.price : h.avgCost) * h.quantity * fx
-      cost += h.avgCost * h.quantity * fx
+      mapa.set(h.accountId, (mapa.get(h.accountId) ?? 0) + precio * h.quantity * fx)
     }
-    return { value, cost, pnl: value - cost, pnlPct: cost ? ((value - cost) / cost) * 100 : 0 }
+    return mapa
   }, [holdings, quotes, fxRate])
 }
 
@@ -409,14 +465,24 @@ export function useInvestmentsValue(quotes: Record<string, { price: number; stal
  */
 export function useNetWorthDetail() {
   const rows = useAccountsInCOP()
+  const inv = useInvestmentsValue()
   return useMemo(() => {
-    let total = 0, sinConvertir = 0
+    let cuentas = 0, sinConvertir = 0
     for (const r of rows) {
       if (r.cop === null) sinConvertir++
-      else total += r.cop
+      else cuentas += r.cop
     }
-    return { total, incompleto: sinConvertir > 0, sinConvertir }
-  }, [rows])
+    if (inv.incompleto) sinConvertir++
+    // El patrimonio incluye el portafolio: dejarlo fuera daba una cifra que no
+    // era el patrimonio de nadie.
+    return {
+      total: cuentas + inv.value,
+      cuentas,
+      inversiones: inv.value,
+      incompleto: sinConvertir > 0,
+      sinConvertir,
+    }
+  }, [rows, inv])
 }
 
 export function useNetWorth() {
@@ -450,6 +516,73 @@ export function useExpectedYield() {
     // mismo peso a un bolsillo de mil pesos que a una cuenta de diez millones.
     const weightedApy = base > 0 ? (Math.pow(1 + monthly / base, 12) - 1) * 100 : 0
     return { monthly, base, weightedApy }
+  }, [accounts, fxRate])
+}
+
+/**
+ * Cashback recibido en una cuenta, en total y en el mes en curso.
+ *
+ * Sale de los propios movimientos en vez de un contador aparte: así no puede
+ * desincronizarse si se borra o edita un movimiento.
+ */
+export function useCashback(accountId?: string) {
+  const { transactions } = useFinance()
+  return useMemo(() => {
+    const mes = monthKey()
+    let total = 0, esteMes = 0
+    for (const t of transactions) {
+      if (t.categoryId !== 'cashback' || t.type !== 'income') continue
+      if (accountId && t.accountId !== accountId) continue
+      total += t.amount
+      if (monthKey(t.occurredAt) === mes) esteMes += t.amount
+    }
+    return { total, esteMes }
+  }, [transactions, accountId])
+}
+
+/**
+ * Rendimiento desglosado por cuenta y bolsillo.
+ *
+ * La media ponderada del resumen dice cuánto rinde el conjunto, pero no cuál
+ * de las cuentas lo está aportando. Este desglose ordena por lo que aporta al
+ * mes, que es lo que permite decidir dónde mover el dinero.
+ */
+export function useYieldBreakdown() {
+  const { accounts, fxRate } = useFinance()
+  return useMemo(() => {
+    const filas: {
+      key: string
+      nombre: string
+      institution: string
+      color: string
+      apy: number
+      base: number
+      mensual: number
+      esBolsillo: boolean
+      cuenta: string
+    }[] = []
+
+    for (const a of accounts) {
+      if (a.currency === 'USD' && fxRate <= 0) continue
+      const fx = a.currency === 'USD' ? fxRate : 1
+      if (a.apy && a.balance > 0) {
+        filas.push({
+          key: a.id, nombre: a.name, institution: a.institution, color: a.color,
+          apy: a.apy, base: a.balance * fx, mensual: a.balance * fx * monthlyFromApy(a.apy),
+          esBolsillo: false, cuenta: a.name,
+        })
+      }
+      for (const p of a.pockets ?? []) {
+        if (p.apy && p.balance > 0) {
+          filas.push({
+            key: `${a.id}:${p.id}`, nombre: p.name, institution: a.institution, color: p.color ?? a.color,
+            apy: p.apy, base: p.balance * fx, mensual: p.balance * fx * monthlyFromApy(p.apy),
+            esBolsillo: true, cuenta: a.name,
+          })
+        }
+      }
+    }
+    return filas.sort((x, y) => y.mensual - x.mensual)
   }, [accounts, fxRate])
 }
 
@@ -539,6 +672,7 @@ const rowToAccount = (r: Row): Account => ({
   balance: Number(r.balance), currency: r.currency, color: r.color,
   apy: r.apy != null ? Number(r.apy) : undefined,
   pockets: Array.isArray(r.pockets) ? r.pockets : [],
+  creditLimit: r.credit_limit != null ? Number(r.credit_limit) : undefined,
   installments: r.installments ?? undefined,
   installmentsPaid: r.installments_paid ?? undefined,
 })
@@ -546,6 +680,7 @@ const accountToRow = (a: Account) => ({
   id: a.id, name: a.name, institution: a.institution, type: a.type,
   balance: a.balance, currency: a.currency, color: a.color,
   apy: a.apy ?? null, pockets: a.pockets ?? [],
+  credit_limit: a.creditLimit ?? null,
   installments: a.installments ?? null, installments_paid: a.installmentsPaid ?? null,
 })
 const accountPatchToRow = (p: Partial<Account>) => {
@@ -558,6 +693,7 @@ const accountPatchToRow = (p: Partial<Account>) => {
   if (p.color !== undefined) r.color = p.color
   if (p.apy !== undefined) r.apy = p.apy
   if (p.pockets !== undefined) r.pockets = p.pockets
+  if (p.creditLimit !== undefined) r.credit_limit = p.creditLimit
   if (p.installments !== undefined) r.installments = p.installments
   if (p.installmentsPaid !== undefined) r.installments_paid = p.installmentsPaid
   return r

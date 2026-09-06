@@ -66,6 +66,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'bonus', name: 'Bonificación', icon: 'Award', color: '#FFD60A', kind: 'income', group: 'Trabajo' },
   { id: 'sales', name: 'Ventas', icon: 'Banknote', color: '#32D74B', kind: 'income', group: 'Trabajo' },
   { id: 'returns', name: 'Rendimientos', icon: 'TrendingUp', color: '#BF5AF2', kind: 'income', group: 'Inversión' },
+  { id: 'cashback', name: 'Cashback', icon: 'BadgePercent', color: '#FF9F0A', kind: 'income', group: 'Inversión' },
   { id: 'dividends', name: 'Dividendos', icon: 'ChartPie', color: '#5E5CE6', kind: 'income', group: 'Inversión' },
   { id: 'rent-income', name: 'Arriendos', icon: 'Building2', color: '#40C8E0', kind: 'income', group: 'Inversión' },
   { id: 'refund', name: 'Reembolso', icon: 'Undo2', color: '#64D2FF', kind: 'income', group: 'Otros' },

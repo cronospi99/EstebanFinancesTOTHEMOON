@@ -1,18 +1,108 @@
 'use client'
 
-import { Check, Database, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Database, DollarSign, RefreshCw, ShieldCheck, User, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { useFinance } from '@/lib/store'
+import { useProfileName } from '@/lib/use-profile'
+import { formatKeypad, parseKeypad } from '@/lib/format'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { cn, haptic } from '@/lib/utils'
 
 export default function SettingsPage() {
-  const { synced, transactions, accounts, holdings, resetDemo } = useFinance()
+  const { synced, transactions, accounts, holdings, resetDemo, fx, fxRate } = useFinance()
+  const { name, setName } = useProfileName()
+  const [editTasa, setEditTasa] = useState(false)
+  const [tasaDraft, setTasaDraft] = useState('')
 
   return (
     <div className="space-y-6 px-5">
       <PageHeader title="Ajustes" />
+
+      <section>
+        <CardHeader title="Tu perfil" />
+        <Card className="p-4">
+          <label className="mb-2 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
+            <User size={12} /> Nombre
+          </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="¿Cómo te llamas?"
+            className="w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+                       text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
+          />
+          <p className="mt-1.5 px-1 text-[12px] text-label-tertiary">
+            Se usa en el saludo. Con sesión iniciada se guarda en tu cuenta, así
+            que te reconoce también en otro dispositivo.
+          </p>
+        </Card>
+      </section>
+
+      <section>
+        <CardHeader title="Tasa de cambio" />
+        <Card className="p-4">
+          {editTasa ? (
+            <>
+              <p className="mb-2 text-[12px] text-label-secondary">Dólar en pesos</p>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2.5">
+                  <span className="text-[16px] text-label-secondary">$</span>
+                  <input
+                    autoFocus value={tasaDraft ? formatKeypad(tasaDraft) : ''} inputMode="decimal"
+                    onChange={(e) => setTasaDraft(e.target.value.replace(/[^\d,]/g, ''))}
+                    placeholder="4.000"
+                    className="tnum w-full bg-transparent text-[20px] font-semibold text-label placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
+                  />
+                </div>
+                <button
+                  onClick={() => { haptic([14, 30]); fx.setManual(parseKeypad(tasaDraft)); setEditTasa(false) }}
+                  aria-label="Guardar tasa"
+                  className="press flex h-11 w-11 items-center justify-center rounded-xl bg-accent-blue text-white"
+                >
+                  <Check size={18} />
+                </button>
+                <button
+                  onClick={() => setEditTasa(false)} aria-label="Cancelar"
+                  className="press flex h-11 w-11 items-center justify-center rounded-xl border border-hairline text-label-secondary"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="px-1 text-[12px] text-label-tertiary">
+                Una tasa fijada a mano manda sobre la que se consulta en línea.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-label-secondary">
+                  <DollarSign size={17} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] text-label-secondary">USD / COP</p>
+                  <p className="tnum text-[18px] font-semibold text-label">
+                    {fxRate > 0 ? fxRate.toLocaleString('es-CO', { maximumFractionDigits: 2 }) : 'Sin tasa'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { haptic(6); setTasaDraft(fxRate > 0 ? String(Math.round(fxRate)) : ''); setEditTasa(true) }}
+                  className="press shrink-0 rounded-pill border border-hairline px-3 py-1.5 text-[13px] font-medium text-accent-blue"
+                >
+                  Fijar
+                </button>
+              </div>
+              <p className="mt-2 px-1 text-[12px] text-label-tertiary">
+                {fx.origin === 'live' && `En vivo, vía ${fx.source}.`}
+                {fx.origin === 'cached' && 'Última conocida: no se pudo consultar en línea.'}
+                {fx.origin === 'manual' && 'Fijada por ti. Toca Fijar y deja el campo vacío para volver a la automática.'}
+                {fx.origin === 'none' && 'No se pudo obtener. Las cuentas en dólares quedan fuera del patrimonio hasta que la fijes.'}
+              </p>
+            </>
+          )}
+        </Card>
+      </section>
 
       <section>
         <CardHeader title="Almacenamiento" />

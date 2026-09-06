@@ -10,18 +10,14 @@ import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { HoldingRow } from '@/components/investments/holding-row'
 import { AddHoldingSheet } from '@/components/investments/add-holding-sheet'
 import { formatMoney, formatPercent } from '@/lib/format'
-import { useFinance, useInvestmentsValue } from '@/lib/store'
+import { accountTotal, precioDe, useFinance, useInvestmentsValue } from '@/lib/store'
 import type { Holding } from '@/lib/types'
-import { USDCOP, useQuotes } from '@/lib/use-quotes'
 import { cn, haptic } from '@/lib/utils'
 
 export default function InvestmentsPage() {
-  const { holdings, accounts, deleteHolding, fxRate, fx } = useFinance()
+  const { holdings, accounts, deleteHolding, fxRate, fx, quotes, quotesLoading, refreshQuotes } = useFinance()
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
-
-  const symbols = useMemo(() => [...holdings.map((h) => h.symbol), USDCOP], [holdings])
-  const { quotes, loading, error, updatedAt, refresh } = useQuotes(symbols)
 
   const hasMarketData = useMemo(
     () => holdings.some((h) => {
@@ -53,7 +49,7 @@ export default function InvestmentsPage() {
     return [...map.entries()]
   }, [holdings])
 
-  const up = portfolio.pnl >= 0
+  const up = (fxRate > 0 ? portfolio.pnl : portfolio.pnlUsd) >= 0
 
   return (
     <div className="space-y-6 px-5">
@@ -63,17 +59,25 @@ export default function InvestmentsPage() {
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[13px] font-medium text-label-secondary">Valor del portafolio</span>
           <button
-            onClick={() => { haptic(8); refresh() }}
+            onClick={() => { haptic(8); refreshQuotes() }}
             aria-label="Actualizar precios"
             className="press rounded-full p-1.5 text-label-tertiary"
           >
-            <RefreshCw size={15} className={cn(loading && 'animate-spin')} />
+            <RefreshCw size={15} className={cn(quotesLoading && 'animate-spin')} />
           </button>
         </div>
 
         <div className="tnum mb-2 text-[36px] font-bold leading-none tracking-[-0.02em]">
-          {formatMoney(portfolio.value)}
+          {/* Sin tasa se muestra en dólares. Antes se descartaban las
+              posiciones en USD y el total salía en cero, que se lee como
+              "no tienes nada". */}
+          {fxRate > 0 ? formatMoney(portfolio.value) : formatMoney(portfolio.usd, 'USD')}
         </div>
+        {fxRate <= 0 && portfolio.usd > 0 && (
+          <p className="mb-2 text-[12px] text-accent-orange">
+            En dólares: falta la tasa de cambio para convertirlo a pesos.
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-1.5">
           {hasMarketData ? (
@@ -85,10 +89,13 @@ export default function InvestmentsPage() {
                 )}
               >
                 {up ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                {formatPercent(portfolio.pnlPct)}
+                {formatPercent(fxRate > 0 ? portfolio.pnlPct : portfolio.pnlPctUsd)}
               </span>
               <span className={cn('tnum text-[12px] font-medium', up ? 'text-accent-green' : 'text-accent-red')}>
-                {up ? '+' : '−'}{formatMoney(Math.abs(portfolio.pnl))}
+                {up ? '+' : '−'}
+                {fxRate > 0
+                  ? formatMoney(Math.abs(portfolio.pnl))
+                  : formatMoney(Math.abs(portfolio.pnlUsd), 'USD')}
               </span>
               <span className="text-[12px] text-label-tertiary">total</span>
             </>
@@ -129,32 +136,30 @@ export default function InvestmentsPage() {
           </div>
         </div>
 
-        {error && (
-          <p className="mt-3 rounded-lg bg-accent-orange/10 px-3 py-2 text-[12px] text-accent-orange">
-            {error}. Mostrando los últimos valores conocidos.
-          </p>
-        )}
-        {!error && !hasMarketData && !loading && holdings.length > 0 && (
+        {!hasMarketData && !quotesLoading && holdings.length > 0 && (
           <p className="mt-3 rounded-lg bg-accent-orange/10 px-3 py-2 text-[12px] leading-relaxed text-accent-orange">
             Sin cotizaciones disponibles. Las posiciones se muestran a su precio de
             compra, no a valor de mercado.
           </p>
         )}
-        {updatedAt && !error && hasMarketData && (
-          <p className="mt-3 text-[11px] text-label-tertiary">
-            Actualizado {new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit' }).format(new Date(updatedAt))}
-            {' · '}se refresca cada minuto
-          </p>
+        {hasMarketData && (
+          <p className="mt-3 text-[11px] text-label-tertiary">Se refresca cada minuto</p>
         )}
       </Card>
 
       {byAccount.map(([accId, items]) => {
         const acc = accounts.find((a) => a.id === accId)
-        const subtotal = items.reduce((s, h) => {
-          const q = quotes[h.symbol]
-          const live = Boolean(q && !q.stale && q.price > 0)
-          return s + (live ? q!.price : h.avgCost) * h.quantity * (h.currency === 'USD' ? fxRate : 1)
+        // Suma las posiciones y el efectivo que haya en la propia cuenta: en
+        // ARQ o Trii conviven las participaciones y el saldo sin invertir, y
+        // ver solo una mitad no dice cuánto tienes ahí.
+        const posiciones = items.reduce((s, h) => {
+          const { precio } = precioDe(h, quotes)
+          const fx = h.currency === 'USD' ? fxRate : 1
+          if (h.currency === 'USD' && fxRate <= 0) return s
+          return s + precio * h.quantity * fx
         }, 0)
+        const efectivo = acc ? (acc.currency === 'USD' ? (fxRate > 0 ? accountTotal(acc) * fxRate : 0) : accountTotal(acc)) : 0
+        const subtotal = posiciones + efectivo
 
         return (
           <section key={accId}>
@@ -168,6 +173,20 @@ export default function InvestmentsPage() {
               <span className="tnum text-[13px] font-semibold text-label-secondary">{formatMoney(subtotal)}</span>
             </div>
             <Card className="divide-y divide-hairline overflow-hidden">
+              {acc && accountTotal(acc) !== 0 && (
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[10px] font-bold text-label-secondary">
+                    EFVO
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-medium text-label">Efectivo sin invertir</p>
+                    <p className="text-[12px] text-label-tertiary">Saldo disponible en {acc.name}</p>
+                  </div>
+                  <span className="tnum shrink-0 text-[15px] font-semibold text-label">
+                    {formatMoney(accountTotal(acc), acc.currency)}
+                  </span>
+                </div>
+              )}
               {items.map((h, i) => (
                 <motion.div key={h.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
                   <HoldingRow

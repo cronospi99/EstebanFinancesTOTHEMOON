@@ -1,12 +1,15 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { CardHeader } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
 import { formatMoney } from '@/lib/format'
+import { haptic } from '@/lib/utils'
 import { useFinance } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import type { AccountType } from '@/lib/types'
+import type { Account, AccountType } from '@/lib/types'
 
 const TYPE_LABEL: Record<AccountType, string> = {
   checking: 'Corriente',
@@ -22,18 +25,22 @@ const TYPE_LABEL: Record<AccountType, string> = {
  */
 export function AccountsStrip() {
   const { accounts } = useFinance()
+  // El sheet vive aquí para que tocar una tarjeta funcione igual en el
+  // resumen que en la pestaña de cuentas.
+  const [detalle, setDetalle] = useState<Account | null>(null)
 
   return (
     <section>
       <CardHeader title="Cuentas" />
       <div className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-2 no-scrollbar">
         {accounts.map((acc, i) => (
-          <motion.div
+          <motion.button
             key={acc.id}
+            onClick={() => { haptic(6); setDetalle(acc) }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05, duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
-            className="glass relative w-[164px] shrink-0 snap-start overflow-hidden rounded-card p-4"
+            className="glass press-soft relative w-[164px] shrink-0 snap-start overflow-hidden rounded-card p-4 text-left"
           >
             {/* Lavado de color de la marca en la esquina */}
             <div
@@ -54,9 +61,11 @@ export function AccountsStrip() {
                 {formatMoney(acc.balance)}
               </div>
             </div>
-          </motion.div>
+          </motion.button>
         ))}
       </div>
+
+      <AccountDetailSheet account={detalle} onClose={() => setDetalle(null)} />
     </section>
   )
 }

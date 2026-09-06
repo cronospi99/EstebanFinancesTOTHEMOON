@@ -57,6 +57,7 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
   const [amount, setAmount] = useState('')
   const [apy, setApy] = useState('')
   const [installments, setInstallments] = useState('')
+  const [cupo, setCupo] = useState('')
   const [negative, setNegative] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -77,11 +78,12 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
       currency,
       color: institution.color,
       apy: apy ? parseKeypad(apy) : undefined,
+      creditLimit: isCredit && cupo ? parseKeypad(cupo) : undefined,
       installments: isCredit && installments ? Number(installments) : undefined,
       installmentsPaid: isCredit && installments ? 0 : undefined,
     })
 
-    setName(''); setAmount(''); setApy(''); setInstallments(''); setNegative(false)
+    setName(''); setAmount(''); setApy(''); setInstallments(''); setCupo(''); setNegative(false)
     setSaving(false)
     onClose()
   }
@@ -153,6 +155,13 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
 
         {isCredit && (
           <div className="mb-5">
+            <Label>Cupo total</Label>
+            <MoneyField value={cupo} onChange={setCupo} prefix={currency === 'USD' ? 'US$' : '$'} />
+            <p className="mb-5 mt-1.5 px-1 text-[12px] text-label-tertiary">
+              El aprobado por el banco. Sirve para ver cuánto te queda disponible
+              y qué porcentaje llevas usado.
+            </p>
+
             <Label>Cuotas pactadas</Label>
             <input
               value={installments}

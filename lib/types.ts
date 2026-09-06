@@ -25,6 +25,8 @@ export interface Account {
   /** Rendimiento efectivo anual en % de la cuenta. */
   apy?: number
   pockets?: Pocket[]
+  /** Solo tarjetas de crédito: cupo total aprobado. */
+  creditLimit?: number
   /** Solo tarjetas de crédito: cuotas pactadas de la deuda actual. */
   installments?: number
   /** Solo tarjetas de crédito: cuotas ya pagadas. */

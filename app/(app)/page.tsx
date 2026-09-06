@@ -8,6 +8,7 @@ import { BudgetRings } from '@/components/dashboard/budget-rings'
 import { WealthDistribution } from '@/components/dashboard/wealth-distribution'
 import { DemoBanner } from '@/components/layout/demo-banner'
 import { monthName } from '@/lib/format'
+import { saludo, useProfileName } from '@/lib/use-profile'
 
 const stagger = {
   hidden: { opacity: 0, y: 16 },
@@ -19,17 +20,14 @@ const stagger = {
 }
 
 export default function DashboardPage() {
-  const greeting = (() => {
-    const h = new Date().getHours()
-    if (h < 12) return 'Buenos días'
-    if (h < 19) return 'Buenas tardes'
-    return 'Buenas noches'
-  })()
+  const { name } = useProfileName()
 
   return (
     <div className="space-y-6 px-5">
       <header className="pt-safe pt-6">
-        <p className="text-[14px] text-label-secondary">{greeting}</p>
+        <p className="text-[14px] text-label-secondary">
+          {saludo()}{name ? `, ${name}` : ''}
+        </p>
         <h1 className="text-[30px] font-bold capitalize leading-tight tracking-[-0.02em]">
           {monthName()}
         </h1>
