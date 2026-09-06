@@ -119,7 +119,7 @@ export default function ExpensesPage() {
           transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
           className="space-y-6"
         >
-          {!accounts.length && (
+          {!accounts.filter((a) => a.type !== 'investment').length && (
             <Card className="p-8 text-center">
               <p className="text-[15px] font-medium text-label">Aún no tienes cuentas</p>
               <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
@@ -128,8 +128,10 @@ export default function ExpensesPage() {
             </Card>
           )}
 
+          {/* Las cuentas de inversión se gestionan en su propia pestaña: aquí
+              solo el dinero disponible del día a día. */}
           <Card className="divide-y divide-hairline overflow-hidden">
-            {accounts.map((acc) => {
+            {accounts.filter((a) => a.type !== 'investment').map((acc) => {
               const total = accountTotal(acc)
               const pockets = acc.pockets?.length ?? 0
               return (

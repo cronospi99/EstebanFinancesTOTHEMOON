@@ -1,53 +1,74 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { USDCOP } from './use-quotes'
+import { useCallback, useEffect, useState } from 'react'
 
-/** Respaldo si no hay red. Orden de magnitud correcto para no dejar la UI en 0. */
-const FALLBACK = 4100
 const CACHE_KEY = 'eftm.fx.usdcop'
+const OVERRIDE_KEY = 'eftm.fx.manual'
+
+export interface FxState {
+  rate: number
+  /** 'live' de una fuente en vivo, 'cached' de la última conocida, 'manual' fijada por el usuario. */
+  origin: 'live' | 'cached' | 'manual' | 'none'
+  source: string | null
+  updatedAt: string | null
+}
 
 /**
- * Tasa USD→COP en vivo, vía el proxy del servidor.
+ * Tasa USD→COP.
  *
- * Guarda la última tasa conocida en localStorage: al abrir la app sin red,
- * una tasa de ayer es mucho mejor que un patrimonio calculado a 4100 fijo.
+ * Sin dato en vivo NO se inventa una cifra: se usa la última conocida, y si
+ * tampoco la hay, la app lo dice. Además el usuario puede fijar la tasa a
+ * mano, que manda sobre todo lo demás: es su dinero y puede que conozca
+ * mejor la tasa a la que él compra.
  */
 export function useExchangeRate() {
-  const [rate, setRate] = useState<number>(() => {
-    if (typeof window === 'undefined') return FALLBACK
+  const [state, setState] = useState<FxState>(() => {
+    if (typeof window === 'undefined') return { rate: 0, origin: 'none', source: null, updatedAt: null }
     try {
-      const cached = Number(localStorage.getItem(CACHE_KEY))
-      return cached > 0 ? cached : FALLBACK
-    } catch {
-      return FALLBACK
-    }
+      const manual = Number(localStorage.getItem(OVERRIDE_KEY))
+      if (manual > 0) return { rate: manual, origin: 'manual', source: 'manual', updatedAt: null }
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null')
+      if (cached?.rate > 0) return { rate: cached.rate, origin: 'cached', source: cached.source, updatedAt: cached.at }
+    } catch { /* storage bloqueado */ }
+    return { rate: 0, origin: 'none', source: null, updatedAt: null }
   })
-  const [live, setLive] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(async () => {
+    // Una tasa fijada a mano no se pisa con la de la red.
+    try {
+      if (Number(localStorage.getItem(OVERRIDE_KEY)) > 0) return
+    } catch { /* noop */ }
 
-    const load = async () => {
-      try {
-        const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(USDCOP)}`)
-        if (!res.ok) return
-        const { quotes } = await res.json()
-        const q = quotes?.[0]
-        if (!cancelled && q?.price > 0 && !q.stale) {
-          setRate(q.price)
-          setLive(true)
-          try { localStorage.setItem(CACHE_KEY, String(q.price)) } catch { /* cuota llena */ }
-        }
-      } catch {
-        /* sin red: nos quedamos con la tasa cacheada */
+    try {
+      const res = await fetch('/api/fx')
+      const data = await res.json()
+      if (data?.rate > 0) {
+        const at = new Date().toISOString()
+        setState({ rate: data.rate, origin: data.stale ? 'cached' : 'live', source: data.source, updatedAt: at })
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ rate: data.rate, source: data.source, at })) } catch { /* noop */ }
       }
-    }
-
-    load()
-    const id = setInterval(load, 10 * 60_000) // la divisa no se mueve tan rápido
-    return () => { cancelled = true; clearInterval(id) }
+    } catch { /* sin red: se conserva lo que hubiera */ }
   }, [])
 
-  return { rate, live }
+  useEffect(() => {
+    load()
+    const id = setInterval(load, 10 * 60_000)
+    const onVisible = () => document.visibilityState === 'visible' && load()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
+  }, [load])
+
+  const setManual = useCallback((rate: number | null) => {
+    try {
+      if (rate && rate > 0) {
+        localStorage.setItem(OVERRIDE_KEY, String(rate))
+        setState({ rate, origin: 'manual', source: 'manual', updatedAt: null })
+      } else {
+        localStorage.removeItem(OVERRIDE_KEY)
+        load()
+      }
+    } catch { /* noop */ }
+  }, [load])
+
+  return { ...state, refresh: load, setManual }
 }

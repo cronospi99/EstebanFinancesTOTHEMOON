@@ -85,8 +85,12 @@ export function categoriesByGroup(kind: 'expense' | 'income') {
   return [...map.entries()]
 }
 
+export type InstitutionGroup = 'Banca tradicional' | 'Neobancos y billeteras' | 'Pagos' | 'Inversión y cripto' | 'Otros'
+
 export interface Institution {
   name: string
+  /** Agrupa el selector: con dos docenas, una lista plana no se navega. */
+  group: InstitutionGroup
   /** Color de marca, usado como fondo del badge. */
   color: string
   /** Color del monograma. Blanco por defecto; se aclara en marcas claras. */
@@ -107,40 +111,49 @@ export interface Institution {
  */
 export const CO_INSTITUTIONS: Institution[] = [
   // Banca tradicional
-  { name: 'Bancolombia', color: '#FDDA24', fg: '#1A1A1A', short: 'BC', logo: 'bancolombia' },
-  { name: 'Davivienda', color: '#ED1C24', short: 'DV', logo: 'davivienda' },
-  { name: 'BBVA', color: '#004481', short: 'BB', logo: 'bbva' },
-  { name: 'Banco de Bogotá', color: '#00489A', short: 'BdB', logo: 'banco-bogota' },
-  { name: 'Scotiabank Colpatria', color: '#EC111A', short: 'SC' },
+  { name: 'Banco de Bogotá', group: 'Banca tradicional', color: '#00489A', short: 'BdB', logo: 'banco-bogota' },
+  { name: 'Bancolombia', group: 'Banca tradicional', color: '#FDDA24', fg: '#1A1A1A', short: 'BC', logo: 'bancolombia' },
+  { name: 'BBVA', group: 'Banca tradicional', color: '#004481', short: 'BB', logo: 'bbva' },
+  { name: 'DaviBank', group: 'Banca tradicional', color: '#E30613', short: 'DB', logo: 'davibank' },
+  { name: 'Davivienda', group: 'Banca tradicional', color: '#ED1C24', short: 'DV', logo: 'davivienda' },
 
   // Neobancos y billeteras
-  { name: 'Nequi', color: '#DA0081', short: 'N', logo: 'nequi' },
-  { name: 'Daviplata', color: '#ED1C24', short: 'DP', logo: 'daviplata' },
-  { name: 'DaviBank', color: '#E30613', short: 'DB', logo: 'davibank' },
-  { name: 'Nu', color: '#820AD1', short: 'nu', logo: 'nu' },
-  { name: 'Lulo Bank', color: '#00D1B0', fg: '#0A2B26', short: 'LB', logo: 'lulo' },
-  { name: 'Dale!', color: '#10395E', short: 'd!', logo: 'dale' },
-  { name: 'Ualá', color: '#F2F2F7', fg: '#1B1B4B', short: 'uá', logo: 'uala' },
-
-  // Rappi
-  { name: 'RappiPay', color: '#FF441F', short: 'RP' },
-  { name: 'RappiCard', color: '#141414', short: 'RC', logo: 'rappicard' },
-  { name: 'Rappi', color: '#FF441F', short: 'R', logo: 'rappi' },
+  { name: 'Dale!', group: 'Neobancos y billeteras', color: '#10395E', short: 'd!', logo: 'dale' },
+  { name: 'Daviplata', group: 'Neobancos y billeteras', color: '#ED1C24', short: 'DP', logo: 'daviplata' },
+  { name: 'Lulo Bank', group: 'Neobancos y billeteras', color: '#00D1B0', fg: '#0A2B26', short: 'LB', logo: 'lulo' },
+  { name: 'Nequi', group: 'Neobancos y billeteras', color: '#DA0081', short: 'N', logo: 'nequi' },
+  { name: 'Nu', group: 'Neobancos y billeteras', color: '#820AD1', short: 'nu', logo: 'nu' },
+  { name: 'Ualá', group: 'Neobancos y billeteras', color: '#F2F2F7', fg: '#1B1B4B', short: 'uá', logo: 'uala' },
 
   // Pagos
-  { name: 'Bold', color: '#4B21C9', short: 'B', logo: 'bold' },
+  { name: 'Bold', group: 'Pagos', color: '#4B21C9', short: 'B', logo: 'bold' },
+  { name: 'RappiCard', group: 'Pagos', color: '#141414', short: 'RC', logo: 'rappicard' },
+  { name: 'RappiPay', group: 'Pagos', color: '#FF441F', short: 'RP', logo: 'rappi' },
 
   // Inversión y cripto
-  { name: 'Trii', color: '#00A868', short: 'tr', logo: 'trii' },
-  { name: 'Tyba', color: '#116466', short: 'ty', logo: 'tyba' },
-  { name: 'ARQ', color: '#EFEDE3', fg: '#141414', short: 'ARQ', logo: 'arq' },
-  { name: 'Insights', color: '#141414', fg: '#C6F432', short: 'In', logo: 'insights' },
-  { name: 'Littio', color: '#1B2A4A', short: 'Li', logo: 'littio' },
-  { name: 'Lemon Cash', color: '#0FD65C', fg: '#0A2B14', short: 'LC', logo: 'lemon-cash' },
-  { name: 'Uphold', color: '#49CC68', fg: '#0A2B14', short: 'U', logo: 'uphold' },
+  { name: 'ARQ', group: 'Inversión y cripto', color: '#EFEDE3', fg: '#141414', short: 'ARQ', logo: 'arq' },
+  { name: 'Insights', group: 'Inversión y cripto', color: '#141414', fg: '#C6F432', short: 'In', logo: 'insights' },
+  { name: 'Lemon Cash', group: 'Inversión y cripto', color: '#0FD65C', fg: '#0A2B14', short: 'LC', logo: 'lemon-cash' },
+  { name: 'Littio', group: 'Inversión y cripto', color: '#1B2A4A', short: 'Li', logo: 'littio' },
+  { name: 'Trii', group: 'Inversión y cripto', color: '#00A868', short: 'tr', logo: 'trii' },
+  { name: 'Tyba', group: 'Inversión y cripto', color: '#116466', short: 'ty', logo: 'tyba' },
+  { name: 'Uphold', group: 'Inversión y cripto', color: '#49CC68', fg: '#0A2B14', short: 'U', logo: 'uphold' },
 
-  { name: 'Efectivo', color: '#30D158', fg: '#0A2B14', short: '$', logo: 'efectivo' },
+  // Otros
+  { name: 'Efectivo', group: 'Otros', color: '#30D158', fg: '#0A2B14', short: '$', logo: 'efectivo' },
 ]
+
+/** Orden de los grupos en el selector; dentro de cada uno, alfabético. */
+export const INSTITUTION_GROUPS: InstitutionGroup[] =
+  ['Banca tradicional', 'Neobancos y billeteras', 'Pagos', 'Inversión y cripto', 'Otros']
+
+export function institutionsByGroup() {
+  return INSTITUTION_GROUPS
+    .map((g) => [g, CO_INSTITUTIONS
+      .filter((i) => i.group === g)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))] as const)
+    .filter(([, items]) => items.length > 0)
+}
 
 /** Busca una entidad por nombre; útil para reconstruir el badge desde una cuenta. */
 export const institutionByName = (name: string) =>

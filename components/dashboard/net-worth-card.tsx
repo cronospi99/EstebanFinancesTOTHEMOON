@@ -2,15 +2,16 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowDownRight, ArrowUpRight, Eye, EyeOff, TrendingUp } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowDownRight, ArrowUpRight, Eye, EyeOff, TrendingUp, TriangleAlert } from 'lucide-react'
 import { BalanceChart } from './balance-chart'
 import { Card } from '@/components/ui/card'
 import { formatMoney, formatPercent } from '@/lib/format'
-import { useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorth } from '@/lib/store'
+import { useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorthDetail } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 
 export function NetWorthCard() {
-  const netWorth = useNetWorth()
+  const { total: netWorth, incompleto, sinConvertir } = useNetWorthDetail()
   const series = useBalanceSeries(30)
   const { income, expense } = useMonthSummary()
   const { monthly, weightedApy } = useExpectedYield()
@@ -54,6 +55,19 @@ export function NetWorthCard() {
         </span>
         <span className="text-[12px] text-label-tertiary">últimos 30 días</span>
       </div>
+
+      {incompleto && (
+        <Link
+          href="/ajustes"
+          className="mb-3 flex items-center gap-2 rounded-xl border border-accent-orange/25 bg-accent-orange/[0.08] px-3 py-2"
+        >
+          <TriangleAlert size={15} className="shrink-0 text-accent-orange" />
+          <span className="text-[12px] leading-snug text-accent-orange">
+            {sinConvertir === 1 ? 'Una cuenta en dólares queda' : `${sinConvertir} cuentas en dólares quedan`}{' '}
+            fuera del total: falta la tasa de cambio. Tócalo para fijarla.
+          </span>
+        </Link>
+      )}
 
       <BalanceChart data={series} positive={positive} />
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, ChevronDown } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
@@ -16,6 +16,27 @@ import { cn, haptic } from '@/lib/utils'
 
 type Mode = 'expense' | 'income'
 
+const hoyISO = () => new Date().toISOString().slice(0, 10)
+
+/**
+ * Combina el día elegido con la hora actual. Registrar algo de ayer no
+ * debería fijarlo a las 00:00: se ordenaría antes que todo lo de ese día.
+ */
+function fechaISO(dia: string) {
+  const ahora = new Date()
+  const [a, m, d] = dia.split('-').map(Number)
+  const fecha = new Date(a, m - 1, d, ahora.getHours(), ahora.getMinutes(), ahora.getSeconds())
+  return fecha.toISOString()
+}
+
+function etiquetaFecha(dia: string) {
+  if (dia === hoyISO()) return 'Hoy'
+  const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
+  if (dia === ayer.toISOString().slice(0, 10)) return 'Ayer'
+  const [a, m, d] = dia.split('-').map(Number)
+  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(new Date(a, m - 1, d))
+}
+
 export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { accounts, transactions, addTransaction, fxRate } = useFinance()
 
@@ -27,6 +48,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [note, setNote] = useState('')
   const [showAll, setShowAll] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
 
   const account = accounts.find((a) => a.id === accountId)
   const currency = account?.currency ?? 'COP'
@@ -58,6 +80,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
     if (open) return
     const t = setTimeout(() => {
       setRaw(''); setNote(''); setSaved(false); setMode('expense'); setShowAll(false); setPocketId(undefined)
+      setFecha(new Date().toISOString().slice(0, 10))
     }, 350)
     return () => clearTimeout(t)
   }, [open])
@@ -87,7 +110,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
       type: mode,
       currency,
       description: note.trim() || DEFAULT_CATEGORIES.find((c) => c.id === categoryId)!.name,
-      occurredAt: new Date().toISOString(),
+      occurredAt: fechaISO(fecha),
     })
     setTimeout(onClose, 620)
   }
@@ -273,6 +296,19 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
             ))}
           </div>
         )}
+
+        {/* Fecha: por defecto hoy, para no estorbar el caso rápido. */}
+        <label className="press mb-3 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline
+                          bg-white/[0.04] px-4 py-2.5">
+          <CalendarDays size={16} className="shrink-0 text-label-tertiary" />
+          <span className="flex-1 text-[15px] text-label">{etiquetaFecha(fecha)}</span>
+          <input
+            type="date" value={fecha} max={hoyISO()}
+            onChange={(e) => { haptic(6); setFecha(e.target.value || hoyISO()) }}
+            className="w-[26px] bg-transparent text-[15px] text-label-tertiary [color-scheme:dark]
+                       focus:outline-none"
+          />
+        </label>
 
         <input
           value={note}

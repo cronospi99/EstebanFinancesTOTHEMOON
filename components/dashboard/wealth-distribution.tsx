@@ -25,9 +25,10 @@ export function WealthDistribution() {
         name: a.name,
         institution: a.institution,
         color: a.color,
+        // null cuando es una cuenta en dólares y no se conoce la tasa.
         value: toCOP(accountTotal(a), a.currency, fxRate),
       }))
-      .filter((r) => r.value > 0)
+      .filter((r): r is typeof r & { value: number } => r.value !== null && r.value > 0)
       .sort((a, b) => b.value - a.value)
 
     if (positivos.length <= MAX_SLICES) return positivos

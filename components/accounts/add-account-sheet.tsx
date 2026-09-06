@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
-import { InstitutionBadge } from '@/components/ui/institution-badge'
-import { CO_INSTITUTIONS } from '@/lib/categories'
+import { InstitutionPicker } from '@/components/ui/institution-picker'
+import { CO_INSTITUTIONS, institutionsByGroup } from '@/lib/categories'
 import { formatKeypad, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { AccountType, Currency } from '@/lib/types'
@@ -50,7 +50,7 @@ function MoneyField({
 export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { addAccount } = useFinance()
 
-  const [institution, setInstitution] = useState(CO_INSTITUTIONS[0])
+  const [institution, setInstitution] = useState(institutionsByGroup()[0][1][0])
   const [name, setName] = useState('')
   const [type, setType] = useState<AccountType>('savings')
   const [currency, setCurrency] = useState<Currency>('COP')
@@ -98,23 +98,8 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
         <h2 className="mb-5 text-center text-[17px] font-semibold">Nueva cuenta</h2>
 
         <Label>Entidad</Label>
-        <div className="-mx-5 mb-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-          {CO_INSTITUTIONS.map((inst) => {
-            const active = inst.name === institution.name
-            return (
-              <button
-                key={inst.name}
-                onClick={() => { haptic(6); setInstitution(inst) }}
-                className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-pill border py-1.5 pl-1.5 pr-3.5 text-[13px] font-medium transition-all',
-                  active ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
-                )}
-              >
-                <InstitutionBadge institution={inst.name} size="sm" />
-                {inst.name}
-              </button>
-            )
-          })}
+        <div className="mb-5">
+          <InstitutionPicker value={institution} onChange={setInstitution} />
         </div>
 
         <Label>Nombre</Label>

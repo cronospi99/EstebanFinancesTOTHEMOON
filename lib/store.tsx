@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
 import { monthKey, monthlyFromApy } from './format'
-import { useExchangeRate } from './use-fx'
+import { useExchangeRate, type FxState } from './use-fx'
 import type { Account, Budget, Holding, Pocket, Transaction } from './types'
 import { uid } from './utils'
 
@@ -27,9 +27,9 @@ const INITIAL: State = {
 interface FinanceContextValue extends State {
   ready: boolean
   synced: boolean
-  /** Tasa USD→COP vigente y si viene de datos en vivo. */
+  /** Tasa USD→COP vigente, con su procedencia. rate 0 = no se conoce. */
   fxRate: number
-  fxLive: boolean
+  fx: FxState & { refresh: () => Promise<void>; setManual: (r: number | null) => void }
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   addAccount: (acc: Omit<Account, 'id'>) => Promise<void>
@@ -51,7 +51,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(INITIAL)
   const [ready, setReady] = useState(false)
   const [synced, setSynced] = useState(false)
-  const { rate: fxRate, live: fxLive } = useExchangeRate()
+  const fx = useExchangeRate()
+  const fxRate = fx.rate
 
   useEffect(() => {
     let cancelled = false
@@ -292,14 +293,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(
     () => ({
-      ...state, ready, synced, fxRate, fxLive,
+      ...state, ready, synced, fxRate, fx,
       addTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       setBudget, resetDemo,
     }),
-    [state, ready, synced, fxRate, fxLive, addTransaction, deleteTransaction, addAccount,
+    [state, ready, synced, fxRate, fx, addTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, setBudget, resetDemo],
   )
@@ -319,9 +320,13 @@ export function useFinance() {
 export const accountTotal = (a: Account) =>
   a.balance + (a.pockets ?? []).reduce((s, p) => s + p.balance, 0)
 
-/** Convierte a pesos según la moneda de la cuenta. */
+/**
+ * Convierte a pesos. Devuelve null si la cuenta está en dólares y no se
+ * conoce la tasa: multiplicar por un número inventado falsearía el
+ * patrimonio, y sumar los dólares como si fueran pesos sería peor todavía.
+ */
 export const toCOP = (amount: number, currency: Account['currency'], fx: number) =>
-  currency === 'USD' ? amount * fx : amount
+  currency === 'USD' ? (fx > 0 ? amount * fx : null) : amount
 
 export function useAccountsInCOP() {
   const { accounts, fxRate } = useFinance()
@@ -339,7 +344,9 @@ export function useInvestmentsValue(quotes: Record<string, { price: number; stal
     for (const h of holdings) {
       const q = quotes[h.symbol]
       const live = Boolean(q && !q.stale && q.price > 0)
+      // Sin tasa, una posición en dólares no puede expresarse en pesos.
       const fx = h.currency === 'USD' ? fxRate : 1
+      if (h.currency === 'USD' && fxRate <= 0) continue
       value += (live ? q!.price : h.avgCost) * h.quantity * fx
       cost += h.avgCost * h.quantity * fx
     }
@@ -347,10 +354,24 @@ export function useInvestmentsValue(quotes: Record<string, { price: number; stal
   }, [holdings, quotes, fxRate])
 }
 
-/** Patrimonio neto: cuentas y bolsillos, todo en pesos. */
-export function useNetWorth() {
+/**
+ * Patrimonio neto en pesos. `incompleto` avisa de que hay cuentas en dólares
+ * que no se pudieron convertir y quedaron fuera del total.
+ */
+export function useNetWorthDetail() {
   const rows = useAccountsInCOP()
-  return useMemo(() => rows.reduce((s, r) => s + r.cop, 0), [rows])
+  return useMemo(() => {
+    let total = 0, sinConvertir = 0
+    for (const r of rows) {
+      if (r.cop === null) sinConvertir++
+      else total += r.cop
+    }
+    return { total, incompleto: sinConvertir > 0, sinConvertir }
+  }, [rows])
+}
+
+export function useNetWorth() {
+  return useNetWorthDetail().total
 }
 
 /**
@@ -363,6 +384,7 @@ export function useExpectedYield() {
   return useMemo(() => {
     let monthly = 0, base = 0
     for (const a of accounts) {
+      if (a.currency === 'USD' && fxRate <= 0) continue
       const fx = a.currency === 'USD' ? fxRate : 1
       if (a.apy && a.balance > 0) {
         monthly += a.balance * fx * monthlyFromApy(a.apy)
