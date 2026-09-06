@@ -46,7 +46,7 @@ export interface Institution {
  */
 export const CO_INSTITUTIONS: Institution[] = [
   // Banca tradicional
-  { name: 'Bancolombia', color: '#FDDA24', fg: '#1A1A1A', short: 'BC' },
+  { name: 'Bancolombia', color: '#FDDA24', fg: '#1A1A1A', short: 'BC', logo: 'bancolombia' },
   { name: 'Davivienda', color: '#ED1C24', short: 'DV' },
   { name: 'BBVA', color: '#004481', short: 'BB' },
   { name: 'Banco de Bogotá', color: '#00489A', short: 'BdB' },
@@ -71,6 +71,8 @@ export const CO_INSTITUTIONS: Institution[] = [
   // Inversión y cripto
   { name: 'Trii', color: '#00A868', short: 'tr', logo: 'trii' },
   { name: 'Tyba', color: '#116466', short: 'ty', logo: 'tyba' },
+  { name: 'ARQ', color: '#EFEDE3', fg: '#141414', short: 'ARQ', logo: 'arq' },
+  { name: 'Insights', color: '#141414', fg: '#C6F432', short: 'In', logo: 'insights' },
   { name: 'Littio', color: '#1B2A4A', short: 'Li', logo: 'littio' },
   { name: 'Lemon Cash', color: '#0FD65C', fg: '#0A2B14', short: 'LC', logo: 'lemon-cash' },
   { name: 'Uphold', color: '#49CC68', fg: '#0A2B14', short: 'U', logo: 'uphold' },

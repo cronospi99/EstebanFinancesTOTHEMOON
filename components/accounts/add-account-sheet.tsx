@@ -15,6 +15,9 @@ const TYPES: { value: AccountType; label: string }[] = [
   { value: 'checking', label: 'Corriente' },
   { value: 'credit', label: 'Crédito' },
   { value: 'cash', label: 'Efectivo' },
+  // Para plataformas como ARQ, Insights, Trii o Tyba, que no son cuentas
+  // bancarias pero sí guardan saldo.
+  { value: 'investment', label: 'Inversión' },
 ]
 
 export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -98,7 +101,7 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
           Tipo
         </label>
-        <div className="mb-5 grid grid-cols-4 gap-2">
+        <div className="mb-5 grid grid-cols-3 gap-2">
           {TYPES.map((t) => {
             const active = t.value === type
             return (
