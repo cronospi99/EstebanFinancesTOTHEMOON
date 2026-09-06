@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Trash2, Wallet } from 'lucide-react'
+import { Check, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { formatKeypad, formatMoney, formatPercent, monthlyFromApy, parseKeypad } from '@/lib/format'
@@ -18,12 +18,18 @@ export function AccountDetailSheet({
   account: Account | null
   onClose: () => void
 }) {
-  const { addPocket, deletePocket, deleteAccount, updateAccount, fxRate } = useFinance()
+  const { addPocket, updatePocket, deletePocket, deleteAccount, updateAccount, fxRate } = useFinance()
   const [adding, setAdding] = useState(false)
   const [pName, setPName] = useState('')
   const [pAmount, setPAmount] = useState('')
   const [pApy, setPApy] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Edición en sitio: el rendimiento cambia (los bancos lo ajustan) y hasta
+  // ahora había que borrar la cuenta y volver a crearla para corregirlo.
+  const [editApy, setEditApy] = useState(false)
+  const [apyDraft, setApyDraft] = useState('')
+  const [editPocket, setEditPocket] = useState<string | null>(null)
+  const [pDraft, setPDraft] = useState({ name: '', balance: '', apy: '' })
 
   if (!account) return null
 
@@ -75,19 +81,63 @@ export function AccountDetailSheet({
           )}
         </div>
 
-        {/* Rendimiento */}
-        {account.apy != null && account.apy > 0 && (
-          <div className="mb-5 flex items-center justify-between rounded-2xl border border-accent-green/25 bg-accent-green/[0.08] px-4 py-3">
+        {/* Rendimiento, editable */}
+        <div className={cn(
+          'mb-5 rounded-2xl border px-4 py-3',
+          account.apy ? 'border-accent-green/25 bg-accent-green/[0.08]' : 'border-hairline bg-white/[0.04]',
+        )}>
+          {editApy ? (
             <div>
-              <p className="text-[12px] text-label-secondary">Rendimiento E.A.</p>
-              <p className="tnum text-[18px] font-semibold text-accent-green">{formatPercent(account.apy, false)}</p>
+              <p className="mb-2 text-[12px] text-label-secondary">Rendimiento E.A.</p>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-1 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2">
+                  <input
+                    autoFocus value={apyDraft} inputMode="decimal"
+                    onChange={(e) => setApyDraft(e.target.value.replace(/[^\d,]/g, '').slice(0, 6))}
+                    placeholder="11,5"
+                    className="tnum w-full bg-transparent text-[18px] font-semibold text-label placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
+                  />
+                  <span className="text-[15px] text-label-secondary">%</span>
+                </div>
+                <button
+                  onClick={() => { haptic([14, 30]); updateAccount(account.id, { apy: apyDraft ? parseKeypad(apyDraft) : undefined }); setEditApy(false) }}
+                  aria-label="Guardar rendimiento"
+                  className="press flex h-10 w-10 items-center justify-center rounded-xl bg-accent-blue text-white"
+                >
+                  <Check size={17} />
+                </button>
+                <button
+                  onClick={() => setEditApy(false)} aria-label="Cancelar"
+                  className="press flex h-10 w-10 items-center justify-center rounded-xl border border-hairline text-label-secondary"
+                >
+                  <X size={17} />
+                </button>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-[12px] text-label-secondary">Estimado al mes</p>
-              <p className="tnum text-[15px] font-semibold text-label">+{formatMoney(monthly, cur)}</p>
-            </div>
-          </div>
-        )}
+          ) : (
+            <button
+              onClick={() => { haptic(6); setApyDraft(account.apy ? String(account.apy).replace('.', ',') : ''); setEditApy(true) }}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <div>
+                <p className="flex items-center gap-1.5 text-[12px] text-label-secondary">
+                  Rendimiento E.A. <Pencil size={11} className="text-label-tertiary" />
+                </p>
+                {account.apy ? (
+                  <p className="tnum text-[18px] font-semibold text-accent-green">{formatPercent(account.apy, false)}</p>
+                ) : (
+                  <p className="text-[15px] font-medium text-accent-blue">Añadir tasa</p>
+                )}
+              </div>
+              {account.apy ? (
+                <div className="text-right">
+                  <p className="text-[12px] text-label-secondary">Estimado al mes</p>
+                  <p className="tnum text-[15px] font-semibold text-label">+{formatMoney(monthly, cur)}</p>
+                </div>
+              ) : null}
+            </button>
+          )}
+        </div>
 
         {/* Cuotas de tarjeta */}
         {account.type === 'credit' && account.installments ? (
@@ -146,15 +196,74 @@ export function AccountDetailSheet({
 
         {pockets.length > 0 && (
           <div className="mb-4 divide-y divide-hairline overflow-hidden rounded-2xl border border-hairline bg-white/[0.04]">
-            {pockets.map((p) => (
+            {pockets.map((p) => editPocket === p.id ? (
+              <div key={p.id} className="space-y-2 px-4 py-3">
+                <input
+                  value={pDraft.name} onChange={(e) => setPDraft((d) => ({ ...d, name: e.target.value }))}
+                  placeholder="Nombre" autoFocus
+                  className="w-full rounded-lg border border-hairline bg-white/[0.06] px-3 py-2 text-[15px] text-label focus:outline-none"
+                />
+                <div className="flex gap-2">
+                  <div className="flex flex-1 items-center gap-1 rounded-lg border border-hairline bg-white/[0.06] px-3 py-2">
+                    <span className="text-[14px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
+                    <input
+                      value={pDraft.balance ? formatKeypad(pDraft.balance) : ''}
+                      onChange={(e) => setPDraft((d) => ({ ...d, balance: e.target.value.replace(/[^\d,]/g, '') }))}
+                      inputMode="decimal" placeholder="0"
+                      className="tnum w-full bg-transparent text-[15px] font-semibold text-label focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex w-[100px] items-center gap-1 rounded-lg border border-hairline bg-white/[0.06] px-3 py-2">
+                    <input
+                      value={pDraft.apy} onChange={(e) => setPDraft((d) => ({ ...d, apy: e.target.value.replace(/[^\d,]/g, '').slice(0, 5) }))}
+                      inputMode="decimal" placeholder="E.A."
+                      className="tnum w-full bg-transparent text-[15px] font-semibold text-label placeholder:font-normal focus:outline-none"
+                    />
+                    <span className="text-[13px] text-label-secondary">%</span>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setEditPocket(null)}
+                    className="press flex-1 rounded-lg border border-hairline py-2 text-[13px] text-label-secondary">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic([14, 30])
+                      updatePocket(account.id, p.id, {
+                        name: pDraft.name.trim() || p.name,
+                        balance: parseKeypad(pDraft.balance),
+                        apy: pDraft.apy ? parseKeypad(pDraft.apy) : undefined,
+                      })
+                      setEditPocket(null)
+                    }}
+                    className="press flex-1 rounded-lg bg-accent-blue py-2 text-[13px] font-semibold text-white">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            ) : (
               <div key={p.id} className="flex items-center gap-3 px-4 py-3">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? '#98989F' }} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-medium text-label">{p.name}</p>
+                <button
+                  onClick={() => {
+                    haptic(6)
+                    setPDraft({
+                      name: p.name,
+                      balance: String(p.balance).replace('.', ','),
+                      apy: p.apy ? String(p.apy).replace('.', ',') : '',
+                    })
+                    setEditPocket(p.id)
+                  }}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <p className="flex items-center gap-1.5 truncate text-[15px] font-medium text-label">
+                    {p.name} <Pencil size={11} className="shrink-0 text-label-tertiary" />
+                  </p>
                   {p.apy ? (
                     <p className="tnum text-[12px] text-accent-green">{formatPercent(p.apy, false)} E.A.</p>
                   ) : null}
-                </div>
+                </button>
                 <span className="tnum shrink-0 text-[15px] font-semibold">{formatMoney(p.balance, cur)}</span>
                 <button
                   onClick={() => { haptic([16, 30]); deletePocket(account.id, p.id) }}

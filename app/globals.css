@@ -85,11 +85,36 @@
 
   .no-scrollbar::-webkit-scrollbar { display: none; }
 
-  /* Feedback táctil: en iOS los elementos se hunden levemente al tocarlos. */
+  /*
+   * Feedback táctil.
+   *
+   * La clave del tacto iOS es la asimetría: el elemento se hunde casi al
+   * instante (90 ms) y vuelve despacio (260 ms, con rebote suave). Con la
+   * misma duración en los dos sentidos la pulsación se siente blanda y
+   * tardía; con esta curva se siente física.
+   */
   .press {
-    transition: transform 150ms cubic-bezier(0.32, 0.72, 0, 1), opacity 150ms;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease;
+    will-change: transform;
   }
-  .press:active { transform: scale(0.97); }
+  .press:active {
+    transform: scale(0.96);
+    transition-duration: 90ms;
+  }
+
+  /* Variante para superficies grandes (tarjetas, filas de lista): el mismo
+     0,96 en un elemento ancho se ve exagerado. */
+  .press-soft {
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms ease;
+  }
+  .press-soft:active {
+    transform: scale(0.985);
+    transition-duration: 90ms;
+  }
+
+  /* Realce al pulsar en elementos sin escala, como las pestañas. */
+  .press-dim { transition: opacity 200ms ease; }
+  .press-dim:active { opacity: 0.55; transition-duration: 60ms; }
 
   /* Realce especular sobre las tarjetas destacadas. */
   .sheen::before {

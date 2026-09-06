@@ -83,6 +83,23 @@ create table if not exists public.holdings (
   created_at timestamptz not null default now()
 );
 
+-- ---------------------------------------------------------------------------
+-- Metas de ahorro
+-- ---------------------------------------------------------------------------
+create table if not exists public.goals (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  name       text not null,
+  target     numeric(16,2) not null default 0,
+  saved      numeric(16,2) not null default 0,
+  currency   text not null default 'COP' check (currency in ('COP','USD')),
+  deadline   date,
+  color      text not null default '#0A84FF',
+  account_id uuid references public.accounts (id) on delete set null,
+  pocket_id  text,
+  created_at timestamptz not null default now()
+);
+
 -- ===========================================================================
 --  Row Level Security
 -- ===========================================================================
@@ -90,6 +107,7 @@ alter table public.accounts     enable row level security;
 alter table public.transactions enable row level security;
 alter table public.budgets      enable row level security;
 alter table public.holdings     enable row level security;
+alter table public.goals        enable row level security;
 
 -- Una política por tabla que cubre select/insert/update/delete.
 -- `using` filtra lo que se puede leer; `with check` valida lo que se escribe.
@@ -97,7 +115,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['accounts','transactions','budgets','holdings'] loop
+  foreach t in array array['accounts','transactions','budgets','holdings','goals'] loop
     execute format('drop policy if exists "own rows" on public.%I', t);
     execute format(
       'create policy "own rows" on public.%I
@@ -129,7 +147,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['accounts','transactions','budgets','holdings'] loop
+  foreach t in array array['accounts','transactions','budgets','holdings','goals'] loop
     execute format('drop trigger if exists set_user_id_trg on public.%I', t);
     execute format(
       'create trigger set_user_id_trg
@@ -182,3 +200,29 @@ alter table public.holdings     add column if not exists account_id uuid referen
 alter table public.holdings drop constraint if exists holdings_asset_type_check;
 alter table public.holdings add constraint holdings_asset_type_check
   check (asset_type in ('stock','etf','crypto','fx','cdt'));
+
+-- Metas de ahorro (añadido después de la primera versión).
+create table if not exists public.goals (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  name       text not null,
+  target     numeric(16,2) not null default 0,
+  saved      numeric(16,2) not null default 0,
+  currency   text not null default 'COP' check (currency in ('COP','USD')),
+  deadline   date,
+  color      text not null default '#0A84FF',
+  account_id uuid references public.accounts (id) on delete set null,
+  pocket_id  text,
+  created_at timestamptz not null default now()
+);
+alter table public.goals enable row level security;
+drop policy if exists "own rows" on public.goals;
+create policy "own rows" on public.goals for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop trigger if exists set_user_id_trg on public.goals;
+create trigger set_user_id_trg before insert on public.goals
+  for each row execute function public.set_user_id();
+
+-- El upsert de presupuestos necesita esta restricción con nombre.
+alter table public.budgets drop constraint if exists budgets_user_id_category_id_key;
+alter table public.budgets add constraint budgets_user_id_category_id_key unique (user_id, category_id);

@@ -12,6 +12,7 @@ import { SpendDonut } from '@/components/expenses/spend-donut'
 import { TransactionList } from '@/components/expenses/transaction-list'
 import { AddAccountSheet } from '@/components/accounts/add-account-sheet'
 import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
+import { GoalsTab } from '@/components/goals/goals-tab'
 import { categoryById, CO_INSTITUTIONS } from '@/lib/categories'
 import { formatMoney, formatPercent, monthName } from '@/lib/format'
 import { accountTotal, useFinance, useMonthSummary, useSpendByCategory } from '@/lib/store'
@@ -24,7 +25,7 @@ const TYPE_LABEL: Record<AccountType, string> = {
 }
 
 export default function ExpensesPage() {
-  const [tab, setTab] = useState<'gastos' | 'cuentas'>('gastos')
+  const [tab, setTab] = useState<'gastos' | 'cuentas' | 'metas'>('gastos')
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [detail, setDetail] = useState<Account | null>(null)
   const { accounts, transactions, fxRate } = useFinance()
@@ -42,10 +43,20 @@ export default function ExpensesPage() {
         options={[
           { value: 'gastos', label: 'Gastos' },
           { value: 'cuentas', label: 'Cuentas' },
+          { value: 'metas', label: 'Metas' },
         ]}
       />
 
-      {tab === 'gastos' ? (
+      {tab === 'metas' ? (
+        <motion.div
+          key="metas"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+        >
+          <GoalsTab />
+        </motion.div>
+      ) : tab === 'gastos' ? (
         <motion.div
           key="gastos"
           initial={{ opacity: 0, x: -12 }}
@@ -119,7 +130,7 @@ export default function ExpensesPage() {
           transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
           className="space-y-6"
         >
-          {!accounts.length && (
+          {!accounts.filter((a) => a.type !== 'investment').length && (
             <Card className="p-8 text-center">
               <p className="text-[15px] font-medium text-label">Aún no tienes cuentas</p>
               <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
@@ -128,15 +139,17 @@ export default function ExpensesPage() {
             </Card>
           )}
 
+          {/* Las cuentas de inversión se gestionan en su propia pestaña: aquí
+              solo el dinero disponible del día a día. */}
           <Card className="divide-y divide-hairline overflow-hidden">
-            {accounts.map((acc) => {
+            {accounts.filter((a) => a.type !== 'investment').map((acc) => {
               const total = accountTotal(acc)
               const pockets = acc.pockets?.length ?? 0
               return (
                 <button
                   key={acc.id}
                   onClick={() => setDetail(acc)}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-white/[0.04]"
+                  className="press-soft flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/[0.04]"
                 >
                   <InstitutionBadge institution={acc.institution} color={acc.color} />
                   <div className="min-w-0 flex-1">

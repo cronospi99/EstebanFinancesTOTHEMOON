@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, ChevronDown } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown, Mic } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
@@ -12,9 +12,32 @@ import { Keypad, ThousandsKey } from './keypad'
 import { categoriesByGroup, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
+import { useVoice } from '@/lib/use-voice'
+import { interpretarDictado } from '@/lib/voice'
 import { cn, haptic } from '@/lib/utils'
 
 type Mode = 'expense' | 'income'
+
+const hoyISO = () => new Date().toISOString().slice(0, 10)
+
+/**
+ * Combina el día elegido con la hora actual. Registrar algo de ayer no
+ * debería fijarlo a las 00:00: se ordenaría antes que todo lo de ese día.
+ */
+function fechaISO(dia: string) {
+  const ahora = new Date()
+  const [a, m, d] = dia.split('-').map(Number)
+  const fecha = new Date(a, m - 1, d, ahora.getHours(), ahora.getMinutes(), ahora.getSeconds())
+  return fecha.toISOString()
+}
+
+function etiquetaFecha(dia: string) {
+  if (dia === hoyISO()) return 'Hoy'
+  const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
+  if (dia === ayer.toISOString().slice(0, 10)) return 'Ayer'
+  const [a, m, d] = dia.split('-').map(Number)
+  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(new Date(a, m - 1, d))
+}
 
 export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { accounts, transactions, addTransaction, fxRate } = useFinance()
@@ -27,6 +50,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [note, setNote] = useState('')
   const [showAll, setShowAll] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
 
   const account = accounts.find((a) => a.id === accountId)
   const currency = account?.currency ?? 'COP'
@@ -58,9 +82,23 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
     if (open) return
     const t = setTimeout(() => {
       setRaw(''); setNote(''); setSaved(false); setMode('expense'); setShowAll(false); setPocketId(undefined)
+      setFecha(new Date().toISOString().slice(0, 10))
     }, 350)
     return () => clearTimeout(t)
   }, [open])
+
+  /** Dictado: rellena monto, categoría y tipo de una sola frase. */
+  const voz = useVoice((texto) => {
+    const d = interpretarDictado(texto)
+    haptic([12, 30])
+    if (d.amount !== null) {
+      // Se guarda con la coma decimal que espera el resto del formulario.
+      setRaw(String(d.amount).replace('.', ','))
+    }
+    if (d.categoryId) setCategoryId(d.categoryId)
+    setMode(d.type)
+    if (d.note) setNote(d.note)
+  })
 
   const amount = parseKeypad(raw)
   const canSave = amount > 0 && Boolean(accountId)
@@ -87,7 +125,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
       type: mode,
       currency,
       description: note.trim() || DEFAULT_CATEGORIES.find((c) => c.id === categoryId)!.name,
-      occurredAt: new Date().toISOString(),
+      occurredAt: fechaISO(fecha),
     })
     setTimeout(onClose, 620)
   }
@@ -160,7 +198,37 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
             <span className="tnum text-[12px] text-label-tertiary">≈ {formatMoney(amount * fxRate)}</span>
           )}
           {!saved && <ThousandsKey onPress={() => setRaw((p) => (p && !p.includes(',') ? p + '000' : p))} disabled={!raw || raw.includes(',')} />}
+          {!saved && voz.soportado && (
+            <button
+              onClick={() => { haptic(10); voz.estado === 'escuchando' ? voz.stop() : voz.start() }}
+              aria-label={voz.estado === 'escuchando' ? 'Detener dictado' : 'Dictar movimiento'}
+              className={cn(
+                'press flex items-center gap-1.5 rounded-pill border px-3 py-1 text-[13px] font-semibold transition-colors',
+                voz.estado === 'escuchando'
+                  ? 'border-transparent bg-accent-red text-white'
+                  : 'border-hairline text-label-secondary',
+              )}
+            >
+              <Mic size={13} />
+              {voz.estado === 'escuchando' ? 'Escuchando' : 'Dictar'}
+            </button>
+          )}
         </div>
+
+        {/* Lo que se va entendiendo, para que el usuario vea si acertó. */}
+        {voz.estado === 'escuchando' && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+            className="mb-3 min-h-[18px] text-center text-[13px] italic text-label-secondary"
+          >
+            {voz.parcial || 'Di por ejemplo: cuarenta y cinco mil en comida'}
+          </motion.p>
+        )}
+        {voz.estado === 'error' && (
+          <p className="mb-3 text-center text-[12px] text-accent-orange">
+            No se pudo escuchar. Revisa el permiso del micrófono.
+          </p>
+        )}
 
         {/* Categorías */}
         <div className="mb-3">
@@ -173,7 +241,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
                     key={cat.id}
                     onClick={() => { haptic(6); setCategoryId(cat.id) }}
                     className={cn(
-                      'flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3.5 transition-all duration-200',
+                      'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3.5 transition-colors duration-200',
                       active ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
                     )}
                   >
@@ -207,7 +275,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
                           key={cat.id}
                           onClick={() => { haptic(6); setCategoryId(cat.id); setShowAll(false) }}
                           className={cn(
-                            'flex flex-col items-center gap-1 rounded-xl px-1 py-2 transition-colors',
+                            'press flex flex-col items-center gap-1 rounded-xl px-1 py-2 transition-colors',
                             active ? 'bg-white/[0.14]' : 'active:bg-white/[0.07]',
                           )}
                         >
@@ -234,7 +302,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
                 key={acc.id}
                 onClick={() => { haptic(6); setAccountId(acc.id) }}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-all',
+                  'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
                   active ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
                 )}
               >
@@ -252,7 +320,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
             <button
               onClick={() => { haptic(6); setPocketId(undefined) }}
               className={cn(
-                'shrink-0 rounded-pill border px-3 py-1 text-[12px] font-medium transition-all',
+                'press shrink-0 rounded-pill border px-3 py-1 text-[12px] font-medium transition-colors',
                 !pocketId ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
               )}
             >
@@ -263,7 +331,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
                 key={p.id}
                 onClick={() => { haptic(6); setPocketId(p.id) }}
                 className={cn(
-                  'flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1 text-[12px] font-medium transition-all',
+                  'press flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1 text-[12px] font-medium transition-colors',
                   pocketId === p.id ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
                 )}
               >
@@ -273,6 +341,19 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
             ))}
           </div>
         )}
+
+        {/* Fecha: por defecto hoy, para no estorbar el caso rápido. */}
+        <label className="press mb-3 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline
+                          bg-white/[0.04] px-4 py-2.5">
+          <CalendarDays size={16} className="shrink-0 text-label-tertiary" />
+          <span className="flex-1 text-[15px] text-label">{etiquetaFecha(fecha)}</span>
+          <input
+            type="date" value={fecha} max={hoyISO()}
+            onChange={(e) => { haptic(6); setFecha(e.target.value || hoyISO()) }}
+            className="w-[26px] bg-transparent text-[15px] text-label-tertiary [color-scheme:dark]
+                       focus:outline-none"
+          />
+        </label>
 
         <input
           value={note}

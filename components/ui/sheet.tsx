@@ -46,17 +46,26 @@ export function Sheet({
 
   return (
     <AnimatePresence>
-      {open && (
-        <>
+      {/*
+        Los dos elementos van como array con `key`, no dentro de un Fragment.
+        AnimatePresence rastrea a sus hijos por key para poder ejecutar la
+        animación de salida; con un Fragment ve un único hijo sin key, la
+        salida nunca termina y el backdrop se queda en el DOM tapando toda la
+        interfaz. Ese era el bloqueo tras navegar un rato: no se colgaba nada,
+        había una capa invisible comiéndose cada toque.
+      */}
+      {open && [
           <motion.div
+            key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
             onClick={onClose}
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-          />
+          />,
           <motion.div
+            key="panel"
             role="dialog"
             aria-modal="true"
             initial={{ y: '100%' }}
@@ -93,9 +102,8 @@ export function Sheet({
             >
               {children}
             </div>
-          </motion.div>
-        </>
-      )}
+          </motion.div>,
+      ]}
     </AnimatePresence>
   )
 }

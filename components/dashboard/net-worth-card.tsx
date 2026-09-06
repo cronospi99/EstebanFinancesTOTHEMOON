@@ -2,16 +2,19 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowDownRight, ArrowUpRight, Eye, EyeOff, TrendingUp } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowDownRight, ArrowUpRight, Eye, EyeOff, TrendingUp, TriangleAlert } from 'lucide-react'
 import { BalanceChart } from './balance-chart'
+import { RangePicker } from './range-picker'
 import { Card } from '@/components/ui/card'
 import { formatMoney, formatPercent } from '@/lib/format'
-import { useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorth } from '@/lib/store'
+import { RANGE_LABEL, useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorthDetail, type RangeKey } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 
 export function NetWorthCard() {
-  const netWorth = useNetWorth()
-  const series = useBalanceSeries(30)
+  const { total: netWorth, incompleto, sinConvertir } = useNetWorthDetail()
+  const [range, setRange] = useState<RangeKey>('1M')
+  const series = useBalanceSeries(range)
   const { income, expense } = useMonthSummary()
   const { monthly, weightedApy } = useExpectedYield()
   const [hidden, setHidden] = useState(false)
@@ -52,8 +55,25 @@ export function NetWorthCard() {
           {positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
           {formatPercent(deltaPct)}
         </span>
-        <span className="text-[12px] text-label-tertiary">últimos 30 días</span>
+        <span className="text-[12px] text-label-tertiary">{RANGE_LABEL[range]}</span>
       </div>
+
+      <div className="mb-2">
+        <RangePicker value={range} onChange={setRange} />
+      </div>
+
+      {incompleto && (
+        <Link
+          href="/ajustes"
+          className="mb-3 flex items-center gap-2 rounded-xl border border-accent-orange/25 bg-accent-orange/[0.08] px-3 py-2"
+        >
+          <TriangleAlert size={15} className="shrink-0 text-accent-orange" />
+          <span className="text-[12px] leading-snug text-accent-orange">
+            {sinConvertir === 1 ? 'Una cuenta en dólares queda' : `${sinConvertir} cuentas en dólares quedan`}{' '}
+            fuera del total: falta la tasa de cambio. Tócalo para fijarla.
+          </span>
+        </Link>
+      )}
 
       <BalanceChart data={series} positive={positive} />
 

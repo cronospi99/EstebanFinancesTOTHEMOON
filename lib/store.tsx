@@ -2,10 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { createClient, isSupabaseConfigured } from './supabase/client'
-import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
+import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
 import { monthKey, monthlyFromApy } from './format'
-import { useExchangeRate } from './use-fx'
-import type { Account, Budget, Holding, Pocket, Transaction } from './types'
+import { useExchangeRate, type FxState } from './use-fx'
+import type { Account, Budget, Goal, Holding, Pocket, Transaction } from './types'
 import { uid } from './utils'
 
 const STORAGE_KEY = 'eftm.state.v2'
@@ -15,6 +15,7 @@ interface State {
   transactions: Transaction[]
   budgets: Budget[]
   holdings: Holding[]
+  goals: Goal[]
 }
 
 const INITIAL: State = {
@@ -22,14 +23,15 @@ const INITIAL: State = {
   transactions: DEMO_TRANSACTIONS,
   budgets: DEMO_BUDGETS,
   holdings: DEMO_HOLDINGS,
+  goals: DEMO_GOALS,
 }
 
 interface FinanceContextValue extends State {
   ready: boolean
   synced: boolean
-  /** Tasa USD→COP vigente y si viene de datos en vivo. */
+  /** Tasa USD→COP vigente, con su procedencia. rate 0 = no se conoce. */
   fxRate: number
-  fxLive: boolean
+  fx: FxState & { refresh: () => Promise<void>; setManual: (r: number | null) => void }
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   addAccount: (acc: Omit<Account, 'id'>) => Promise<void>
@@ -42,6 +44,10 @@ interface FinanceContextValue extends State {
   updateHolding: (id: string, patch: Partial<Holding>) => Promise<void>
   deleteHolding: (id: string) => Promise<void>
   setBudget: (categoryId: string, amount: number) => void
+  removeBudget: (categoryId: string) => void
+  addGoal: (g: Omit<Goal, 'id'>) => Promise<void>
+  updateGoal: (id: string, patch: Partial<Goal>) => Promise<void>
+  deleteGoal: (id: string) => Promise<void>
   resetDemo: () => void
 }
 
@@ -51,7 +57,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(INITIAL)
   const [ready, setReady] = useState(false)
   const [synced, setSynced] = useState(false)
-  const { rate: fxRate, live: fxLive } = useExchangeRate()
+  const fx = useExchangeRate()
+  const fxRate = fx.rate
 
   useEffect(() => {
     let cancelled = false
@@ -61,11 +68,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         const supabase = createClient()
         const { data: { session } = { session: null } } = (await supabase?.auth.getSession()) ?? {}
         if (supabase && session) {
-          const [accounts, transactions, holdings, budgets] = await Promise.all([
+          const [accounts, transactions, holdings, budgets, goals] = await Promise.all([
             supabase.from('accounts').select('*').order('created_at'),
             supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
             supabase.from('holdings').select('*'),
             supabase.from('budgets').select('*'),
+            supabase.from('goals').select('*'),
           ])
           if (!cancelled && !accounts.error) {
             setState({
@@ -73,6 +81,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               transactions: (transactions.data ?? []).map(rowToTx),
               holdings: (holdings.data ?? []).map(rowToHolding),
               budgets: (budgets.data ?? []).map((b) => ({ categoryId: b.category_id, amount: Number(b.amount) })),
+              goals: (goals.data ?? []).map(rowToGoal),
             })
             setSynced(true)
             setReady(true)
@@ -276,14 +285,55 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
-  const setBudget = useCallback((categoryId: string, amount: number) => {
-    setState((s) => ({
-      ...s,
-      budgets: s.budgets.some((b) => b.categoryId === categoryId)
-        ? s.budgets.map((b) => (b.categoryId === categoryId ? { ...b, amount } : b))
-        : [...s.budgets, { categoryId, amount }],
-    }))
-  }, [])
+  const setBudget = useCallback(
+    (categoryId: string, amount: number) => {
+      setState((s) => ({
+        ...s,
+        budgets: s.budgets.some((b) => b.categoryId === categoryId)
+          ? s.budgets.map((b) => (b.categoryId === categoryId ? { ...b, amount } : b))
+          : [...s.budgets, { categoryId, amount }],
+      }))
+      remote()?.from('budgets').upsert(
+        { category_id: categoryId, amount },
+        { onConflict: 'user_id,category_id' },
+      ).then(() => {}, () => {})
+    },
+    [remote],
+  )
+
+  const removeBudget = useCallback(
+    (categoryId: string) => {
+      setState((s) => ({ ...s, budgets: s.budgets.filter((b) => b.categoryId !== categoryId) }))
+      remote()?.from('budgets').delete().eq('category_id', categoryId).then(() => {}, () => {})
+    },
+    [remote],
+  )
+
+  // ---- Metas de ahorro -----------------------------------------------------
+  const addGoal = useCallback(
+    async (g: Omit<Goal, 'id'>) => {
+      const full: Goal = { ...g, id: uid() }
+      setState((s) => ({ ...s, goals: [...s.goals, full] }))
+      await remote()?.from('goals').insert(goalToRow(full))
+    },
+    [remote],
+  )
+
+  const updateGoal = useCallback(
+    async (id: string, patch: Partial<Goal>) => {
+      setState((s) => ({ ...s, goals: s.goals.map((g) => (g.id === id ? { ...g, ...patch } : g)) }))
+      await remote()?.from('goals').update(goalPatchToRow(patch)).eq('id', id)
+    },
+    [remote],
+  )
+
+  const deleteGoal = useCallback(
+    async (id: string) => {
+      setState((s) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) }))
+      await remote()?.from('goals').delete().eq('id', id)
+    },
+    [remote],
+  )
 
   const resetDemo = useCallback(() => {
     setState(INITIAL)
@@ -292,16 +342,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(
     () => ({
-      ...state, ready, synced, fxRate, fxLive,
+      ...state, ready, synced, fxRate, fx,
       addTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
-      setBudget, resetDemo,
+      setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
-    [state, ready, synced, fxRate, fxLive, addTransaction, deleteTransaction, addAccount,
+    [state, ready, synced, fxRate, fx, addTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, addPocket, updatePocket, deletePocket, addHolding,
-     updateHolding, deleteHolding, setBudget, resetDemo],
+     updateHolding, deleteHolding, setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -319,9 +369,13 @@ export function useFinance() {
 export const accountTotal = (a: Account) =>
   a.balance + (a.pockets ?? []).reduce((s, p) => s + p.balance, 0)
 
-/** Convierte a pesos según la moneda de la cuenta. */
+/**
+ * Convierte a pesos. Devuelve null si la cuenta está en dólares y no se
+ * conoce la tasa: multiplicar por un número inventado falsearía el
+ * patrimonio, y sumar los dólares como si fueran pesos sería peor todavía.
+ */
 export const toCOP = (amount: number, currency: Account['currency'], fx: number) =>
-  currency === 'USD' ? amount * fx : amount
+  currency === 'USD' ? (fx > 0 ? amount * fx : null) : amount
 
 export function useAccountsInCOP() {
   const { accounts, fxRate } = useFinance()
@@ -339,7 +393,9 @@ export function useInvestmentsValue(quotes: Record<string, { price: number; stal
     for (const h of holdings) {
       const q = quotes[h.symbol]
       const live = Boolean(q && !q.stale && q.price > 0)
+      // Sin tasa, una posición en dólares no puede expresarse en pesos.
       const fx = h.currency === 'USD' ? fxRate : 1
+      if (h.currency === 'USD' && fxRate <= 0) continue
       value += (live ? q!.price : h.avgCost) * h.quantity * fx
       cost += h.avgCost * h.quantity * fx
     }
@@ -347,10 +403,24 @@ export function useInvestmentsValue(quotes: Record<string, { price: number; stal
   }, [holdings, quotes, fxRate])
 }
 
-/** Patrimonio neto: cuentas y bolsillos, todo en pesos. */
-export function useNetWorth() {
+/**
+ * Patrimonio neto en pesos. `incompleto` avisa de que hay cuentas en dólares
+ * que no se pudieron convertir y quedaron fuera del total.
+ */
+export function useNetWorthDetail() {
   const rows = useAccountsInCOP()
-  return useMemo(() => rows.reduce((s, r) => s + r.cop, 0), [rows])
+  return useMemo(() => {
+    let total = 0, sinConvertir = 0
+    for (const r of rows) {
+      if (r.cop === null) sinConvertir++
+      else total += r.cop
+    }
+    return { total, incompleto: sinConvertir > 0, sinConvertir }
+  }, [rows])
+}
+
+export function useNetWorth() {
+  return useNetWorthDetail().total
 }
 
 /**
@@ -363,6 +433,7 @@ export function useExpectedYield() {
   return useMemo(() => {
     let monthly = 0, base = 0
     for (const a of accounts) {
+      if (a.currency === 'USD' && fxRate <= 0) continue
       const fx = a.currency === 'USD' ? fxRate : 1
       if (a.apy && a.balance > 0) {
         monthly += a.balance * fx * monthlyFromApy(a.apy)
@@ -405,25 +476,58 @@ export function useSpendByCategory(month = monthKey()) {
   }, [transactions, month])
 }
 
-export function useBalanceSeries(days = 30) {
+export type RangeKey = '1D' | '5D' | '1S' | '1M' | '3M' | '6M' | '1A' | '5A'
+
+export const RANGE_DAYS: Record<RangeKey, number> = {
+  '1D': 1, '5D': 5, '1S': 7, '1M': 30, '3M': 90, '6M': 180, '1A': 365, '5A': 1825,
+}
+
+export const RANGE_LABEL: Record<RangeKey, string> = {
+  '1D': 'hoy', '5D': '5 días', '1S': 'la semana', '1M': '30 días',
+  '3M': '3 meses', '6M': '6 meses', '1A': 'el año', '5A': '5 años',
+}
+
+/**
+ * Serie de patrimonio para un rango.
+ *
+ * Reconstruye el pasado restando los movimientos hacia atrás desde el saldo
+ * actual, que es el único dato conocido con certeza. Agrupa en como mucho 60
+ * puntos: cinco años en puntos diarios serían 1.825, ilegibles en un móvil y
+ * lentos de dibujar.
+ *
+ * Los tramos anteriores al primer movimiento salen planos, y es correcto: no
+ * hay información para dibujar otra cosa, e inventar una curva sería mentir.
+ */
+export function useBalanceSeries(range: RangeKey = '1M') {
   const { transactions } = useFinance()
   const netWorth = useNetWorth()
 
   return useMemo(() => {
-    const series: { date: string; value: number }[] = []
-    let running = netWorth
+    const days = RANGE_DAYS[range]
+    const puntos = Math.min(days, 60)
+    const paso = days / puntos
 
-    for (let i = 0; i < days; i++) {
-      const day = new Date()
-      day.setHours(23, 59, 59, 999)
-      day.setDate(day.getDate() - i)
-      series.unshift({ date: day.toISOString(), value: Math.round(running) })
-      transactions
-        .filter((t) => new Date(t.occurredAt).toDateString() === day.toDateString())
-        .forEach((t) => { running -= t.type === 'income' ? t.amount : -t.amount })
+    // Movimientos ordenados de más reciente a más antiguo, con su marca de tiempo.
+    const movs = transactions
+      .map((t) => ({ at: new Date(t.occurredAt).getTime(), delta: t.type === 'income' ? t.amount : -t.amount }))
+      .sort((a, b) => b.at - a.at)
+
+    const ahora = Date.now()
+    const serie: { date: string; value: number }[] = []
+    let running = netWorth
+    let i = 0
+
+    for (let k = 0; k < puntos; k++) {
+      const corte = ahora - k * paso * 86_400_000
+      // Deshacemos todo lo ocurrido después del corte.
+      while (i < movs.length && movs[i].at > corte) {
+        running -= movs[i].delta
+        i++
+      }
+      serie.unshift({ date: new Date(corte).toISOString(), value: Math.round(running) })
     }
-    return series
-  }, [transactions, netWorth, days])
+    return serie
+  }, [transactions, netWorth, range])
 }
 
 // ---- Mapeo fila <-> dominio ------------------------------------------------
@@ -487,5 +591,28 @@ const holdingPatchToRow = (p: Partial<Holding>) => {
   if (p.assetType !== undefined) r.asset_type = p.assetType
   if (p.currency !== undefined) r.currency = p.currency
   if (p.accountId !== undefined) r.account_id = p.accountId
+  return r
+}
+
+const rowToGoal = (r: Row): Goal => ({
+  id: r.id, name: r.name, target: Number(r.target), saved: Number(r.saved),
+  currency: r.currency ?? 'COP', deadline: r.deadline ?? undefined, color: r.color,
+  accountId: r.account_id ?? undefined, pocketId: r.pocket_id ?? undefined,
+})
+const goalToRow = (g: Goal) => ({
+  id: g.id, name: g.name, target: g.target, saved: g.saved, currency: g.currency,
+  deadline: g.deadline ?? null, color: g.color,
+  account_id: g.accountId ?? null, pocket_id: g.pocketId ?? null,
+})
+const goalPatchToRow = (p: Partial<Goal>) => {
+  const r: Row = {}
+  if (p.name !== undefined) r.name = p.name
+  if (p.target !== undefined) r.target = p.target
+  if (p.saved !== undefined) r.saved = p.saved
+  if (p.currency !== undefined) r.currency = p.currency
+  if (p.deadline !== undefined) r.deadline = p.deadline ?? null
+  if (p.color !== undefined) r.color = p.color
+  if (p.accountId !== undefined) r.account_id = p.accountId ?? null
+  if (p.pocketId !== undefined) r.pocket_id = p.pocketId ?? null
   return r
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowDownRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
@@ -15,7 +16,7 @@ import { USDCOP, useQuotes } from '@/lib/use-quotes'
 import { cn, haptic } from '@/lib/utils'
 
 export default function InvestmentsPage() {
-  const { holdings, accounts, deleteHolding, fxRate, fxLive } = useFinance()
+  const { holdings, accounts, deleteHolding, fxRate, fx } = useFinance()
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
 
@@ -111,10 +112,20 @@ export default function InvestmentsPage() {
           </div>
           <div>
             <div className="mb-0.5 text-[12px] text-label-secondary">USD / COP</div>
-            <div className="tnum text-[15px] font-semibold">
-              {fxRate.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-              {!fxLive && <span className="ml-1 text-[11px] font-normal text-label-tertiary">aprox.</span>}
-            </div>
+            {fxRate > 0 ? (
+              <div className="tnum text-[15px] font-semibold">
+                {fxRate.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                {fx.origin !== 'live' && (
+                  <span className="ml-1 text-[11px] font-normal text-label-tertiary">
+                    {fx.origin === 'manual' ? 'fijada' : 'guardada'}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <Link href="/ajustes" className="text-[13px] font-medium text-accent-orange">
+                Sin tasa · fijar
+              </Link>
+            )}
           </div>
         </div>
 
