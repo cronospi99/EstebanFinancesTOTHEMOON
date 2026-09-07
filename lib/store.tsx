@@ -87,6 +87,16 @@ function aplicarDelta(
 /** Lo que un movimiento le suma al saldo: los ingresos entran, los gastos salen. */
 const deltaDe = (t: Pick<Transaction, 'type' | 'amount'>) => (t.type === 'income' ? t.amount : -t.amount)
 
+/** Aplica al saldo de una cuenta todos sus movimientos, bolsillo por bolsillo. */
+function aplicarMovimientos(accounts: Account[], transactions: Transaction[], accountId: string): Account[] {
+  let salida = accounts
+  for (const t of transactions) {
+    if (t.accountId !== accountId) continue
+    salida = aplicarDelta(salida, accountId, t.pocketId, deltaDe(t))
+  }
+  return salida
+}
+
 interface FinanceContextValue extends State {
   ready: boolean
   synced: boolean
@@ -107,6 +117,8 @@ interface FinanceContextValue extends State {
   addAccount: (acc: Omit<Account, 'id'>) => Promise<void>
   updateAccount: (id: string, patch: Partial<Account>) => Promise<void>
   deleteAccount: (id: string) => Promise<void>
+  /** Repara un saldo que quedó sin los movimientos ya registrados. */
+  aplicarMovimientosAlSaldo: (accountId: string) => Promise<void>
   addPocket: (accountId: string, pocket: Omit<Pocket, 'id'>) => Promise<void>
   updatePocket: (accountId: string, pocketId: string, patch: Partial<Pocket>) => Promise<void>
   deletePocket: (accountId: string, pocketId: string) => Promise<void>
@@ -294,18 +306,49 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const remote = useCallback(() => (synced ? createClient() : null), [synced])
 
   // ---- Transacciones -------------------------------------------------------
+  /**
+   * Escribe en el servidor el saldo de las cuentas que un movimiento acaba de
+   * mover.
+   *
+   * El saldo vive como una cifra en la fila de la cuenta, no como la suma de
+   * los movimientos, así que insertar la fila del movimiento no lo cambia por
+   * sí solo. Esta escritura faltaba: la app aplicaba el delta en memoria y
+   * pintaba el saldo nuevo, pero en la siguiente carga volvía el de la base de
+   * datos, intacto. Por eso el cupo de una tarjeta de crédito no se movía por
+   * más gastos que se registraran, ni bajaba el saldo del banco, ni cambiaba
+   * el patrimonio.
+   */
+  const persistirSaldos = useCallback(
+    async (cuentas: Account[]) => {
+      const supabase = remote()
+      if (!supabase || !cuentas.length) return
+      await Promise.all(
+        cuentas.map((a) =>
+          supabase.from('accounts').update({ balance: a.balance, pockets: a.pockets ?? [] }).eq('id', a.id),
+        ),
+      )
+    },
+    [remote],
+  )
+
   const addTransaction = useCallback(
     async (tx: Omit<Transaction, 'id'>) => {
       const full: Transaction = { ...tx, id: uid() }
-      setState((s) => ({
-        ...s,
-        transactions: [full, ...s.transactions],
+      // `aplicarDelta` devuelve la misma referencia para las cuentas que no
+      // toca, así que comparar identidades basta para saber cuáles guardar.
+      let tocadas: Account[] = []
+      setState((s) => {
         // Si va a un bolsillo, el saldo se mueve ahí y no en el general.
-        accounts: aplicarDelta(s.accounts, full.accountId, full.pocketId, deltaDe(full)),
-      }))
-      await remote()?.from('transactions').insert(txToRow(full))
+        const accounts = aplicarDelta(s.accounts, full.accountId, full.pocketId, deltaDe(full))
+        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        return { ...s, transactions: [full, ...s.transactions], accounts }
+      })
+      await Promise.all([
+        remote()?.from('transactions').insert(txToRow(full)),
+        persistirSaldos(tocadas),
+      ])
     },
-    [remote],
+    [remote, persistirSaldos],
   )
 
   /**
@@ -318,6 +361,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const updateTransaction = useCallback(
     async (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
+      let tocadas: Account[] = []
       setState((s) => {
         const anterior = s.transactions.find((t) => t.id === id)
         if (!anterior) return s
@@ -325,6 +369,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
         let accounts = aplicarDelta(s.accounts, anterior.accountId, anterior.pocketId, -deltaDe(anterior))
         accounts = aplicarDelta(accounts, nuevo.accountId, nuevo.pocketId, deltaDe(nuevo))
+        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
 
         return {
           ...s,
@@ -332,25 +377,60 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           accounts,
         }
       })
-      await remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id)
+      await Promise.all([
+        remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id),
+        persistirSaldos(tocadas),
+      ])
     },
-    [remote],
+    [remote, persistirSaldos],
   )
 
   const deleteTransaction = useCallback(
     async (id: string) => {
+      let tocadas: Account[] = []
       setState((s) => {
         const tx = s.transactions.find((t) => t.id === id)
         if (!tx) return s
+        const accounts = aplicarDelta(s.accounts, tx.accountId, tx.pocketId, -deltaDe(tx))
+        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
         return {
           ...s,
           transactions: s.transactions.filter((t) => t.id !== id),
-          accounts: aplicarDelta(s.accounts, tx.accountId, tx.pocketId, -deltaDe(tx)),
+          accounts,
         }
       })
-      await remote()?.from('transactions').delete().eq('id', id)
+      await Promise.all([
+        remote()?.from('transactions').delete().eq('id', id),
+        persistirSaldos(tocadas),
+      ])
     },
-    [remote],
+    [remote, persistirSaldos],
+  )
+
+  /**
+   * Vuelve a aplicar al saldo guardado todos los movimientos de una cuenta.
+   *
+   * Existe para reparar los datos anteriores a la corrección: durante un
+   * tiempo los movimientos se guardaban pero no tocaban el saldo de su cuenta,
+   * así que las tarjetas se quedaron con el cupo intacto y los bancos con el
+   * saldo del día que se crearon.
+   *
+   * Es una acción manual, y tiene que serlo: no hay forma de saber desde el
+   * código qué movimientos ya están reflejados en el saldo y cuáles no.
+   * Aplicarla dos veces contaría los movimientos dos veces, así que la
+   * interfaz enseña antes la cifra que quedaría.
+   */
+  const aplicarMovimientosAlSaldo = useCallback(
+    async (accountId: string) => {
+      let tocadas: Account[] = []
+      setState((s) => {
+        const accounts = aplicarMovimientos(s.accounts, s.transactions, accountId)
+        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        return { ...s, accounts }
+      })
+      await persistirSaldos(tocadas)
+    },
+    [persistirSaldos],
   )
 
   // ---- Cuentas -------------------------------------------------------------
@@ -529,14 +609,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
       addTransaction, updateTransaction, deleteTransaction,
-      addAccount, updateAccount, deleteAccount,
+      addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
-     updateAccount, deleteAccount, addPocket, updatePocket, deletePocket, addHolding,
+     updateAccount, deleteAccount, aplicarMovimientosAlSaldo, addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
   )
 
@@ -554,6 +634,26 @@ export function useFinance() {
 /** Saldo total de una cuenta: el general más el de sus bolsillos. */
 export const accountTotal = (a: Account) =>
   a.balance + (a.pockets ?? []).reduce((s, p) => s + p.balance, 0)
+
+/**
+ * Vista previa de la reparación de saldo: qué hay hoy y qué quedaría al
+ * aplicar los movimientos ya registrados de la cuenta.
+ */
+export function useSaldoConMovimientos(accountId: string | undefined) {
+  const { accounts, transactions } = useFinance()
+  return useMemo(() => {
+    if (!accountId) return null
+    const actual = accounts.find((a) => a.id === accountId)
+    if (!actual) return null
+    const movimientos = transactions.filter((t) => t.accountId === accountId)
+    const propuesta = aplicarMovimientos(accounts, transactions, accountId).find((a) => a.id === accountId)!
+    return {
+      movimientos: movimientos.length,
+      actual: accountTotal(actual),
+      propuesto: accountTotal(propuesta),
+    }
+  }, [accounts, transactions, accountId])
+}
 
 /**
  * Convierte a pesos. Devuelve null si la cuenta está en dólares y no se
