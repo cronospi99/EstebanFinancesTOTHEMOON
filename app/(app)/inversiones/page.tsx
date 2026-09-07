@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowDownRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
@@ -13,13 +13,40 @@ import { AddHoldingSheet } from '@/components/investments/add-holding-sheet'
 import { TradeHistory } from '@/components/investments/trade-history'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { accountTotal, precioDe, useFinance, useInvestmentsValue } from '@/lib/store'
-import type { Holding } from '@/lib/types'
+import type { Currency, Holding } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
 
+const MONEDA_KEY = 'eftm.inv.moneda'
+
 export default function InvestmentsPage() {
-  const { holdings, accounts, deleteHolding, fxRate, fx, quotes, quotesLoading, refreshQuotes } = useFinance()
+  const {
+    holdings, accounts, deleteHolding, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
+  } = useFinance()
   const [adding, setAdding] = useState(false)
   const [tab, setTab] = useState<'posiciones' | 'historial'>('posiciones')
+
+  /*
+   * Moneda en la que se enseña el portafolio. Se recuerda entre visitas: quien
+   * lleva la cabeza en dólares no quiere volver a cambiarlo cada vez.
+   */
+  const [moneda, setMoneda] = useState<Currency>('COP')
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(MONEDA_KEY) === 'USD') setMoneda('USD')
+    } catch { /* storage bloqueado */ }
+  }, [])
+
+  const cambiarMoneda = (m: Currency) => {
+    haptic(8)
+    setMoneda(m)
+    try { localStorage.setItem(MONEDA_KEY, m) } catch { /* noop */ }
+  }
+
+  // Sin tasa de cambio no hay pesos que enseñar: todo va en dólares.
+  const enUSD = moneda === 'USD' || fxRate <= 0
+  /** Convierte un importe ya calculado en pesos a la moneda elegida. */
+  const enMoneda = (cop: number) => (enUSD ? (fxRate > 0 ? cop / fxRate : cop) : cop)
+  const divisa: Currency = enUSD ? 'USD' : 'COP'
   const [editing, setEditing] = useState<Holding | null>(null)
 
   const hasMarketData = useMemo(
@@ -59,22 +86,43 @@ export default function InvestmentsPage() {
       <PageHeader title="Inversiones" subtitle="Portafolio en tiempo real" />
 
       <Card className="p-5">
-        <div className="mb-1 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between gap-2">
           <span className="text-[13px] font-medium text-label-secondary">Valor del portafolio</span>
-          <button
-            onClick={() => { haptic(8); refreshQuotes() }}
-            aria-label="Actualizar precios"
-            className="press rounded-full p-1.5 text-label-tertiary"
-          >
-            <RefreshCw size={15} className={cn(quotesLoading && 'animate-spin')} />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Cambio de moneda. Sin tasa no hay nada que elegir: se desactiva
+                en vez de ofrecer un botón que no haría nada. */}
+            <div className="flex overflow-hidden rounded-pill border border-hairline">
+              {(['COP', 'USD'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => cambiarMoneda(m)}
+                  disabled={fxRate <= 0}
+                  aria-pressed={divisa === m}
+                  className={cn(
+                    'px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                    divisa === m ? 'bg-white/[0.14] text-label' : 'text-label-tertiary',
+                    fxRate <= 0 && 'opacity-40',
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { haptic(8); refreshQuotes() }}
+              aria-label="Actualizar precios"
+              className="press rounded-full p-1.5 text-label-tertiary"
+            >
+              <RefreshCw size={15} className={cn(quotesLoading && 'animate-spin')} />
+            </button>
+          </div>
         </div>
 
         <div className="tnum mb-2 text-[36px] font-bold leading-none tracking-[-0.02em]">
           {/* Sin tasa se muestra en dólares. Antes se descartaban las
               posiciones en USD y el total salía en cero, que se lee como
               "no tienes nada". */}
-          {fxRate > 0 ? formatMoney(portfolio.value) : formatMoney(portfolio.usd, 'USD')}
+          {fxRate > 0 ? formatMoney(enMoneda(portfolio.value), divisa) : formatMoney(portfolio.usd, 'USD')}
         </div>
         {fxRate <= 0 && portfolio.usd > 0 && (
           <p className="mb-2 text-[12px] text-accent-orange">
@@ -97,7 +145,7 @@ export default function InvestmentsPage() {
               <span className={cn('tnum text-[12px] font-medium', up ? 'text-accent-green' : 'text-accent-red')}>
                 {up ? '+' : '−'}
                 {fxRate > 0
-                  ? formatMoney(Math.abs(portfolio.pnl))
+                  ? formatMoney(Math.abs(enMoneda(portfolio.pnl)), divisa)
                   : formatMoney(Math.abs(portfolio.pnlUsd), 'USD')}
               </span>
               <span className="text-[12px] text-label-tertiary">total</span>
@@ -114,7 +162,7 @@ export default function InvestmentsPage() {
             <div className="mb-0.5 text-[12px] text-label-secondary">Hoy</div>
             {hasMarketData ? (
               <div className={cn('tnum text-[15px] font-semibold', dayChange >= 0 ? 'text-accent-green' : 'text-accent-red')}>
-                {dayChange >= 0 ? '+' : '−'}{formatMoney(Math.abs(dayChange))}
+                {dayChange >= 0 ? '+' : '−'}{formatMoney(Math.abs(enMoneda(dayChange)), divisa)}
               </div>
             ) : (
               <div className="text-[15px] font-semibold text-label-tertiary">—</div>
@@ -143,6 +191,13 @@ export default function InvestmentsPage() {
           <p className="mt-3 rounded-lg bg-accent-orange/10 px-3 py-2 text-[12px] leading-relaxed text-accent-orange">
             Sin cotizaciones disponibles. Las posiciones se muestran a su precio de
             compra, no a valor de mercado.
+            {/* Con el detalle a la vista se distingue «el símbolo no existe» de
+                «el proveedor nos está bloqueando», que se veían igual. */}
+            {quotesFallos.length > 0 && (
+              <span className="mt-1.5 block text-[11px] leading-relaxed text-accent-orange/70">
+                {quotesFallos.slice(0, 3).join(' · ')}
+              </span>
+            )}
           </p>
         )}
         {hasMarketData && (
@@ -186,7 +241,7 @@ export default function InvestmentsPage() {
                     {acc?.name ?? 'Sin plataforma'}
                   </h2>
                 </div>
-                <span className="tnum text-[13px] font-semibold text-label-secondary">{formatMoney(subtotal)}</span>
+                <span className="tnum text-[13px] font-semibold text-label-secondary">{formatMoney(enMoneda(subtotal), divisa)}</span>
               </div>
               <Card className="divide-y divide-hairline overflow-hidden">
                 {acc && accountTotal(acc) !== 0 && (
@@ -199,7 +254,7 @@ export default function InvestmentsPage() {
                       <p className="text-[12px] text-label-tertiary">Saldo disponible en {acc.name}</p>
                     </div>
                     <span className="tnum shrink-0 text-[15px] font-semibold text-label">
-                      {formatMoney(accountTotal(acc), acc.currency)}
+                      {formatMoney(enMoneda(efectivo), divisa)}
                     </span>
                   </div>
                 )}
@@ -209,6 +264,7 @@ export default function InvestmentsPage() {
                       holding={h}
                       quote={quotes[h.symbol]}
                       usdCop={fxRate}
+                      moneda={divisa}
                       onEdit={() => { haptic(6); setEditing(h) }}
                       onDelete={() => deleteHolding(h.id)}
                     />

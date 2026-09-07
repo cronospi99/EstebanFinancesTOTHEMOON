@@ -1,9 +1,10 @@
 'use client'
 
+import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { formatMoney, formatPercent, formatQuantity } from '@/lib/format'
-import type { Holding, Quote } from '@/lib/types'
+import type { Currency, Holding, Quote } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
 
 const TYPE_BADGE: Record<Holding['assetType'], string> = {
@@ -11,34 +12,50 @@ const TYPE_BADGE: Record<Holding['assetType'], string> = {
 }
 
 export function HoldingRow({
-  holding, quote, usdCop, onEdit, onDelete,
+  holding, quote, usdCop, moneda = 'COP', onEdit, onDelete,
 }: {
   holding: Holding
   quote?: Quote
   usdCop: number
+  /** Moneda en la que se enseñan los importes de la fila. */
+  moneda?: Currency
   onEdit?: () => void
   onDelete?: () => void
 }) {
+  /*
+   * Deslizar para borrar y tocar para editar comparten el mismo dedo. Framer
+   * dispara el click igual al soltar tras arrastrar, así que al intentar
+   * borrar se abría el editor de la posición encima. Se marca el arrastre y se
+   * deja caer ese click; el flag se limpia en el siguiente turno del bucle de
+   * eventos, cuando el click ya pasó.
+   */
+  const arrastrando = useRef(false)
+
   // Solo un precio real y fresco cuenta como "en vivo": sin esto mostraríamos
   // un 0,00 % en verde que se lee como sesión plana cuando no hay ni un dato.
   const live = Boolean(quote && !quote.stale && quote.price > 0)
 
   const fx = holding.currency === 'USD' ? usdCop : 1
   const price = live ? quote!.price : holding.avgCost
-  const marketValue = price * holding.quantity * fx
-  const cost = holding.avgCost * holding.quantity * fx
-  const pnlPct = cost ? ((marketValue - cost) / cost) * 100 : 0
+  // Todo se calcula en pesos y se convierte al final: mezclar monedas por el
+  // camino es como se cuelan los totales que no son de nadie.
+  const valorCOP = price * holding.quantity * fx
+  const costeCOP = holding.avgCost * holding.quantity * fx
+  const aMoneda = (cop: number) => (moneda === 'USD' && usdCop > 0 ? cop / usdCop : cop)
+  const marketValue = aMoneda(valorCOP)
+  const pnlPct = costeCOP ? ((valorCOP - costeCOP) / costeCOP) * 100 : 0
   const up = pnlPct >= 0
   const dayUp = (quote?.changePercent ?? 0) >= 0
 
   return (
-    <motion.div
-      layout
-      drag={onDelete ? 'x' : false}
-      dragConstraints={{ left: -72, right: 0 }}
-      dragElastic={{ left: 0.12, right: 0 }}
-      className="relative"
-    >
+    /*
+     * El botón de borrar vive FUERA del elemento que se arrastra.
+     * Estaba dentro, así que al deslizar se movía con la fila y quedaba
+     * flotando a media pantalla en vez de asomar por el borde derecho: el
+     * gesto de iOS es la fila deslizándose sobre un botón quieto, no los dos
+     * viajando juntos.
+     */
+    <div className="relative overflow-hidden">
       {onDelete && (
         <button
           onClick={() => { haptic([18, 30]); onDelete() }}
@@ -49,8 +66,16 @@ export function HoldingRow({
         </button>
       )}
 
+      <motion.div
+        drag={onDelete ? 'x' : false}
+        dragConstraints={{ left: -72, right: 0 }}
+        dragElastic={{ left: 0.12, right: 0 }}
+        onDragStart={() => { arrastrando.current = true }}
+        onDragEnd={() => { setTimeout(() => { arrastrando.current = false }, 0) }}
+        className="relative bg-[#0E0E10]"
+      >
       <button
-        onClick={onEdit}
+        onClick={() => { if (!arrastrando.current) onEdit?.() }}
         className="press-soft relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3.5 text-left active:bg-white/[0.03]"
       >
         <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[11px] font-bold tracking-tight text-label">
@@ -61,12 +86,18 @@ export function HoldingRow({
           <div className="truncate text-[15px] font-medium text-label">{holding.name}</div>
           <div className="tnum truncate text-[12px] text-label-tertiary">
             {formatQuantity(holding.quantity)} · {TYPE_BADGE[holding.assetType]}
-            {!live && ' · al costo'}
+            {/* El precio unitario en vivo: es el dato que uno mira para saber
+                si entrar o salir, y hasta ahora solo se veía el total. */}
+            {live
+              ? ` · ${formatMoney(quote!.price, holding.currency)}`
+              : ' · al costo'}
           </div>
         </div>
 
         <div className="shrink-0 text-right">
-          <div className="tnum text-[15px] font-semibold text-label">{formatMoney(marketValue)}</div>
+          <div className="tnum text-[15px] font-semibold text-label">
+            {formatMoney(marketValue, moneda)}
+          </div>
           <div className="flex items-center justify-end gap-1.5">
             {live ? (
               <>
@@ -90,6 +121,7 @@ export function HoldingRow({
           </div>
         </div>
       </button>
-    </motion.div>
+      </motion.div>
+    </div>
   )
 }

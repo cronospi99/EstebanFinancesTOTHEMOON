@@ -62,18 +62,14 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                 const account = accounts.find((a) => a.id === tx.accountId)
                 const income = tx.type === 'income'
                 return (
-                  <motion.div
-                    key={tx.id}
-                    layout
-                    // Deslizar a la izquierda revela el botón de borrar,
-                    // el gesto estándar de iOS para eliminar de una lista.
-                    drag="x"
-                    dragConstraints={{ left: -72, right: 0 }}
-                    dragElastic={{ left: 0.12, right: 0 }}
-                    onDragStart={() => { arrastrando.current = true }}
-                    onDragEnd={() => { setTimeout(() => { arrastrando.current = false }, 0) }}
-                    className="relative bg-transparent"
-                  >
+                  <div key={tx.id} className="relative overflow-hidden">
+                    {/*
+                      El botón de borrar va FUERA del elemento que se arrastra.
+                      Estaba dentro, así que al deslizar se movía con la fila y
+                      quedaba flotando a media pantalla en vez de asomar por el
+                      borde derecho: el gesto de iOS es la fila deslizándose
+                      sobre un botón quieto, no los dos viajando juntos.
+                    */}
                     <button
                       onClick={() => {
                         haptic([18, 30])
@@ -85,6 +81,14 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                       <Trash2 size={18} />
                     </button>
 
+                    <motion.div
+                      drag="x"
+                      dragConstraints={{ left: -72, right: 0 }}
+                      dragElastic={{ left: 0.12, right: 0 }}
+                      onDragStart={() => { arrastrando.current = true }}
+                      onDragEnd={() => { setTimeout(() => { arrastrando.current = false }, 0) }}
+                      className="relative bg-[#0E0E10]"
+                    >
                     <button
                       onClick={() => {
                         if (arrastrando.current) return
@@ -106,7 +110,8 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                         {formatMoney(tx.amount).replace('$', '').trim()}
                       </div>
                     </button>
-                  </motion.div>
+                    </motion.div>
+                  </div>
                 )
               })}
             </Card>
