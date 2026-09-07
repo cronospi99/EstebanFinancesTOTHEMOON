@@ -101,6 +101,34 @@ create table if not exists public.goals (
   created_at timestamptz not null default now()
 );
 
+-- ---------------------------------------------------------------------------
+-- Operaciones de inversión (compras y ventas)
+-- ---------------------------------------------------------------------------
+--  El libro de operaciones es la fuente de verdad de una posición: la cantidad
+--  y el coste promedio de `holdings` se recalculan a partir de él. Guardar solo
+--  la posición, como antes, hacía imposible consultar el historial o corregir
+--  una compra mal tecleada.
+create table if not exists public.trades (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  symbol      text not null,
+  name        text not null default '',
+  side        text not null default 'buy' check (side in ('buy','sell')),
+  quantity    numeric(20,8) not null check (quantity > 0),
+  price       numeric(16,4) not null default 0,
+  currency    text not null default 'USD' check (currency in ('COP','USD')),
+  asset_type  text not null default 'stock' check (asset_type in ('stock','etf','crypto','fx','cdt')),
+  account_id  uuid references public.accounts (id) on delete set null,
+  -- Operación sintética que representa una posición anterior al libro.
+  opening     boolean not null default false,
+  occurred_at timestamptz not null default now(),
+  created_at  timestamptz not null default now()
+);
+
+-- El historial siempre se lee por símbolo y de más reciente a más antiguo.
+create index if not exists trades_user_symbol_idx
+  on public.trades (user_id, symbol, occurred_at desc);
+
 -- ===========================================================================
 --  Row Level Security
 -- ===========================================================================
@@ -109,6 +137,7 @@ alter table public.transactions enable row level security;
 alter table public.budgets      enable row level security;
 alter table public.holdings     enable row level security;
 alter table public.goals        enable row level security;
+alter table public.trades       enable row level security;
 
 -- Una política por tabla que cubre select/insert/update/delete.
 -- `using` filtra lo que se puede leer; `with check` valida lo que se escribe.
@@ -116,7 +145,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['accounts','transactions','budgets','holdings','goals'] loop
+  foreach t in array array['accounts','transactions','budgets','holdings','goals','trades'] loop
     execute format('drop policy if exists "own rows" on public.%I', t);
     execute format(
       'create policy "own rows" on public.%I
@@ -148,7 +177,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['accounts','transactions','budgets','holdings','goals'] loop
+  foreach t in array array['accounts','transactions','budgets','holdings','goals','trades'] loop
     execute format('drop trigger if exists set_user_id_trg on public.%I', t);
     execute format(
       'create trigger set_user_id_trg

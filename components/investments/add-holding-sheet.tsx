@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2 } from 'lucide-react'
+import { History, Loader2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
@@ -26,6 +26,17 @@ const TIPO_YAHOO: Record<string, AssetType> = {
 
 const hoy = () => new Date().toISOString().slice(0, 10)
 
+/**
+ * Une el día elegido con la hora actual. Una operación registrada a las 3 de
+ * la tarde no debería quedar a las 00:00: el promedio ponderado depende del
+ * orden, y varias del mismo día se ordenarían al azar.
+ */
+function fechaConHoraActual(dia: string) {
+  const ahora = new Date()
+  const [a, m, d] = dia.split('-').map(Number)
+  return new Date(a, m - 1, d, ahora.getHours(), ahora.getMinutes(), ahora.getSeconds()).toISOString()
+}
+
 export function AddHoldingSheet({
   open, onClose, editing,
 }: {
@@ -33,7 +44,7 @@ export function AddHoldingSheet({
   onClose: () => void
   editing?: Holding | null
 }) {
-  const { accounts, holdings, addHolding, updateHolding, asegurarPlataforma, fxRate } = useFinance()
+  const { accounts, holdings, trades, updateHolding, registrarOperacion, asegurarPlataforma, fxRate } = useFinance()
 
   /*
    * Las plataformas son una lista cerrada, no las cuentas que existan. Antes
@@ -134,6 +145,18 @@ export function AddHoldingSheet({
   // Con el importe en dinero, la cantidad sale de dividir por el precio.
   const cantidad = modo === 'cantidad' ? parseKeypad(qty) : (precioNum > 0 ? montoNum / precioNum : 0)
 
+  /*
+   * Al reconocer una posición que ya existe se propone su plataforma: lo
+   * normal es seguir comprando donde ya se tiene. Si el usuario elige otra,
+   * manda la suya — esto solo vuelve a correr al cambiar de símbolo.
+   */
+  useEffect(() => {
+    if (editing || !existente) return
+    const inst = accounts.find((a) => a.id === existente.accountId)?.institution
+    if (inst) setPlataforma(inst)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existente?.id])
+
   const maxVenta = existente?.quantity ?? editing?.quantity ?? 0
   const excedeVenta = operacion === 'venta' && cantidad > maxVenta + 1e-8
   const canSave = symbol.trim().length > 0 && cantidad > 0 && precioNum > 0 && !excedeVenta
@@ -144,33 +167,28 @@ export function AddHoldingSheet({
     haptic([14, 40, 22])
 
     const sym = symbol.trim().toUpperCase()
-    const base = existente ?? editing
     // La cuenta de la plataforma nace aquí si aún no existía.
     const accountId = plataforma ? await asegurarPlataforma(plataforma) : undefined
 
-    if (base && !editing) {
-      if (operacion === 'compra') {
-        // Coste promedio ponderado: (qxp anterior + qxp nuevo) / cantidad total.
-        const nuevaQty = base.quantity + cantidad
-        await updateHolding(base.id, {
-          quantity: nuevaQty,
-          avgCost: (base.quantity * base.avgCost + cantidad * precioNum) / nuevaQty,
-        })
-      } else {
-        // En venta el coste promedio no cambia: solo se reduce la cantidad.
-        const resto = base.quantity - cantidad
-        if (resto <= 1e-8) await updateHolding(base.id, { quantity: 0 })
-        else await updateHolding(base.id, { quantity: resto })
-      }
-    } else if (editing) {
+    if (editing) {
+      // Edición directa de la posición. Solo llega aquí cuando el símbolo no
+      // tiene libro; con operaciones registradas, la hoja manda al historial.
       await updateHolding(editing.id, {
         symbol: sym, name: name.trim() || sym,
         quantity: cantidad, avgCost: precioNum, assetType, currency, accountId,
       })
     } else {
-      await addHolding({
-        symbol: sym, name: name.trim() || sym,
-        quantity: cantidad, avgCost: precioNum, assetType, currency, accountId,
+      // Se registra la operación; la posición sale del libro, no al revés.
+      await registrarOperacion({
+        symbol: sym,
+        name: name.trim() || sym,
+        side: operacion === 'compra' ? 'buy' : 'sell',
+        quantity: cantidad,
+        price: precioNum,
+        currency,
+        assetType,
+        accountId,
+        occurredAt: fechaConHoraActual(fecha),
       })
     }
 
@@ -191,6 +209,41 @@ export function AddHoldingSheet({
     const limpio = v.replace(/[^\d,]/g, '')
     const [ent, ...d] = limpio.split(',')
     return d.length ? `${ent},${d.join('').slice(0, dec)}` : ent
+  }
+
+  /*
+   * Una posición con libro se calcula desde sus operaciones, así que editar
+   * aquí sus cifras a mano no serviría de nada: el siguiente recálculo las
+   * pisaría. En vez de dejar escribir algo que se va a perder, la hoja explica
+   * dónde se corrige de verdad.
+   */
+  const operacionesDelSimbolo = editing ? trades.filter((t) => t.symbol === editing.symbol).length : 0
+
+  if (editing && operacionesDelSimbolo > 0) {
+    return (
+      <Sheet open={open} onClose={onClose}>
+        <div className="px-5 pb-8 pt-4 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent-blue/[0.15] text-accent-blue">
+            <History size={22} />
+          </div>
+          <h2 className="text-[17px] font-semibold text-label">{editing.symbol}</h2>
+          <p className="mx-auto mt-2 max-w-[280px] text-[14px] leading-relaxed text-label-secondary">
+            Esta posición se calcula a partir de sus {operacionesDelSimbolo}{' '}
+            {operacionesDelSimbolo === 1 ? 'operación registrada' : 'operaciones registradas'}.
+            Para corregirla, edita la operación que esté mal en el historial.
+          </p>
+          <button
+            onClick={() => { haptic(8); onClose() }}
+            className="press mt-6 h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white shadow-glow"
+          >
+            Entendido
+          </button>
+          <p className="mt-3 text-[12px] text-label-tertiary">
+            Inversiones → pestaña Historial
+          </p>
+        </div>
+      </Sheet>
+    )
   }
 
   return (
@@ -321,28 +374,31 @@ export function AddHoldingSheet({
               options={[{ value: 'USD' as Currency, label: 'Dólares' }, { value: 'COP' as Currency, label: 'Pesos' }]}
             />
 
-            {plataformas.length > 0 && (
-              <>
-                <Label>Plataforma</Label>
-                <div className="-mx-5 mb-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-                  {plataformas.map((p) => (
-                    <button
-                      key={p.name}
-                      onClick={() => { haptic(6); setPlataforma(p.name) }}
-                      className={cn(
-                        'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
-                        p.name === plataforma ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
-                      )}
-                    >
-                      <InstitutionBadge institution={p.name} color={p.color} size="xs" />
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
           </>
         )}
+
+        {/*
+          La plataforma se pregunta siempre, también al sumar a una posición que
+          ya existe: el tipo de activo y la moneda son del instrumento y no
+          cambian, pero cada operación se hace en un sitio concreto y el
+          historial la guarda con ella.
+        */}
+        <Label>Plataforma</Label>
+        <div className="-mx-5 mb-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+          {plataformas.map((p) => (
+            <button
+              key={p.name}
+              onClick={() => { haptic(6); setPlataforma(p.name) }}
+              className={cn(
+                'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
+                p.name === plataforma ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+              )}
+            >
+              <InstitutionBadge institution={p.name} color={p.color} size="xs" />
+              {p.name}
+            </button>
+          ))}
+        </div>
 
         <motion.button
           whileTap={{ scale: canSave ? 0.97 : 1 }}
