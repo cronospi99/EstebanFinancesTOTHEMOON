@@ -197,6 +197,8 @@ interface FinanceContextValue extends State {
   /** Cotizaciones vivas de todas las posiciones, compartidas por toda la app. */
   quotes: Record<string, Quote>
   quotesLoading: boolean
+  /** Proveedores que fallaron en la última consulta de precios. */
+  quotesFallos: string[]
   refreshQuotes: () => Promise<void>
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>
   updateTransaction: (id: string, patch: Partial<Omit<Transaction, 'id'>>) => Promise<void>
@@ -244,7 +246,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // el patrimonio del resumen use el valor de mercado real. Antes solo las
   // conocía esa pantalla, así que el resumen ignoraba el portafolio entero.
   const simbolos = useMemo(() => [...new Set(state.holdings.map((h) => h.symbol))], [state.holdings])
-  const { quotes, loading: quotesLoading, refresh: refreshQuotes } = useQuotes(simbolos)
+  const { quotes, loading: quotesLoading, fallos: quotesFallos, refresh: refreshQuotes } = useQuotes(simbolos)
 
   // Espejo del estado para los callbacks estables, que no lo tienen en su
   // clausura pero necesitan consultarlo (no para renderizar).
@@ -847,7 +849,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(
     () => ({
-      ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
+      ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
       addTransaction, updateTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
       addPocket, updatePocket, deletePocket,
@@ -855,7 +857,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       registrarOperacion, updateTrade, deleteTrade,
       setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
-    [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
+    [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
      addPocket, updatePocket, deletePocket, addHolding,

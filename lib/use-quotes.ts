@@ -12,6 +12,8 @@ export function useQuotes(symbols: string[], intervalMs = 60_000) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  /** Qué proveedores fallaron, para poder diagnosticar la falta de precios. */
+  const [fallos, setFallos] = useState<string[]>([])
 
   // Clave estable: evita relanzar el efecto en cada render por identidad del array.
   const key = [...symbols].sort().join(',')
@@ -32,9 +34,10 @@ export function useQuotes(symbols: string[], intervalMs = 60_000) {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
-      const data: { quotes: Quote[]; fetchedAt: string } = await res.json()
+      const data: { quotes: Quote[]; fetchedAt: string; fallos?: string[] } = await res.json()
       setQuotes(Object.fromEntries(data.quotes.map((q) => [q.symbol, q])))
       setUpdatedAt(data.fetchedAt)
+      setFallos(data.fallos ?? [])
       setError(null)
     } catch (err) {
       if (!esCancelacion(err)) setError('No se pudieron actualizar los precios')
@@ -64,5 +67,5 @@ export function useQuotes(symbols: string[], intervalMs = 60_000) {
     }
   }, [refresh, intervalMs])
 
-  return { quotes, loading, error, updatedAt, refresh }
+  return { quotes, loading, error, updatedAt, fallos, refresh }
 }
