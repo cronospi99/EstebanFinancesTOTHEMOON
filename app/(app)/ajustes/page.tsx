@@ -11,7 +11,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { cn, haptic } from '@/lib/utils'
 
 export default function SettingsPage() {
-  const { synced, transactions, accounts, holdings, resetDemo, fx, fxRate } = useFinance()
+  const { synced, syncError, transactions, accounts, holdings, resetDemo, fx, fxRate } = useFinance()
   const { name, setName } = useProfileName()
   const [editTasa, setEditTasa] = useState(false)
   const [tasaDraft, setTasaDraft] = useState('')
@@ -111,13 +111,15 @@ export default function SettingsPage() {
             icon={<Database size={17} />}
             title="Supabase"
             subtitle={
-              isSupabaseConfigured
-                ? synced
-                  ? 'Conectado y sincronizando'
-                  : 'Configurado — falta iniciar sesión'
-                : 'Sin configurar (Modo Demo)'
+              !isSupabaseConfigured
+                ? 'Sin configurar (Modo Demo)'
+                : !synced
+                  ? 'Configurado — falta iniciar sesión'
+                  : syncError
+                    ? 'Sesión activa, pero la última lectura falló'
+                    : 'Conectado y sincronizando'
             }
-            status={isSupabaseConfigured && synced}
+            status={isSupabaseConfigured && synced && !syncError}
           />
           <Row
             icon={<ShieldCheck size={17} />}

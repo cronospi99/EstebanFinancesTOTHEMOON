@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { esCancelacion, fetchConTimeout } from './net'
 import type { Quote } from './types'
 
 /** Símbolo de Yahoo para la tasa USD → COP. */
@@ -26,7 +27,7 @@ export function useQuotes(symbols: string[], intervalMs = 60_000) {
     abortRef.current = controller
 
     try {
-      const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(key)}`, {
+      const res = await fetchConTimeout(`/api/quotes?symbols=${encodeURIComponent(key)}`, {
         signal: controller.signal,
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -36,7 +37,7 @@ export function useQuotes(symbols: string[], intervalMs = 60_000) {
       setUpdatedAt(data.fetchedAt)
       setError(null)
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') setError('No se pudieron actualizar los precios')
+      if (!esCancelacion(err)) setError('No se pudieron actualizar los precios')
     } finally {
       setLoading(false)
     }
@@ -44,7 +45,12 @@ export function useQuotes(symbols: string[], intervalMs = 60_000) {
 
   useEffect(() => {
     refresh()
-    const id = setInterval(refresh, intervalMs)
+    // Con la app en segundo plano no se sondea: iOS congela los temporizadores
+    // y al reanudar los dispara todos a la vez, lo que llena el cupo de
+    // conexiones de Safari con peticiones que ya no interesan a nadie.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh()
+    }, intervalMs)
 
     // Al volver a la app (desbloquear el teléfono) refrescamos de inmediato:
     // ver precios de hace 20 minutos es peor que no verlos.
