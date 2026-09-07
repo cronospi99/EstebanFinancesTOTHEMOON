@@ -13,13 +13,13 @@ import { cn, haptic } from '@/lib/utils'
 const POCKET_COLORS = ['#0A84FF', '#30D158', '#BF5AF2', '#FF9F0A', '#FF375F', '#40C8E0']
 
 export function AccountDetailSheet({
-  account, onClose,
+  account: seleccionada, onClose,
 }: {
   account: Account | null
   onClose: () => void
 }) {
   const {
-    addPocket, updatePocket, deletePocket, deleteAccount, updateAccount,
+    accounts, addPocket, updatePocket, deletePocket, deleteAccount, updateAccount,
     aplicarMovimientosAlSaldo, fxRate,
   } = useFinance()
   const [adding, setAdding] = useState(false)
@@ -39,6 +39,21 @@ export function AccountDetailSheet({
   const [editCupo, setEditCupo] = useState(false)
   const [cupoDraft, setCupoDraft] = useState('')
   const [cuadrando, setCuadrando] = useState(false)
+
+  /**
+   * La cuenta viva del store, no la copia con la que se abrió la ficha.
+   *
+   * La página pasa el objeto que tenía en el momento del toque, y ese objeto
+   * ya no vuelve a cambiar: al editar desde aquí el saldo, el cupo, la tasa o
+   * un bolsillo, el dato se guardaba bien pero la pantalla seguía enseñando la
+   * cifra vieja hasta cerrar y volver a abrir. Con «Cuadrar con los
+   * movimientos» eso pasaba de confuso a peligroso — parecía que no había
+   * pasado nada, e invitaba a aplicarlo por segunda vez.
+   *
+   * Se conserva la copia como respaldo para el instante entre borrar la cuenta
+   * y que se cierre la hoja, cuando ya no existe en el store.
+   */
+  const account = accounts.find((a) => a.id === seleccionada?.id) ?? seleccionada
 
   // Los hooks se llaman antes del retorno temprano: no pueden ir condicionados.
   const cashback = useCashback(account?.id)
