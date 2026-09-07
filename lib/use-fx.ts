@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { fetchConTimeout } from './net'
 
 const CACHE_KEY = 'eftm.fx.usdcop'
 const OVERRIDE_KEY = 'eftm.fx.manual'
@@ -40,7 +41,7 @@ export function useExchangeRate() {
     } catch { /* noop */ }
 
     try {
-      const res = await fetch('/api/fx')
+      const res = await fetchConTimeout('/api/fx')
       const data = await res.json()
       if (data?.rate > 0) {
         const at = new Date().toISOString()
@@ -52,7 +53,14 @@ export function useExchangeRate() {
 
   useEffect(() => {
     load()
-    const id = setInterval(load, 10 * 60_000)
+    // El sondeo no dispara con la app en segundo plano. iOS congela los
+    // temporizadores de una app instalada al salir de pantalla y los suelta
+    // todos de golpe al volver: sin esta guarda, reanudar la app lanza una
+    // ráfaga de peticiones simultáneas que agota el cupo de conexiones de
+    // Safari justo cuando el usuario está tocando la pantalla.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') load()
+    }, 10 * 60_000)
     const onVisible = () => document.visibilityState === 'visible' && load()
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
@@ -70,5 +78,11 @@ export function useExchangeRate() {
     } catch { /* noop */ }
   }, [load])
 
-  return { ...state, refresh: load, setManual }
+  // Objeto estable: el store lo mete en la lista de dependencias del contexto,
+  // y devolver uno nuevo en cada render obligaba a redibujar toda la app cada
+  // vez que cambiaba cualquier cosa, por pequeña que fuera.
+  return useMemo(
+    () => ({ ...state, refresh: load, setManual }),
+    [state, load, setManual],
+  )
 }

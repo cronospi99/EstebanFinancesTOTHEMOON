@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useDragControls, type PanInfo } from 'framer-motion'
 import { useEffect, useRef } from 'react'
+import { bloquearScroll } from '@/lib/scroll-lock'
 import { cn } from '@/lib/utils'
 
 /**
@@ -23,13 +24,13 @@ export function Sheet({
   const dragControls = useDragControls()
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // El bloqueo del fondo se lleva en un contador compartido: con dos hojas
+  // abiertas a la vez, cada una guardando y restaurando el estilo por su
+  // cuenta, cerrar en el orden equivocado dejaba el `body` en overflow:hidden
+  // para siempre y la página no volvía a desplazarse.
   useEffect(() => {
     if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
+    return bloquearScroll()
   }, [open])
 
   useEffect(() => {

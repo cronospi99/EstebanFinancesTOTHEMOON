@@ -9,7 +9,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { CategoryIcon } from '@/components/ui/category-icon'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { Keypad, ThousandsKey } from './keypad'
-import { categoriesByGroup, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoriesByGroup, categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { useVoice } from '@/lib/use-voice'
@@ -113,20 +113,30 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
     })
   }
 
-  async function handleSave() {
+  function handleSave() {
     if (!canSave) return
     haptic([14, 40, 22])
     setSaved(true)
-    await addTransaction({
+
+    // El cierre no espera a la escritura remota. El movimiento ya está en
+    // pantalla y guardado en el dispositivo; si la petición tarda —o no vuelve
+    // nunca, que es lo que pasa al reanudar la app en iOS— la hoja se quedaba
+    // abierta con el visto puesto y el fondo bloqueado detrás. Se ve idéntico
+    // a una app colgada, y sin barra de direcciones no había cómo salir.
+    addTransaction({
       accountId,
       pocketId,
       categoryId,
       amount,
       type: mode,
       currency,
-      description: note.trim() || DEFAULT_CATEGORIES.find((c) => c.id === categoryId)!.name,
+      description: note.trim() || categoryById(categoryId).name,
       occurredAt: fechaISO(fecha),
+    }).catch(() => {
+      /* El movimiento ya está en el estado en memoria. La escritura remota no
+         se reintenta todavía — ver "cola de escrituras" en el README. */
     })
+
     setTimeout(onClose, 620)
   }
 

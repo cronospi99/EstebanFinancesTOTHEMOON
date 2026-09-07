@@ -183,3 +183,57 @@ o el enlace mágico redirigirá a `localhost` y no podrás entrar desde el móvi
 
 En iPhone: Safari → **Compartir** → *Añadir a pantalla de inicio*.
 Arranca en pantalla completa, con icono propio y sin barra del navegador.
+
+> **Tras desplegar una corrección, borra el icono y vuelve a añadirlo.** Una app
+> instalada arrastra su propio service worker y su propia caché; sin reinstalar
+> puede seguir corriendo la versión vieja durante días.
+
+---
+
+## Pendientes
+
+Lo que falta, en orden de lo que más duele.
+
+### Configuración (fuera del código)
+
+- [ ] **Supabase → Authentication → URL Configuration.** *Site URL* y *Redirect
+      URLs* con el dominio de Vercel (`https://tu-app.vercel.app/auth/callback`).
+      Sin esto el enlace mágico redirige a `localhost` y no se puede entrar
+      desde el teléfono.
+- [ ] **Variables de entorno en Vercel:** `NEXT_PUBLIC_SUPABASE_URL`,
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY` y, si se quiere respaldo de precios,
+      `ALPHA_VANTAGE_API_KEY`. Sin las dos primeras el despliegue queda en Modo
+      Demo y **público**: cualquiera con el enlace entra.
+
+### Código
+
+- [ ] **Cola de escrituras.** Con sesión iniciada el estado deja de guardarse en
+      el dispositivo (`store.tsx`: `if (!ready || synced) return`) y cada
+      escritura sale directa a Supabase. Si esa petición falla —sin red, plazo
+      agotado— el movimiento solo existe en memoria y se pierde al recargar.
+      Falta una cola persistente que reintente al recuperar la conexión.
+- [ ] **Los errores remotos son mudos.** Ninguna escritura comprueba el error
+      que devuelve Supabase. No hay forma de saber que algo no se guardó.
+      Mínimo: un aviso discreto y un reintento manual.
+- [ ] **Los datos no se refrescan al volver.** El store carga una sola vez al
+      montar. Lo registrado en otro dispositivo no aparece hasta cerrar y abrir
+      la app. El esquema ya publica `transactions` y `accounts` en
+      `supabase_realtime`, pero nadie se suscribe; alternativa más simple:
+      recargar al volver a primer plano.
+- [ ] **El atajo `/?quick=1` no hace nada.** Está declarado en `shortcuts` del
+      manifiesto (mantener pulsado el icono → «Registro rápido»), pero nadie lee
+      el parámetro, así que abre el resumen como siempre.
+- [ ] **`uid()` cae a un id que no es UUID** cuando `crypto.randomUUID` no
+      existe —solo fuera de HTTPS—, y las columnas `id` son `uuid`: ese insert
+      falla. Solo afecta a las pruebas por IP en la red local.
+- [ ] **Sin `loading.tsx`.** Al cambiar de pestaña con la red lenta no hay
+      ninguna señal de que algo está pasando.
+- [ ] **Sin pruebas.** Ni de los selectores del store (patrimonio, series,
+      rendimiento), que es donde un error se convierte en una cifra falsa.
+
+### Verificado
+
+- [x] `supabase/schema.sql` cubre todo lo que el cliente escribe: bolsillos
+      (`pockets` jsonb), cupo y cuotas de las tarjetas, `goals`, y la
+      restricción única `budgets_user_id_category_id_key` que necesita el
+      upsert de presupuestos. RLS activo en las cinco tablas.

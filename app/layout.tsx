@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { FinanceProvider } from '@/lib/store'
+import { PwaRecovery } from '@/components/layout/pwa-recovery'
 import { ServiceWorkerRegistrar } from '@/components/layout/service-worker'
 
 // Inter con números tabulares. En iPhone el fallback -apple-system entrega
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </FinanceProvider>
         <ServiceWorkerRegistrar />
+        <PwaRecovery />
       </body>
     </html>
   )
