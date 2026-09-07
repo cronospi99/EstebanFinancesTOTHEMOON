@@ -9,7 +9,11 @@ import type { Currency } from './types'
 
 const copInt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const copDec = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Los dólares se prefijan «US$» a mano, no con el símbolo de Intl. En una app
+// colombiana donde ahora se puede alternar la moneda, un «$» a secas es
+// ambiguo justo donde más caro sale confundirse.
+const usdNum = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const usd = { format: (v: number) => `${v < 0 ? '-' : ''}US$ ${usdNum.format(Math.abs(v))}` }
 
 /** true si el valor tiene parte decimal significativa (más de un centavo). */
 const hasCents = (v: number) => Math.abs(v - Math.round(v)) > 0.004
@@ -23,7 +27,7 @@ export function formatCompact(value: number, currency: Currency = 'COP') {
   const abs = Math.abs(value)
   const sign = value < 0 ? '-' : ''
   if (currency === 'USD') {
-    if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}K`
+    if (abs >= 1000) return `${sign}US$ ${(abs / 1000).toFixed(1)}K`
     return usd.format(value)
   }
   if (abs >= 1_000_000_000) return `${sign}$ ${(abs / 1_000_000_000).toFixed(1).replace('.', ',')} MM`

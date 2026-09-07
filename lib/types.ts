@@ -129,4 +129,6 @@ export interface Quote {
   changePercent: number
   currency: string
   stale?: boolean
+  /** Proveedor que respondió. Sirve para diagnosticar por qué falta un precio. */
+  source?: string
 }
