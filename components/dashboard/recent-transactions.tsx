@@ -1,17 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { EditTransactionSheet } from '@/components/expenses/edit-transaction-sheet'
 import { categoryById } from '@/lib/categories'
 import { formatDate, formatMoney } from '@/lib/format'
 import { useFinance } from '@/lib/store'
-import { cn } from '@/lib/utils'
+import { cn, haptic } from '@/lib/utils'
+import type { Transaction } from '@/lib/types'
 
 export function RecentTransactions({ limit = 6 }: { limit?: number }) {
   const { transactions, accounts } = useFinance()
+  const [editando, setEditando] = useState<Transaction | null>(null)
 
   const recent = [...transactions]
     .sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt))
@@ -47,12 +51,14 @@ export function RecentTransactions({ limit = 6 }: { limit?: number }) {
           const account = accounts.find((a) => a.id === tx.accountId)
           const income = tx.type === 'income'
           return (
-            <motion.div
+            <motion.button
               key={tx.id}
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.035, duration: 0.3 }}
-              className="flex items-center gap-3 px-4 py-3"
+              onClick={() => { haptic(6); setEditando(tx) }}
+              aria-label={`Editar ${tx.description}`}
+              className="press-soft flex w-full items-center gap-3 px-4 py-3 text-left"
             >
               <CategoryIcon icon={cat.icon} color={cat.color} />
               <div className="min-w-0 flex-1">
@@ -65,10 +71,12 @@ export function RecentTransactions({ limit = 6 }: { limit?: number }) {
                 {income ? '+' : '−'}
                 {formatMoney(tx.amount).replace('$', '').trim()}
               </div>
-            </motion.div>
+            </motion.button>
           )
         })}
       </Card>
+
+      <EditTransactionSheet transaction={editando} onClose={() => setEditando(null)} />
     </section>
   )
 }

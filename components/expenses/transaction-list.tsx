@@ -1,9 +1,11 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { EditTransactionSheet } from './edit-transaction-sheet'
 import { categoryById } from '@/lib/categories'
 import { formatDayLabel, formatMoney } from '@/lib/format'
 import { useFinance } from '@/lib/store'
@@ -22,6 +24,13 @@ function groupByDay(transactions: Transaction[]) {
 
 export function TransactionList({ transactions }: { transactions: Transaction[] }) {
   const { accounts, deleteTransaction } = useFinance()
+  const [editando, setEditando] = useState<Transaction | null>(null)
+
+  // Deslizar para borrar y tocar para editar comparten el mismo dedo. Framer
+  // dispara el click igual al soltar tras arrastrar, así que se marca el
+  // arrastre y se deja caer ese click; el flag se limpia en el siguiente turno
+  // del bucle de eventos, cuando el click ya pasó.
+  const arrastrando = useRef(false)
 
   if (!transactions.length) {
     return (
@@ -61,6 +70,8 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                     drag="x"
                     dragConstraints={{ left: -72, right: 0 }}
                     dragElastic={{ left: 0.12, right: 0 }}
+                    onDragStart={() => { arrastrando.current = true }}
+                    onDragEnd={() => { setTimeout(() => { arrastrando.current = false }, 0) }}
                     className="relative bg-transparent"
                   >
                     <button
@@ -74,7 +85,15 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                       <Trash2 size={18} />
                     </button>
 
-                    <div className="relative flex items-center gap-3 bg-[#0E0E10] px-4 py-3">
+                    <button
+                      onClick={() => {
+                        if (arrastrando.current) return
+                        haptic(6)
+                        setEditando(tx)
+                      }}
+                      aria-label={`Editar ${tx.description}`}
+                      className="press-soft relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3 text-left"
+                    >
                       <CategoryIcon icon={cat.icon} color={cat.color} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[15px] font-medium text-label">{tx.description}</div>
@@ -86,7 +105,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                         {income ? '+' : '−'}
                         {formatMoney(tx.amount).replace('$', '').trim()}
                       </div>
-                    </div>
+                    </button>
                   </motion.div>
                 )
               })}
@@ -94,6 +113,8 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
           </div>
         )
       })}
+
+      <EditTransactionSheet transaction={editando} onClose={() => setEditando(null)} />
     </div>
   )
 }
