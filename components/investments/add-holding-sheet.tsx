@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { investmentPlatforms } from '@/lib/categories'
 import { formatKeypad, formatMoney, formatQuantity, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { AssetType, Currency, Holding } from '@/lib/types'
@@ -32,8 +33,16 @@ export function AddHoldingSheet({
   onClose: () => void
   editing?: Holding | null
 }) {
-  const { accounts, holdings, addHolding, updateHolding, fxRate } = useFinance()
-  const plataformas = accounts.filter((a) => a.type === 'investment' || a.type === 'savings')
+  const { accounts, holdings, addHolding, updateHolding, asegurarPlataforma, fxRate } = useFinance()
+
+  /*
+   * Las plataformas son una lista cerrada, no las cuentas que existan. Antes
+   * salía cualquier cuenta de ahorros o de inversión, así que aparecían Nequi
+   * y Bancolombia —donde no se compran ETF— y faltaban las corredoras para las
+   * que todavía no se había creado una cuenta a mano. La cuenta de la
+   * plataforma elegida se crea sola al guardar.
+   */
+  const plataformas = investmentPlatforms()
 
   const [symbol, setSymbol] = useState(editing?.symbol ?? '')
   const [name, setName] = useState(editing?.name ?? '')
@@ -46,8 +55,44 @@ export function AddHoldingSheet({
   const [fecha, setFecha] = useState(hoy())
   const [assetType, setAssetType] = useState<AssetType>(editing?.assetType ?? 'etf')
   const [currency, setCurrency] = useState<Currency>(editing?.currency ?? 'USD')
-  const [accountId, setAccountId] = useState(editing?.accountId ?? plataformas[0]?.id)
+  const [plataforma, setPlataforma] = useState(
+    () =>
+      accounts.find((a) => a.id === editing?.accountId)?.institution
+      ?? plataformas[0]?.name
+      ?? '',
+  )
   const [saving, setSaving] = useState(false)
+
+  /*
+   * El formulario se rellena cada vez que la hoja se abre.
+   *
+   * Los `useState` solo leen su valor inicial en el primer montaje, y este
+   * componente no se desmonta al cerrar la hoja —solo su contenido—, así que
+   * abrir «editar» sobre otra posición enseñaba los datos de la anterior.
+   *
+   * Las dependencias son solo `open` y `editing` a propósito: incluir
+   * `accounts` haría que el formulario se reiniciara solo al crearse la cuenta
+   * de una plataforma nueva, en mitad de lo que el usuario está escribiendo.
+   */
+  useEffect(() => {
+    if (!open) return
+    setSymbol(editing?.symbol ?? '')
+    setName(editing?.name ?? '')
+    setOperacion('compra')
+    setModo('cantidad')
+    setQty(editing ? String(editing.quantity).replace('.', ',') : '')
+    setMonto('')
+    setPrecio(editing ? String(editing.avgCost).replace('.', ',') : '')
+    setFecha(hoy())
+    setAssetType(editing?.assetType ?? 'etf')
+    setCurrency(editing?.currency ?? 'USD')
+    setPlataforma(
+      accounts.find((a) => a.id === editing?.accountId)?.institution
+      ?? investmentPlatforms()[0]?.name
+      ?? '',
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing])
 
   /** Posición ya existente con el mismo símbolo: una compra se suma a ella. */
   const existente = useMemo(
@@ -100,6 +145,8 @@ export function AddHoldingSheet({
 
     const sym = symbol.trim().toUpperCase()
     const base = existente ?? editing
+    // La cuenta de la plataforma nace aquí si aún no existía.
+    const accountId = plataforma ? await asegurarPlataforma(plataforma) : undefined
 
     if (base && !editing) {
       if (operacion === 'compra') {
@@ -278,17 +325,17 @@ export function AddHoldingSheet({
               <>
                 <Label>Plataforma</Label>
                 <div className="-mx-5 mb-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-                  {plataformas.map((a) => (
+                  {plataformas.map((p) => (
                     <button
-                      key={a.id}
-                      onClick={() => { haptic(6); setAccountId(a.id) }}
+                      key={p.name}
+                      onClick={() => { haptic(6); setPlataforma(p.name) }}
                       className={cn(
                         'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
-                        a.id === accountId ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                        p.name === plataforma ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
                       )}
                     >
-                      <InstitutionBadge institution={a.institution} color={a.color} size="xs" />
-                      {a.name}
+                      <InstitutionBadge institution={p.name} color={p.color} size="xs" />
+                      {p.name}
                     </button>
                   ))}
                 </div>

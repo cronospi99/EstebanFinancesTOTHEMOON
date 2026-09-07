@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
+import { institutionByName } from './categories'
 import { monthKey, monthlyFromApy } from './format'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
@@ -119,6 +120,8 @@ interface FinanceContextValue extends State {
   deleteAccount: (id: string) => Promise<void>
   /** Repara un saldo que quedó sin los movimientos ya registrados. */
   aplicarMovimientosAlSaldo: (accountId: string) => Promise<void>
+  /** Id de la cuenta de una plataforma de inversión; la crea si hace falta. */
+  asegurarPlataforma: (institution: string) => Promise<string>
   addPocket: (accountId: string, pocket: Omit<Pocket, 'id'>) => Promise<void>
   updatePocket: (accountId: string, pocketId: string, patch: Partial<Pocket>) => Promise<void>
   deletePocket: (accountId: string, pocketId: string) => Promise<void>
@@ -152,6 +155,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // conocía esa pantalla, así que el resumen ignoraba el portafolio entero.
   const simbolos = useMemo(() => [...new Set(state.holdings.map((h) => h.symbol))], [state.holdings])
   const { quotes, loading: quotesLoading, refresh: refreshQuotes } = useQuotes(simbolos)
+
+  // Espejo del estado para los callbacks estables, que no lo tienen en su
+  // clausura pero necesitan consultarlo (no para renderizar).
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const vivo = useRef(true)
   const cargando = useRef(false)
@@ -463,6 +471,40 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /**
+   * Id de la cuenta de una plataforma de inversión, creándola si no existe.
+   *
+   * Una posición apunta a una cuenta, pero exigir que el usuario cree a mano
+   * la cuenta de ARQ antes de poder registrar lo que tiene en ARQ es papeleo
+   * sin motivo: la plataforma se elige de una lista cerrada y su cuenta
+   * aparece sola. Nace con saldo cero porque el valor lo llevan las
+   * posiciones; el saldo es el efectivo sin invertir, y ese lo pone el usuario
+   * si quiere.
+   */
+  const asegurarPlataforma = useCallback(
+    async (institution: string) => {
+      const ya = stateRef.current.accounts.find(
+        (a) => a.type === 'investment' && a.institution === institution,
+      )
+      if (ya) return ya.id
+
+      const full: Account = {
+        id: uid(),
+        name: institution,
+        institution,
+        type: 'investment',
+        balance: 0,
+        currency: 'COP',
+        color: institutionByName(institution)?.color ?? '#0A84FF',
+        pockets: [],
+      }
+      setState((s) => ({ ...s, accounts: [...s.accounts, full] }))
+      await remote()?.from('accounts').insert(accountToRow(full))
+      return full.id
+    },
+    [remote],
+  )
+
   // ---- Bolsillos -----------------------------------------------------------
   // Viven dentro de la cuenta (columna jsonb): son subdivisiones suyas, no
   // entidades propias, y así se mueven y se borran con ella.
@@ -609,14 +651,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
       addTransaction, updateTransaction, deleteTransaction,
-      addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo,
+      addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
-     updateAccount, deleteAccount, aplicarMovimientosAlSaldo, addPocket, updatePocket, deletePocket, addHolding,
+     updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
+     addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
   )
 

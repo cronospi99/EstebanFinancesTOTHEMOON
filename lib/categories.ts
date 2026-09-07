@@ -205,3 +205,16 @@ export function institutionsByGroup() {
 /** Busca una entidad por nombre; útil para reconstruir el badge desde una cuenta. */
 export const institutionByName = (name: string) =>
   CO_INSTITUTIONS.find((i) => i.name === name)
+
+/**
+ * Plataformas donde se registran inversiones, en el orden en que se ofrecen.
+ *
+ * Es una lista cerrada y no se deriva de las cuentas que existan. Antes el
+ * selector de plataforma ofrecía toda cuenta de ahorros o de inversión, así
+ * que aparecían Nequi y Bancolombia —donde no se compran ETF— y faltaban las
+ * corredoras para las que aún no se había creado una cuenta a mano.
+ */
+export const INVESTMENT_PLATFORMS = ['ARQ', 'Insights', 'Tyba', 'Trii'] as const
+
+export const investmentPlatforms = () =>
+  INVESTMENT_PLATFORMS.map((name) => institutionByName(name)).filter((i): i is Institution => Boolean(i))
