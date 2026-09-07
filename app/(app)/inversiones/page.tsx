@@ -6,9 +6,11 @@ import { motion } from 'framer-motion'
 import { ArrowDownRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
+import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { HoldingRow } from '@/components/investments/holding-row'
 import { AddHoldingSheet } from '@/components/investments/add-holding-sheet'
+import { TradeHistory } from '@/components/investments/trade-history'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { accountTotal, precioDe, useFinance, useInvestmentsValue } from '@/lib/store'
 import type { Holding } from '@/lib/types'
@@ -17,6 +19,7 @@ import { cn, haptic } from '@/lib/utils'
 export default function InvestmentsPage() {
   const { holdings, accounts, deleteHolding, fxRate, fx, quotes, quotesLoading, refreshQuotes } = useFinance()
   const [adding, setAdding] = useState(false)
+  const [tab, setTab] = useState<'posiciones' | 'historial'>('posiciones')
   const [editing, setEditing] = useState<Holding | null>(null)
 
   const hasMarketData = useMemo(
@@ -147,69 +150,86 @@ export default function InvestmentsPage() {
         )}
       </Card>
 
-      {byAccount.map(([accId, items]) => {
-        const acc = accounts.find((a) => a.id === accId)
-        // Suma las posiciones y el efectivo que haya en la propia cuenta: en
-        // ARQ o Trii conviven las participaciones y el saldo sin invertir, y
-        // ver solo una mitad no dice cuánto tienes ahí.
-        const posiciones = items.reduce((s, h) => {
-          const { precio } = precioDe(h, quotes)
-          const fx = h.currency === 'USD' ? fxRate : 1
-          if (h.currency === 'USD' && fxRate <= 0) return s
-          return s + precio * h.quantity * fx
-        }, 0)
-        const efectivo = acc ? (acc.currency === 'USD' ? (fxRate > 0 ? accountTotal(acc) * fxRate : 0) : accountTotal(acc)) : 0
-        const subtotal = posiciones + efectivo
+      {/* Las posiciones dicen qué tienes; el historial, cómo llegaste ahí. */}
+      <Segmented
+        id="inversiones"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'posiciones' as const, label: 'Posiciones' },
+          { value: 'historial' as const, label: 'Historial' },
+        ]}
+      />
 
-        return (
-          <section key={accId}>
-            <div className="mb-3 flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                {acc && <InstitutionBadge institution={acc.institution} color={acc.color} size="sm" />}
-                <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-label-tertiary">
-                  {acc?.name ?? 'Sin plataforma'}
-                </h2>
-              </div>
-              <span className="tnum text-[13px] font-semibold text-label-secondary">{formatMoney(subtotal)}</span>
-            </div>
-            <Card className="divide-y divide-hairline overflow-hidden">
-              {acc && accountTotal(acc) !== 0 && (
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[10px] font-bold text-label-secondary">
-                    EFVO
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-medium text-label">Efectivo sin invertir</p>
-                    <p className="text-[12px] text-label-tertiary">Saldo disponible en {acc.name}</p>
-                  </div>
-                  <span className="tnum shrink-0 text-[15px] font-semibold text-label">
-                    {formatMoney(accountTotal(acc), acc.currency)}
-                  </span>
+      {tab === 'posiciones' ? (
+        <>
+        {byAccount.map(([accId, items]) => {
+          const acc = accounts.find((a) => a.id === accId)
+          // Suma las posiciones y el efectivo que haya en la propia cuenta: en
+          // ARQ o Trii conviven las participaciones y el saldo sin invertir, y
+          // ver solo una mitad no dice cuánto tienes ahí.
+          const posiciones = items.reduce((s, h) => {
+            const { precio } = precioDe(h, quotes)
+            const fx = h.currency === 'USD' ? fxRate : 1
+            if (h.currency === 'USD' && fxRate <= 0) return s
+            return s + precio * h.quantity * fx
+          }, 0)
+          const efectivo = acc ? (acc.currency === 'USD' ? (fxRate > 0 ? accountTotal(acc) * fxRate : 0) : accountTotal(acc)) : 0
+          const subtotal = posiciones + efectivo
+
+          return (
+            <section key={accId}>
+              <div className="mb-3 flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  {acc && <InstitutionBadge institution={acc.institution} color={acc.color} size="sm" />}
+                  <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-label-tertiary">
+                    {acc?.name ?? 'Sin plataforma'}
+                  </h2>
                 </div>
-              )}
-              {items.map((h, i) => (
-                <motion.div key={h.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-                  <HoldingRow
-                    holding={h}
-                    quote={quotes[h.symbol]}
-                    usdCop={fxRate}
-                    onEdit={() => { haptic(6); setEditing(h) }}
-                    onDelete={() => deleteHolding(h.id)}
-                  />
-                </motion.div>
-              ))}
-            </Card>
-          </section>
-        )
-      })}
+                <span className="tnum text-[13px] font-semibold text-label-secondary">{formatMoney(subtotal)}</span>
+              </div>
+              <Card className="divide-y divide-hairline overflow-hidden">
+                {acc && accountTotal(acc) !== 0 && (
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[10px] font-bold text-label-secondary">
+                      EFVO
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] font-medium text-label">Efectivo sin invertir</p>
+                      <p className="text-[12px] text-label-tertiary">Saldo disponible en {acc.name}</p>
+                    </div>
+                    <span className="tnum shrink-0 text-[15px] font-semibold text-label">
+                      {formatMoney(accountTotal(acc), acc.currency)}
+                    </span>
+                  </div>
+                )}
+                {items.map((h, i) => (
+                  <motion.div key={h.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+                    <HoldingRow
+                      holding={h}
+                      quote={quotes[h.symbol]}
+                      usdCop={fxRate}
+                      onEdit={() => { haptic(6); setEditing(h) }}
+                      onDelete={() => deleteHolding(h.id)}
+                    />
+                  </motion.div>
+                ))}
+              </Card>
+            </section>
+          )
+        })}
 
-      {!holdings.length && (
-        <Card className="p-8 text-center">
-          <p className="text-[15px] font-medium text-label">Aún no tienes posiciones</p>
-          <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
-            Añade tus ETFs, acciones o cripto con la cantidad exacta que tengas.
-          </p>
-        </Card>
+        {!holdings.length && (
+          <Card className="p-8 text-center">
+            <p className="text-[15px] font-medium text-label">Aún no tienes posiciones</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
+              Añade tus ETFs, acciones o cripto con la cantidad exacta que tengas.
+            </p>
+          </Card>
+        )}
+        </>
+      ) : (
+        <TradeHistory />
       )}
 
       <button

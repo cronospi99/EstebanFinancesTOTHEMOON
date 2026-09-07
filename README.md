@@ -190,6 +190,31 @@ Arranca en pantalla completa, con icono propio y sin barra del navegador.
 
 ---
 
+## Historial de inversiones
+
+Cada compra y cada venta se guardan como una **operación**, y la posición
+—cantidad y coste promedio— se calcula a partir de ellas. Por eso editar una
+operación de hace tres meses recalcula el promedio bien sin tocar nada más.
+
+La pestaña **Historial** de Inversiones las agrupa por símbolo, con la posición
+que resulta de cada grupo en la cabecera. Tocar una operación la abre para
+corregirla o borrarla.
+
+Las posiciones que ya existían antes del libro se incorporan solas: la primera
+vez que registras algo sobre ellas se crea una operación de **«posición
+inicial»** con su cantidad y su coste promedio, para que el historial explique
+la posición completa y no arranque a mitad.
+
+> Una posición con operaciones ya no se edita a mano: sus cifras salen del
+> libro y cualquier cambio directo se perdería en el siguiente recálculo. La
+> app lo dice y remite al historial.
+
+**Requiere volver a ejecutar [`supabase/schema.sql`](supabase/schema.sql)** para
+crear la tabla `trades`. Es idempotente: se puede correr entero sobre una base
+ya creada. Sin ella la app sigue funcionando, pero sin historial.
+
+---
+
 ## Pendientes
 
 Lo que falta, en orden de lo que más duele.

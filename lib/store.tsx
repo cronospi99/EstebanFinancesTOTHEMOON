@@ -7,7 +7,7 @@ import { institutionByName } from './categories'
 import { monthKey, monthlyFromApy } from './format'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
-import type { Account, Budget, Goal, Holding, Pocket, Quote, Transaction } from './types'
+import type { Account, Budget, Goal, Holding, Pocket, Quote, Trade, Transaction } from './types'
 import { uid } from './utils'
 
 const STORAGE_KEY = 'eftm.state.v2'
@@ -18,6 +18,8 @@ interface State {
   budgets: Budget[]
   holdings: Holding[]
   goals: Goal[]
+  /** Libro de operaciones de inversión; la posición se deriva de él. */
+  trades: Trade[]
 }
 
 /** Datos de ejemplo del Modo Demo. */
@@ -27,9 +29,10 @@ const INITIAL: State = {
   budgets: DEMO_BUDGETS,
   holdings: DEMO_HOLDINGS,
   goals: DEMO_GOALS,
+  trades: [],
 }
 
-const VACIO: State = { accounts: [], transactions: [], budgets: [], holdings: [], goals: [] }
+const VACIO: State = { accounts: [], transactions: [], budgets: [], holdings: [], goals: [], trades: [] }
 
 /**
  * Clave de almacenamiento local.
@@ -88,6 +91,89 @@ function aplicarDelta(
 /** Lo que un movimiento le suma al saldo: los ingresos entran, los gastos salen. */
 const deltaDe = (t: Pick<Transaction, 'type' | 'amount'>) => (t.type === 'income' ? t.amount : -t.amount)
 
+/**
+ * Reconstruye una posición a partir de sus operaciones.
+ *
+ * Promedio ponderado, que es como lo calculan las corredoras: una compra suma
+ * cantidad y coste; una venta baja la cantidad y retira coste al promedio
+ * vigente, sin mover ese promedio. Se ordena por fecha porque el promedio
+ * depende del orden: dos compras al mismo precio dan igual, pero una venta
+ * entre ellas no.
+ *
+ * Recalcular entero en vez de aplicar deltas es lo que hace que editar una
+ * operación cualquiera —incluso la primera de cinco— salga bien sin más.
+ */
+export function posicionDesdeOperaciones(ops: Trade[]) {
+  let quantity = 0
+  let costo = 0
+
+  for (const t of [...ops].sort((a, b) => +new Date(a.occurredAt) - +new Date(b.occurredAt))) {
+    if (t.side === 'buy') {
+      quantity += t.quantity
+      costo += t.quantity * t.price
+    } else {
+      const promedio = quantity > 0 ? costo / quantity : 0
+      // No se puede vender más de lo que hay: el exceso se ignora en vez de
+      // dejar la posición en negativo, que no significaría nada.
+      const vendida = Math.min(t.quantity, quantity)
+      quantity -= vendida
+      costo -= vendida * promedio
+    }
+  }
+
+  // Redondeo de la basura de coma flotante: 3 − 1 − 2 debe dar 0, no 4e-16.
+  if (Math.abs(quantity) < 1e-8) quantity = 0
+  return { quantity, avgCost: quantity > 0 ? costo / quantity : 0 }
+}
+
+/**
+ * Deja la posición de un símbolo de acuerdo con su libro de operaciones.
+ *
+ * Los datos descriptivos —nombre, plataforma, tipo de activo, moneda— salen de
+ * la operación más reciente: si la última compra fue en Trii, la posición vive
+ * en Trii. Si el libro se queda sin operaciones la posición baja a cero en vez
+ * de borrarse, para no perder el rastro de algo que sí se tuvo.
+ */
+function sincronizarPosicion(holdings: Holding[], trades: Trade[], symbol: string): Holding[] {
+  const ops = trades.filter((t) => t.symbol === symbol)
+  const { quantity, avgCost } = posicionDesdeOperaciones(ops)
+  const ultima = [...ops].sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt))[0]
+  const i = holdings.findIndex((h) => h.symbol === symbol)
+
+  if (i === -1) {
+    if (!ultima || quantity <= 0) return holdings
+    return [...holdings, {
+      id: uid(),
+      symbol,
+      name: ultima.name || symbol,
+      quantity,
+      avgCost,
+      assetType: ultima.assetType,
+      currency: ultima.currency,
+      accountId: ultima.accountId,
+    }]
+  }
+
+  return holdings.map((h, k) => (k === i
+    ? {
+        ...h,
+        quantity,
+        avgCost,
+        // El nombre solo se pisa si la operación trae uno de verdad: cuando la
+        // búsqueda del ticker falla se guarda el propio símbolo, y eso no debe
+        // borrar un «Vanguard S&P 500 ETF» que ya estaba bien.
+        ...(ultima
+          ? {
+              name: ultima.name && ultima.name !== symbol ? ultima.name : h.name,
+              assetType: ultima.assetType,
+              currency: ultima.currency,
+              accountId: ultima.accountId,
+            }
+          : null),
+      }
+    : h))
+}
+
 /** Aplica al saldo de una cuenta todos sus movimientos, bolsillo por bolsillo. */
 function aplicarMovimientos(accounts: Account[], transactions: Transaction[], accountId: string): Account[] {
   let salida = accounts
@@ -128,6 +214,10 @@ interface FinanceContextValue extends State {
   addHolding: (h: Omit<Holding, 'id'>) => Promise<void>
   updateHolding: (id: string, patch: Partial<Holding>) => Promise<void>
   deleteHolding: (id: string) => Promise<void>
+  /** Registra una compra o una venta y recalcula la posición. */
+  registrarOperacion: (op: Omit<Trade, 'id'>) => Promise<void>
+  updateTrade: (id: string, patch: Partial<Omit<Trade, 'id'>>) => Promise<void>
+  deleteTrade: (id: string) => Promise<void>
   setBudget: (categoryId: string, amount: number) => void
   removeBudget: (categoryId: string) => void
   addGoal: (g: Omit<Goal, 'id'>) => Promise<void>
@@ -198,12 +288,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             if (cache) setState(cache)
           }
 
-          const [accounts, transactions, holdings, budgets, goals] = await Promise.all([
+          const [accounts, transactions, holdings, budgets, goals, trades] = await Promise.all([
             supabase.from('accounts').select('*').order('created_at'),
             supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
             supabase.from('holdings').select('*'),
             supabase.from('budgets').select('*'),
             supabase.from('goals').select('*'),
+            supabase.from('trades').select('*').order('occurred_at', { ascending: false }),
           ])
           if (!vivo.current) return
 
@@ -232,6 +323,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             holdings: (holdings.data ?? []).map(rowToHolding),
             budgets: (budgets.data ?? []).map((b) => ({ categoryId: b.category_id, amount: Number(b.amount) })),
             goals: (goals.data ?? []).map(rowToGoal),
+            // Si la tabla `trades` aún no existe en el proyecto, la consulta
+            // falla sola y el resto de la app sigue funcionando sin historial.
+            trades: trades.error ? [] : (trades.data ?? []).map(rowToTrade),
           }
           setState(remoto)
           guardarEstado(claveEstado(uid), remoto)
@@ -590,6 +684,110 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  const persistirPosicion = useCallback(
+    async (holding: Holding | undefined) => {
+      if (!holding) return
+      await remote()?.from('holdings').upsert(holdingToRow(holding))
+    },
+    [remote],
+  )
+
+  /**
+   * Registra una compra o una venta y deja la posición al día.
+   *
+   * Si el símbolo ya tenía posición pero ninguna operación —porque se creó
+   * antes de que existiera el libro— se añade primero una operación de
+   * apertura que la explique. Sin ella el recálculo arrancaría de cero y la
+   * posición encogería hasta el tamaño de lo que se acaba de registrar.
+   */
+  const registrarOperacion = useCallback(
+    async (op: Omit<Trade, 'id'>) => {
+      const previo = stateRef.current
+      const nuevas: Trade[] = []
+
+      const sinLibro = !previo.trades.some((t) => t.symbol === op.symbol)
+      const posicion = previo.holdings.find((h) => h.symbol === op.symbol)
+      if (sinLibro && posicion && posicion.quantity > 0) {
+        nuevas.push({
+          id: uid(),
+          symbol: posicion.symbol,
+          name: posicion.name,
+          side: 'buy',
+          quantity: posicion.quantity,
+          price: posicion.avgCost,
+          currency: posicion.currency,
+          assetType: posicion.assetType,
+          accountId: posicion.accountId,
+          // Un segundo antes de lo que se registra ahora, para que el
+          // recálculo la vea primero pase lo que pase con la fecha elegida.
+          occurredAt: new Date(Date.parse(op.occurredAt) - 1000).toISOString(),
+          opening: true,
+        })
+      }
+      nuevas.push({ ...op, id: uid() })
+
+      let posicionFinal: Holding | undefined
+      setState((s) => {
+        const trades = [...nuevas, ...s.trades]
+        const holdings = sincronizarPosicion(s.holdings, trades, op.symbol)
+        posicionFinal = holdings.find((h) => h.symbol === op.symbol)
+        return { ...s, trades, holdings }
+      })
+
+      await Promise.all([
+        remote()?.from('trades').insert(nuevas.map(tradeToRow)),
+        persistirPosicion(posicionFinal),
+      ])
+    },
+    [remote, persistirPosicion],
+  )
+
+  const updateTrade = useCallback(
+    async (id: string, patch: Partial<Omit<Trade, 'id'>>) => {
+      let posicionFinal: Holding | undefined
+      let symbol = ''
+      setState((s) => {
+        const anterior = s.trades.find((t) => t.id === id)
+        if (!anterior) return s
+        symbol = anterior.symbol
+        const trades = s.trades.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        // Editar no puede cambiar de símbolo: sería mover la operación a otra
+        // posición, y eso es borrarla de una y crearla en la otra.
+        const holdings = sincronizarPosicion(s.holdings, trades, symbol)
+        posicionFinal = holdings.find((h) => h.symbol === symbol)
+        return { ...s, trades, holdings }
+      })
+      if (!symbol) return
+      await Promise.all([
+        remote()?.from('trades').update(tradePatchToRow(patch)).eq('id', id),
+        persistirPosicion(posicionFinal),
+      ])
+    },
+    [remote, persistirPosicion],
+  )
+
+  const deleteTrade = useCallback(
+    async (id: string) => {
+      let posicionFinal: Holding | undefined
+      let symbol = ''
+      setState((s) => {
+        const anterior = s.trades.find((t) => t.id === id)
+        if (!anterior) return s
+        symbol = anterior.symbol
+        const trades = s.trades.filter((t) => t.id !== id)
+        const holdings = sincronizarPosicion(s.holdings, trades, symbol)
+        posicionFinal = holdings.find((h) => h.symbol === symbol)
+        return { ...s, trades, holdings }
+      })
+      if (!symbol) return
+      await Promise.all([
+        remote()?.from('trades').delete().eq('id', id),
+        persistirPosicion(posicionFinal),
+      ])
+    },
+    [remote, persistirPosicion],
+  )
+
   const setBudget = useCallback(
     (categoryId: string, amount: number) => {
       setState((s) => ({
@@ -654,13 +852,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
+      registrarOperacion, updateTrade, deleteTrade,
       setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
      addPocket, updatePocket, deletePocket, addHolding,
-     updateHolding, deleteHolding, setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
+     updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
+     setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -759,6 +959,43 @@ export function useInvestmentsValue(quotesOverride?: Record<string, { price: num
       incompleto: sinConvertir > 0,
     }
   }, [holdings, quotes, fxRate])
+}
+
+/**
+ * Historial de operaciones agrupado por símbolo.
+ *
+ * Cada grupo va de la operación más reciente a la más antigua, y los grupos se
+ * ordenan por su última operación: lo que se acaba de mover, primero.
+ */
+export function useOperacionesPorSimbolo() {
+  const { trades, holdings } = useFinance()
+  return useMemo(() => {
+    const mapa = new Map<string, Trade[]>()
+    for (const t of trades) mapa.set(t.symbol, [...(mapa.get(t.symbol) ?? []), t])
+
+    return [...mapa.entries()]
+      .map(([symbol, ops]) => {
+        const operaciones = [...ops].sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt))
+        return {
+          symbol,
+          nombre: holdings.find((h) => h.symbol === symbol)?.name || operaciones[0].name || symbol,
+          operaciones,
+          ...posicionDesdeOperaciones(ops),
+        }
+      })
+      .sort((a, b) => +new Date(b.operaciones[0].occurredAt) - +new Date(a.operaciones[0].occurredAt))
+  }, [trades, holdings])
+}
+
+/** Operaciones de un símbolo, de más reciente a más antigua. */
+export function useOperacionesDe(symbol: string | undefined) {
+  const { trades } = useFinance()
+  return useMemo(
+    () => (symbol
+      ? trades.filter((t) => t.symbol === symbol).sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt))
+      : []),
+    [trades, symbol],
+  )
 }
 
 /** Valor de mercado de las posiciones de una cuenta, en pesos. */
@@ -1059,6 +1296,32 @@ const holdingPatchToRow = (p: Partial<Holding>) => {
   if (p.assetType !== undefined) r.asset_type = p.assetType
   if (p.currency !== undefined) r.currency = p.currency
   if (p.accountId !== undefined) r.account_id = p.accountId
+  return r
+}
+
+const rowToTrade = (r: Row): Trade => ({
+  id: r.id, symbol: r.symbol, name: r.name ?? '', side: r.side,
+  quantity: Number(r.quantity), price: Number(r.price),
+  currency: r.currency, assetType: r.asset_type,
+  accountId: r.account_id ?? undefined,
+  occurredAt: r.occurred_at, opening: Boolean(r.opening),
+})
+const tradeToRow = (t: Trade) => ({
+  id: t.id, symbol: t.symbol, name: t.name, side: t.side,
+  quantity: t.quantity, price: t.price, currency: t.currency, asset_type: t.assetType,
+  account_id: t.accountId ?? null, opening: t.opening ?? false, occurred_at: t.occurredAt,
+})
+const tradePatchToRow = (p: Partial<Trade>) => {
+  const r: Row = {}
+  if (p.symbol !== undefined) r.symbol = p.symbol
+  if (p.name !== undefined) r.name = p.name
+  if (p.side !== undefined) r.side = p.side
+  if (p.quantity !== undefined) r.quantity = p.quantity
+  if (p.price !== undefined) r.price = p.price
+  if (p.currency !== undefined) r.currency = p.currency
+  if (p.assetType !== undefined) r.asset_type = p.assetType
+  if ('accountId' in p) r.account_id = p.accountId ?? null
+  if (p.occurredAt !== undefined) r.occurred_at = p.occurredAt
   return r
 }
 

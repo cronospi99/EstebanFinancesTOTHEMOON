@@ -90,6 +90,37 @@ export interface Holding {
   accountId?: string
 }
 
+/**
+ * Operación de inversión: una compra o una venta concreta.
+ *
+ * El libro de operaciones es la fuente de verdad; la posición (`Holding`) se
+ * recalcula a partir de él. Antes solo se guardaba la posición: al registrar
+ * una compra se fundía en el promedio y la operación desaparecía, así que no
+ * había historial que consultar ni forma de corregir una cifra mal tecleada
+ * sin rehacer la posición entera a mano.
+ */
+export interface Trade {
+  id: string
+  symbol: string
+  name: string
+  side: 'buy' | 'sell'
+  /** Admite fracciones, igual que la posición. */
+  quantity: number
+  /** Precio por unidad de esta operación, en su moneda. */
+  price: number
+  currency: Currency
+  assetType: AssetType
+  /** Plataforma donde se hizo (ARQ, Insights, Tyba, Trii). */
+  accountId?: string
+  occurredAt: string
+  /**
+   * Marca la operación sintética que representa una posición anterior al libro.
+   * Se crea sola la primera vez que se toca un símbolo que ya existía, para que
+   * el historial explique la posición completa en vez de arrancar a mitad.
+   */
+  opening?: boolean
+}
+
 export interface Quote {
   symbol: string
   price: number
