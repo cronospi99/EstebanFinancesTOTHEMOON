@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
 import { monthKey, monthlyFromApy } from './format'
@@ -19,6 +19,7 @@ interface State {
   goals: Goal[]
 }
 
+/** Datos de ejemplo del Modo Demo. */
 const INITIAL: State = {
   accounts: DEMO_ACCOUNTS,
   transactions: DEMO_TRANSACTIONS,
@@ -27,9 +28,72 @@ const INITIAL: State = {
   goals: DEMO_GOALS,
 }
 
+const VACIO: State = { accounts: [], transactions: [], budgets: [], holdings: [], goals: [] }
+
+/**
+ * Clave de almacenamiento local.
+ *
+ * Los datos de una sesión iniciada van bajo el id de su usuario. Compartir la
+ * clave con el Modo Demo tenía dos consecuencias feas: si una carga remota
+ * fallaba, la app caía al blob de demo y pintaba cuentas de ejemplo encima de
+ * las de verdad; y dos personas en el mismo teléfono se veían los datos la una
+ * a la otra.
+ */
+const claveEstado = (userId?: string | null) => (userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY)
+
+function leerEstado(clave: string, base: State): State | null {
+  try {
+    const raw = localStorage.getItem(clave)
+    if (!raw) return null
+    const datos = JSON.parse(raw)
+    if (!datos || typeof datos !== 'object') return null
+    return { ...base, ...datos }
+  } catch {
+    // Storage bloqueado (modo privado) o contenido corrupto: se sigue en memoria.
+    return null
+  }
+}
+
+function guardarEstado(clave: string, state: State) {
+  try {
+    localStorage.setItem(clave, JSON.stringify(state))
+  } catch {
+    /* cuota llena */
+  }
+}
+
+/**
+ * Suma `delta` al saldo de una cuenta, o al del bolsillo indicado.
+ *
+ * Si el bolsillo no existe en esa cuenta —puede pasar al mover un movimiento
+ * de una cuenta a otra— el importe cae al saldo general en vez de perderse.
+ */
+function aplicarDelta(
+  accounts: Account[],
+  accountId: string,
+  pocketId: string | undefined,
+  delta: number,
+): Account[] {
+  return accounts.map((a) => {
+    if (a.id !== accountId) return a
+    const pockets = a.pockets ?? []
+    if (pocketId && pockets.some((p) => p.id === pocketId)) {
+      return { ...a, pockets: pockets.map((p) => (p.id === pocketId ? { ...p, balance: p.balance + delta } : p)) }
+    }
+    return { ...a, balance: a.balance + delta }
+  })
+}
+
+/** Lo que un movimiento le suma al saldo: los ingresos entran, los gastos salen. */
+const deltaDe = (t: Pick<Transaction, 'type' | 'amount'>) => (t.type === 'income' ? t.amount : -t.amount)
+
 interface FinanceContextValue extends State {
   ready: boolean
   synced: boolean
+  /** Hay sesión, pero la última lectura del servidor falló: se ve la copia local. */
+  syncError: boolean
+  /** Vuelve a pedir los datos al servidor. */
+  reload: () => Promise<void>
   /** Tasa USD→COP vigente, con su procedencia. rate 0 = no se conoce. */
   fxRate: number
   fx: FxState & { refresh: () => Promise<void>; setManual: (r: number | null) => void }
@@ -38,6 +102,7 @@ interface FinanceContextValue extends State {
   quotesLoading: boolean
   refreshQuotes: () => Promise<void>
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>
+  updateTransaction: (id: string, patch: Partial<Omit<Transaction, 'id'>>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   addAccount: (acc: Omit<Account, 'id'>) => Promise<void>
   updateAccount: (id: string, patch: Partial<Account>) => Promise<void>
@@ -59,9 +124,14 @@ interface FinanceContextValue extends State {
 const FinanceContext = createContext<FinanceContextValue | null>(null)
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<State>(INITIAL)
+  // Con Supabase configurado nunca se parte de los datos de ejemplo: quien
+  // entra tiene sesión, y ver cuentas que no son suyas mientras carga se lee
+  // como "se me borró todo".
+  const [state, setState] = useState<State>(isSupabaseConfigured ? VACIO : INITIAL)
   const [ready, setReady] = useState(false)
   const [synced, setSynced] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [syncError, setSyncError] = useState(false)
   const fx = useExchangeRate()
   const fxRate = fx.rate
 
@@ -71,14 +141,43 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const simbolos = useMemo(() => [...new Set(state.holdings.map((h) => h.symbol))], [state.holdings])
   const { quotes, loading: quotesLoading, refresh: refreshQuotes } = useQuotes(simbolos)
 
-  useEffect(() => {
-    let cancelled = false
+  const vivo = useRef(true)
+  const cargando = useRef(false)
+  const ultimaCarga = useRef(0)
+  // Espejo de userId legible desde `cargar`, que no se recrea nunca.
+  const userIdRef = useRef<string | null>(null)
 
-    async function load() {
+  useEffect(() => () => { vivo.current = false }, [])
+
+  /**
+   * Trae los datos del servidor.
+   *
+   * `pintarCache` solo en el arranque: al refrescar ya hay algo en pantalla y
+   * volver a pintar la copia local haría parpadear la app.
+   */
+  const cargar = useCallback(async ({ pintarCache = false } = {}) => {
+    if (cargando.current) return
+    cargando.current = true
+
+    try {
       if (isSupabaseConfigured) {
         const supabase = createClient()
-        const { data: { session } = { session: null } } = (await supabase?.auth.getSession()) ?? {}
-        if (supabase && session) {
+        const { data } = (await supabase?.auth.getSession()) ?? { data: null }
+        const sesion = data?.session
+
+        if (supabase && sesion) {
+          const uid = sesion.user.id
+          if (!vivo.current) return
+          userIdRef.current = uid
+          setUserId(uid)
+
+          // Se pinta de inmediato lo último que se supo de ESTE usuario, para
+          // que la app no arranque en blanco mientras viaja la consulta.
+          if (pintarCache) {
+            const cache = leerEstado(claveEstado(uid), VACIO)
+            if (cache) setState(cache)
+          }
+
           const [accounts, transactions, holdings, budgets, goals] = await Promise.all([
             supabase.from('accounts').select('*').order('created_at'),
             supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
@@ -86,42 +185,111 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             supabase.from('budgets').select('*'),
             supabase.from('goals').select('*'),
           ])
-          if (!cancelled && !accounts.error) {
-            setState({
-              accounts: (accounts.data ?? []).map(rowToAccount),
-              transactions: (transactions.data ?? []).map(rowToTx),
-              holdings: (holdings.data ?? []).map(rowToHolding),
-              budgets: (budgets.data ?? []).map((b) => ({ categoryId: b.category_id, amount: Number(b.amount) })),
-              goals: (goals.data ?? []).map(rowToGoal),
-            })
+          if (!vivo.current) return
+
+          if (accounts.error) {
+            /*
+             * La sesión es válida aunque la consulta fallara. Antes se caía al
+             * Modo Demo, y ese era el fallo que hacía "vencer" los datos en
+             * cada acceso: la app pintaba las cuentas de ejemplo, marcaba
+             * synced = false, y a partir de ahí todo lo que el usuario tocaba
+             * se guardaba solo en el teléfono —encima del blob de demo— sin
+             * llegar nunca a Supabase. Las tarjetas de crédito, sus cupos y
+             * sus cuotas desaparecían en la siguiente carga buena.
+             *
+             * Ahora se conserva la sesión: se sigue escribiendo contra el
+             * servidor y en pantalla queda la copia local de este usuario.
+             */
             setSynced(true)
+            setSyncError(true)
             setReady(true)
             return
           }
+
+          const remoto: State = {
+            accounts: (accounts.data ?? []).map(rowToAccount),
+            transactions: (transactions.data ?? []).map(rowToTx),
+            holdings: (holdings.data ?? []).map(rowToHolding),
+            budgets: (budgets.data ?? []).map((b) => ({ categoryId: b.category_id, amount: Number(b.amount) })),
+            goals: (goals.data ?? []).map(rowToGoal),
+          }
+          setState(remoto)
+          guardarEstado(claveEstado(uid), remoto)
+          ultimaCarga.current = Date.now()
+          setSynced(true)
+          setSyncError(false)
+          setReady(true)
+          return
         }
       }
 
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (raw && !cancelled) setState({ ...INITIAL, ...JSON.parse(raw) })
-      } catch {
-        /* Storage bloqueado (modo privado): seguimos en memoria. */
-      }
-      if (!cancelled) setReady(true)
-    }
+      if (!vivo.current) return
 
-    load()
-    return () => { cancelled = true }
+      /*
+       * Sin sesión, pero ya la hubo en esta pestaña: no se degrada a Modo
+       * Demo. Leer la cookie puede fallar de forma pasajera, y bajar aquí
+       * marcaría synced = false y volcaría los datos del usuario sobre el blob
+       * anónimo — la misma pérdida que este bloque existe para evitar. Un
+       * cierre de sesión de verdad lo resuelve el middleware, que expulsa a
+       * /login antes de que esto se ejecute.
+       */
+      if (userIdRef.current) {
+        setSyncError(true)
+        setReady(true)
+        return
+      }
+
+      // Modo Demo: sin llaves de Supabase, o sin sesión desde el principio.
+      setUserId(null)
+      if (pintarCache) setState(leerEstado(STORAGE_KEY, INITIAL) ?? INITIAL)
+      setSynced(false)
+      setSyncError(false)
+      setReady(true)
+    } finally {
+      cargando.current = false
+    }
   }, [])
 
   useEffect(() => {
-    if (!ready || synced) return
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch {
-      /* cuota llena */
+    cargar({ pintarCache: true })
+  }, [cargar])
+
+  /*
+   * El estado se refleja en el dispositivo SIEMPRE, también con sesión
+   * iniciada. Antes, al sincronizar, se dejaba de escribir en local: la copia
+   * quedaba congelada en los datos de demo del primer día y cualquier carga
+   * remota fallida retrocedía hasta ahí. La copia es además lo que se pinta
+   * mientras llega la consulta al abrir la app.
+   */
+  useEffect(() => {
+    if (!ready) return
+    guardarEstado(claveEstado(userId), state)
+  }, [state, ready, userId])
+
+  /*
+   * Al volver a primer plano se releen los datos. Una app instalada puede
+   * pasar días abierta: sin esto, lo registrado en otro dispositivo no
+   * aparecía nunca, y un fallo de carga al arrancar no se recuperaba solo.
+   */
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible') return
+      /*
+       * No en cada vistazo: releer sustituye el estado por el del servidor, y
+       * si el usuario acaba de registrar algo y sale y entra en un segundo, la
+       * escritura puede seguir en vuelo. Refrescar ahí borraría de la pantalla
+       * un movimiento que sí se está guardando. Un minuto deja terminar
+       * cualquier escritura y sigue cubriendo el caso que importa: volver a
+       * una app que llevaba horas abierta. Una carga fallida no marca la hora,
+       * así que se reintenta en el siguiente regreso.
+       */
+      if (Date.now() - ultimaCarga.current < 60_000) return
+      void cargar()
     }
-  }, [state, ready, synced])
+    document.addEventListener('visibilitychange', alVolver)
+    return () => document.removeEventListener('visibilitychange', alVolver)
+  }, [cargar])
 
   const remote = useCallback(() => (synced ? createClient() : null), [synced])
 
@@ -129,26 +297,42 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const addTransaction = useCallback(
     async (tx: Omit<Transaction, 'id'>) => {
       const full: Transaction = { ...tx, id: uid() }
-      const delta = full.type === 'income' ? full.amount : -full.amount
-
       setState((s) => ({
         ...s,
         transactions: [full, ...s.transactions],
-        accounts: s.accounts.map((a) => {
-          if (a.id !== full.accountId) return a
-          // Si va a un bolsillo, el saldo se mueve ahí y no en el general.
-          if (full.pocketId) {
-            return {
-              ...a,
-              pockets: (a.pockets ?? []).map((p) =>
-                p.id === full.pocketId ? { ...p, balance: p.balance + delta } : p,
-              ),
-            }
-          }
-          return { ...a, balance: a.balance + delta }
-        }),
+        // Si va a un bolsillo, el saldo se mueve ahí y no en el general.
+        accounts: aplicarDelta(s.accounts, full.accountId, full.pocketId, deltaDe(full)),
       }))
       await remote()?.from('transactions').insert(txToRow(full))
+    },
+    [remote],
+  )
+
+  /**
+   * Edita un movimiento ya registrado.
+   *
+   * El saldo se recalcula en dos pasos —deshacer el movimiento viejo, aplicar
+   * el nuevo— en vez de sumar la diferencia. Es lo único que funciona cuando
+   * la edición cambia de cuenta o de bolsillo: entonces el importe tiene que
+   * salir de un sitio y entrar en otro, no ajustarse en el mismo.
+   */
+  const updateTransaction = useCallback(
+    async (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
+      setState((s) => {
+        const anterior = s.transactions.find((t) => t.id === id)
+        if (!anterior) return s
+        const nuevo: Transaction = { ...anterior, ...patch }
+
+        let accounts = aplicarDelta(s.accounts, anterior.accountId, anterior.pocketId, -deltaDe(anterior))
+        accounts = aplicarDelta(accounts, nuevo.accountId, nuevo.pocketId, deltaDe(nuevo))
+
+        return {
+          ...s,
+          transactions: s.transactions.map((t) => (t.id === id ? nuevo : t)),
+          accounts,
+        }
+      })
+      await remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id)
     },
     [remote],
   )
@@ -158,22 +342,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       setState((s) => {
         const tx = s.transactions.find((t) => t.id === id)
         if (!tx) return s
-        const delta = tx.type === 'income' ? tx.amount : -tx.amount
         return {
           ...s,
           transactions: s.transactions.filter((t) => t.id !== id),
-          accounts: s.accounts.map((a) => {
-            if (a.id !== tx.accountId) return a
-            if (tx.pocketId) {
-              return {
-                ...a,
-                pockets: (a.pockets ?? []).map((p) =>
-                  p.id === tx.pocketId ? { ...p, balance: p.balance - delta } : p,
-                ),
-              }
-            }
-            return { ...a, balance: a.balance - delta }
-          }),
+          accounts: aplicarDelta(s.accounts, tx.accountId, tx.pocketId, -deltaDe(tx)),
         }
       })
       await remote()?.from('transactions').delete().eq('id', id)
@@ -346,21 +518,24 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
+  // explícita para que nunca pueda llevarse por delante los datos de un usuario.
   const resetDemo = useCallback(() => {
     setState(INITIAL)
-    try { localStorage.removeItem(STORAGE_KEY) } catch { /* noop */ }
+    try { localStorage.removeItem(claveEstado(null)) } catch { /* noop */ }
   }, [])
 
   const value = useMemo<FinanceContextValue>(
     () => ({
-      ...state, ready, synced, fxRate, fx, quotes, quotesLoading, refreshQuotes,
-      addTransaction, deleteTransaction,
+      ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
+      addTransaction, updateTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
     }),
-    [state, ready, synced, fxRate, fx, quotes, quotesLoading, refreshQuotes, addTransaction, deleteTransaction, addAccount,
+    [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, refreshQuotes,
+     addTransaction, updateTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
   )
@@ -708,6 +883,20 @@ const txToRow = (t: Transaction) => ({
   category_id: t.categoryId, amount: t.amount, type: t.type,
   description: t.description, occurred_at: t.occurredAt, currency: t.currency ?? null,
 })
+const txPatchToRow = (p: Partial<Transaction>) => {
+  const r: Row = {}
+  if (p.accountId !== undefined) r.account_id = p.accountId
+  // pocketId se envía siempre que venga en el patch, incluido undefined: pasar
+  // de un bolsillo al saldo general es precisamente borrar la referencia.
+  if ('pocketId' in p) r.pocket_id = p.pocketId ?? null
+  if (p.categoryId !== undefined) r.category_id = p.categoryId
+  if (p.amount !== undefined) r.amount = p.amount
+  if (p.type !== undefined) r.type = p.type
+  if (p.description !== undefined) r.description = p.description
+  if (p.occurredAt !== undefined) r.occurred_at = p.occurredAt
+  if (p.currency !== undefined) r.currency = p.currency ?? null
+  return r
+}
 const rowToHolding = (r: Row): Holding => ({
   id: r.id, symbol: r.symbol, name: r.name, quantity: Number(r.quantity),
   avgCost: Number(r.avg_cost), assetType: r.asset_type, currency: r.currency,

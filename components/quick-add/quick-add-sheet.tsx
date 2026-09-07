@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, Check, ChevronDown, Mic } from 'lucide-react'
+import { CalendarDays, Check, Mic } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
-import { CategoryIcon } from '@/components/ui/category-icon'
-import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { AccountPicker } from '@/components/ui/account-picker'
+import { CategoryPicker } from '@/components/ui/category-picker'
 import { Keypad, ThousandsKey } from './keypad'
-import { categoriesByGroup, categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { useVoice } from '@/lib/use-voice'
@@ -40,7 +40,7 @@ function etiquetaFecha(dia: string) {
 }
 
 export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { accounts, transactions, addTransaction, fxRate } = useFinance()
+  const { accounts, addTransaction, fxRate } = useFinance()
 
   const [raw, setRaw] = useState('')
   const [mode, setMode] = useState<Mode>('expense')
@@ -48,7 +48,6 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [accountId, setAccountId] = useState('')
   const [pocketId, setPocketId] = useState<string | undefined>()
   const [note, setNote] = useState('')
-  const [showAll, setShowAll] = useState(false)
   const [saved, setSaved] = useState(false)
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
 
@@ -57,23 +56,13 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   const categories = useMemo(() => DEFAULT_CATEGORIES.filter((c) => c.kind === mode), [mode])
 
-  /** Las más usadas primero: con cincuenta categorías el orden fijo no sirve. */
-  const frequent = useMemo(() => {
-    const uses = new Map<string, number>()
-    transactions.filter((t) => t.type === mode).forEach((t) => uses.set(t.categoryId, (uses.get(t.categoryId) ?? 0) + 1))
-    return [...categories].sort((a, b) => (uses.get(b.id) ?? 0) - (uses.get(a.id) ?? 0)).slice(0, 8)
-  }, [categories, transactions, mode])
-
   useEffect(() => {
     if (!accounts.length) return
     if (!accounts.some((a) => a.id === accountId)) setAccountId(accounts[0].id)
   }, [accounts, accountId])
 
-  // El bolsillo pertenece a la cuenta: al cambiarla, deja de ser válido.
-  useEffect(() => {
-    if (pocketId && !account?.pockets?.some((p) => p.id === pocketId)) setPocketId(undefined)
-  }, [account, pocketId])
-
+  // Gasto e ingreso no comparten categorías: al cambiar de modo, la elegida
+  // puede dejar de existir.
   useEffect(() => {
     if (!categories.some((c) => c.id === categoryId)) setCategoryId(categories[0]?.id ?? 'other')
   }, [categories, categoryId])
@@ -81,7 +70,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   useEffect(() => {
     if (open) return
     const t = setTimeout(() => {
-      setRaw(''); setNote(''); setSaved(false); setMode('expense'); setShowAll(false); setPocketId(undefined)
+      setRaw(''); setNote(''); setSaved(false); setMode('expense'); setPocketId(undefined)
       setFecha(new Date().toISOString().slice(0, 10))
     }, 350)
     return () => clearTimeout(t)
@@ -160,8 +149,6 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
       </Sheet>
     )
   }
-
-  const catChips = showAll ? [] : frequent
 
   return (
     <Sheet open={open} onClose={onClose}>
@@ -242,115 +229,15 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
 
         {/* Categorías */}
         <div className="mb-3">
-          {!showAll ? (
-            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-              {catChips.map((cat) => {
-                const active = cat.id === categoryId
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => { haptic(6); setCategoryId(cat.id) }}
-                    className={cn(
-                      'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3.5 transition-colors duration-200',
-                      active ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
-                    )}
-                  >
-                    <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
-                    <span className={cn('text-[13px] font-medium', active ? 'text-label' : 'text-label-secondary')}>
-                      {cat.name}
-                    </span>
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => { haptic(6); setShowAll(true) }}
-                className="flex shrink-0 items-center gap-1 rounded-pill border border-hairline px-3.5 py-1
-                           text-[13px] font-medium text-accent-blue"
-              >
-                Todas <ChevronDown size={14} />
-              </button>
-            </div>
-          ) : (
-            <div className="max-h-[210px] overflow-y-auto rounded-2xl border border-hairline bg-white/[0.03] p-3">
-              {categoriesByGroup(mode).map(([group, cats]) => (
-                <div key={group} className="mb-3 last:mb-0">
-                  <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-label-tertiary">
-                    {group}
-                  </p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {cats.map((cat) => {
-                      const active = cat.id === categoryId
-                      return (
-                        <button
-                          key={cat.id}
-                          onClick={() => { haptic(6); setCategoryId(cat.id); setShowAll(false) }}
-                          className={cn(
-                            'press flex flex-col items-center gap-1 rounded-xl px-1 py-2 transition-colors',
-                            active ? 'bg-white/[0.14]' : 'active:bg-white/[0.07]',
-                          )}
-                        >
-                          <CategoryIcon icon={cat.icon} color={cat.color} size="xs" />
-                          <span className="w-full truncate text-center text-[10px] leading-tight text-label-secondary">
-                            {cat.name}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <CategoryPicker mode={mode} value={categoryId} onChange={setCategoryId} />
         </div>
 
-        {/* Cuentas */}
-        <div className="-mx-5 mb-2 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-          {accounts.map((acc) => {
-            const active = acc.id === accountId
-            return (
-              <button
-                key={acc.id}
-                onClick={() => { haptic(6); setAccountId(acc.id) }}
-                className={cn(
-                  'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
-                  active ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
-                )}
-              >
-                <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
-                {acc.name}
-                {acc.currency === 'USD' && <span className="text-[10px] text-label-tertiary">USD</span>}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Bolsillos de la cuenta elegida */}
-        {Boolean(account?.pockets?.length) && (
-          <div className="-mx-5 mb-3 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-            <button
-              onClick={() => { haptic(6); setPocketId(undefined) }}
-              className={cn(
-                'press shrink-0 rounded-pill border px-3 py-1 text-[12px] font-medium transition-colors',
-                !pocketId ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
-              )}
-            >
-              General
-            </button>
-            {account!.pockets!.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => { haptic(6); setPocketId(p.id) }}
-                className={cn(
-                  'press flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1 text-[12px] font-medium transition-colors',
-                  pocketId === p.id ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
-                )}
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.color ?? '#98989F' }} />
-                {p.name}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Medio de pago */}
+        <AccountPicker
+          accountId={accountId}
+          pocketId={pocketId}
+          onChange={(cuenta, bolsillo) => { setAccountId(cuenta); setPocketId(bolsillo) }}
+        />
 
         {/* Fecha: por defecto hoy, para no estorbar el caso rápido. */}
         <label className="press mb-3 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline

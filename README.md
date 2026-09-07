@@ -212,14 +212,14 @@ Lo que falta, en orden de lo que más duele.
       escritura sale directa a Supabase. Si esa petición falla —sin red, plazo
       agotado— el movimiento solo existe en memoria y se pierde al recargar.
       Falta una cola persistente que reintente al recuperar la conexión.
-- [ ] **Los errores remotos son mudos.** Ninguna escritura comprueba el error
-      que devuelve Supabase. No hay forma de saber que algo no se guardó.
-      Mínimo: un aviso discreto y un reintento manual.
-- [ ] **Los datos no se refrescan al volver.** El store carga una sola vez al
-      montar. Lo registrado en otro dispositivo no aparece hasta cerrar y abrir
-      la app. El esquema ya publica `transactions` y `accounts` en
-      `supabase_realtime`, pero nadie se suscribe; alternativa más simple:
-      recargar al volver a primer plano.
+- [ ] **Los errores de escritura siguen siendo mudos.** Una lectura fallida ya
+      se ve (aviso «Sin conexión con el servidor» con reintento), pero ninguna
+      escritura comprueba el error que devuelve Supabase: si un gasto no llega
+      al servidor, nadie se entera.
+- [ ] **Sin tiempo real.** El esquema ya publica `transactions` y `accounts` en
+      `supabase_realtime`, pero nadie se suscribe. Hoy los datos se releen al
+      volver a primer plano (como mucho una vez por minuto), que cubre el caso
+      normal pero no muestra al instante lo que se registra en otro dispositivo.
 - [ ] **El atajo `/?quick=1` no hace nada.** Está declarado en `shortcuts` del
       manifiesto (mantener pulsado el icono → «Registro rápido»), pero nadie lee
       el parámetro, así que abre el resumen como siempre.
@@ -237,3 +237,9 @@ Lo que falta, en orden de lo que más duele.
       (`pockets` jsonb), cupo y cuotas de las tarjetas, `goals`, y la
       restricción única `budgets_user_id_category_id_key` que necesita el
       upsert de presupuestos. RLS activo en las cinco tablas.
+- [x] **Las tarjetas de crédito no caducan.** Nada en el código las borra ni
+      las reinicia; lo que las hacía «vencer» era la carga: cuando la consulta
+      al servidor fallaba, la app se pasaba a Modo Demo, pintaba las cuentas de
+      ejemplo y a partir de ahí guardaba solo en el teléfono, sin llegar nunca
+      a Supabase. Corregido: la copia local se escribe siempre y bajo la clave
+      del usuario, y una lectura fallida conserva la sesión y avisa en pantalla.
