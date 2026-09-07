@@ -11,12 +11,19 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'delivery', name: 'Domicilios', icon: 'Bike', color: '#FF6B35', kind: 'expense', group: 'Diario' },
   { id: 'coffee', name: 'Café', icon: 'Coffee', color: '#A0785A', kind: 'expense', group: 'Diario' },
   { id: 'drinks', name: 'Bares', icon: 'Wine', color: '#C2407A', kind: 'expense', group: 'Diario' },
+  { id: 'snacks', name: 'Mecato', icon: 'Cookie', color: '#E0A458', kind: 'expense', group: 'Diario' },
+  { id: 'bakery', name: 'Panadería', icon: 'Croissant', color: '#D6A75E', kind: 'expense', group: 'Diario' },
+  { id: 'tips', name: 'Propinas', icon: 'Coins', color: '#FFD60A', kind: 'expense', group: 'Diario' },
 
   // ---- Gastos: transporte --------------------------------------------------
   { id: 'transport', name: 'Transporte', icon: 'Car', color: '#0A84FF', kind: 'expense', group: 'Transporte' },
   { id: 'fuel', name: 'Gasolina', icon: 'Fuel', color: '#FF453A', kind: 'expense', group: 'Transporte' },
   { id: 'parking', name: 'Parqueadero', icon: 'SquareParking', color: '#5E9BD6', kind: 'expense', group: 'Transporte' },
   { id: 'transit', name: 'Transporte público', icon: 'TrainFront', color: '#40C8E0', kind: 'expense', group: 'Transporte' },
+  { id: 'taxi', name: 'Taxi y apps', icon: 'CarTaxiFront', color: '#FFD60A', kind: 'expense', group: 'Transporte' },
+  { id: 'tolls', name: 'Peajes', icon: 'Milestone', color: '#98989F', kind: 'expense', group: 'Transporte' },
+  { id: 'car-service', name: 'Mantenimiento', icon: 'Cog', color: '#8E8E93', kind: 'expense', group: 'Transporte' },
+  { id: 'car-fees', name: 'Impuestos y SOAT', icon: 'FileText', color: '#5E9BD6', kind: 'expense', group: 'Transporte' },
 
   // ---- Gastos: hogar -------------------------------------------------------
   { id: 'home', name: 'Arriendo', icon: 'House', color: '#BF5AF2', kind: 'expense', group: 'Hogar' },
@@ -24,6 +31,12 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'internet', name: 'Internet', icon: 'Wifi', color: '#5E5CE6', kind: 'expense', group: 'Hogar' },
   { id: 'phone', name: 'Celular', icon: 'Smartphone', color: '#64D2FF', kind: 'expense', group: 'Hogar' },
   { id: 'repairs', name: 'Reparaciones', icon: 'Wrench', color: '#8E8E93', kind: 'expense', group: 'Hogar' },
+  { id: 'water', name: 'Agua', icon: 'Droplet', color: '#64D2FF', kind: 'expense', group: 'Hogar' },
+  { id: 'gas', name: 'Gas', icon: 'Flame', color: '#FF9F0A', kind: 'expense', group: 'Hogar' },
+  { id: 'admin-fee', name: 'Administración', icon: 'Building', color: '#BF5AF2', kind: 'expense', group: 'Hogar' },
+  { id: 'cleaning', name: 'Aseo', icon: 'SprayCan', color: '#40C8E0', kind: 'expense', group: 'Hogar' },
+  { id: 'furniture', name: 'Muebles', icon: 'Sofa', color: '#AC8E68', kind: 'expense', group: 'Hogar' },
+  { id: 'laundry', name: 'Lavandería', icon: 'WashingMachine', color: '#5AC8FA', kind: 'expense', group: 'Hogar' },
 
   // ---- Gastos: salud -------------------------------------------------------
   { id: 'health', name: 'Salud', icon: 'HeartPulse', color: '#FF375F', kind: 'expense', group: 'Salud' },
@@ -31,6 +44,9 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'gym', name: 'Gimnasio', icon: 'Dumbbell', color: '#32D74B', kind: 'expense', group: 'Salud' },
   { id: 'insurance', name: 'Seguros', icon: 'ShieldCheck', color: '#0A84FF', kind: 'expense', group: 'Salud' },
   { id: 'beauty', name: 'Cuidado personal', icon: 'Scissors', color: '#FF9AC1', kind: 'expense', group: 'Salud' },
+  { id: 'dentist', name: 'Odontología', icon: 'Stethoscope', color: '#5AC8FA', kind: 'expense', group: 'Salud' },
+  { id: 'optics', name: 'Óptica', icon: 'Glasses', color: '#98989F', kind: 'expense', group: 'Salud' },
+  { id: 'therapy', name: 'Terapia', icon: 'Brain', color: '#BF5AF2', kind: 'expense', group: 'Salud' },
 
   // ---- Gastos: ocio --------------------------------------------------------
   { id: 'fun', name: 'Ocio', icon: 'Clapperboard', color: '#5E5CE6', kind: 'expense', group: 'Ocio' },
@@ -40,6 +56,9 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'travel', name: 'Viajes', icon: 'Plane', color: '#40C8E0', kind: 'expense', group: 'Ocio' },
   { id: 'hotel', name: 'Hoteles', icon: 'Hotel', color: '#5AC8FA', kind: 'expense', group: 'Ocio' },
   { id: 'subs', name: 'Suscripciones', icon: 'Repeat', color: '#40C8E0', kind: 'expense', group: 'Ocio' },
+  { id: 'sports', name: 'Deportes', icon: 'Volleyball', color: '#32D74B', kind: 'expense', group: 'Ocio' },
+  { id: 'music', name: 'Música', icon: 'Music', color: '#FF375F', kind: 'expense', group: 'Ocio' },
+  { id: 'hobbies', name: 'Pasatiempos', icon: 'Palette', color: '#FF9F0A', kind: 'expense', group: 'Ocio' },
 
   // ---- Gastos: compras -----------------------------------------------------
   { id: 'shopping', name: 'Compras', icon: 'ShoppingBag', color: '#FF453A', kind: 'expense', group: 'Compras' },
@@ -47,10 +66,21 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'tech', name: 'Tecnología', icon: 'Laptop', color: '#8E8E93', kind: 'expense', group: 'Compras' },
   { id: 'gifts', name: 'Regalos', icon: 'Gift', color: '#FF375F', kind: 'expense', group: 'Compras' },
   { id: 'pets', name: 'Mascotas', icon: 'PawPrint', color: '#AC8E68', kind: 'expense', group: 'Compras' },
+  { id: 'shoes', name: 'Calzado', icon: 'Footprints', color: '#C2407A', kind: 'expense', group: 'Compras' },
+  { id: 'kids', name: 'Niños', icon: 'Baby', color: '#FF9AC1', kind: 'expense', group: 'Compras' },
+  { id: 'tools', name: 'Herramientas', icon: 'Hammer', color: '#8E8E93', kind: 'expense', group: 'Compras' },
 
   // ---- Gastos: formación ---------------------------------------------------
   { id: 'education', name: 'Educación', icon: 'GraduationCap', color: '#FFD60A', kind: 'expense', group: 'Formación' },
   { id: 'books', name: 'Libros', icon: 'BookOpen', color: '#D6A75E', kind: 'expense', group: 'Formación' },
+  { id: 'courses', name: 'Cursos', icon: 'MonitorPlay', color: '#0A84FF', kind: 'expense', group: 'Formación' },
+  { id: 'languages', name: 'Idiomas', icon: 'Languages', color: '#40C8E0', kind: 'expense', group: 'Formación' },
+
+  // ---- Gastos: personas y trámites -----------------------------------------
+  { id: 'family', name: 'Familia', icon: 'Users', color: '#FF375F', kind: 'expense', group: 'Personas' },
+  { id: 'legal', name: 'Trámites', icon: 'Stamp', color: '#98989F', kind: 'expense', group: 'Personas' },
+  { id: 'shipping', name: 'Envíos', icon: 'Package', color: '#FF6B35', kind: 'expense', group: 'Personas' },
+  { id: 'work-expense', name: 'Gastos de trabajo', icon: 'Briefcase', color: '#0A84FF', kind: 'expense', group: 'Personas' },
 
   // ---- Gastos: financiero --------------------------------------------------
   { id: 'fees', name: 'Comisiones', icon: 'Receipt', color: '#8E8E93', kind: 'expense', group: 'Financiero' },
@@ -58,6 +88,10 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'taxes', name: 'Impuestos', icon: 'Landmark', color: '#98989F', kind: 'expense', group: 'Financiero' },
   { id: 'installment', name: 'Cuota tarjeta', icon: 'CreditCard', color: '#FF9F0A', kind: 'expense', group: 'Financiero' },
   { id: 'donation', name: 'Donaciones', icon: 'HandCoins', color: '#32D74B', kind: 'expense', group: 'Financiero' },
+  { id: 'loan-payment', name: 'Cuota de préstamo', icon: 'Banknote', color: '#FF453A', kind: 'expense', group: 'Financiero' },
+  { id: 'to-savings', name: 'Paso a ahorro', icon: 'PiggyBank', color: '#30D158', kind: 'expense', group: 'Financiero' },
+  { id: 'to-investment', name: 'Paso a inversión', icon: 'TrendingUp', color: '#BF5AF2', kind: 'expense', group: 'Financiero' },
+  { id: 'withdrawal', name: 'Retiro en cajero', icon: 'Landmark', color: '#8E8E93', kind: 'expense', group: 'Financiero' },
   { id: 'other', name: 'Otros', icon: 'Ellipsis', color: '#98989F', kind: 'expense', group: 'Financiero' },
 
   // ---- Ingresos ------------------------------------------------------------
@@ -71,11 +105,23 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'rent-income', name: 'Arriendos', icon: 'Building2', color: '#40C8E0', kind: 'income', group: 'Inversión' },
   { id: 'refund', name: 'Reembolso', icon: 'Undo2', color: '#64D2FF', kind: 'income', group: 'Otros' },
   { id: 'gift-income', name: 'Regalo', icon: 'Gift', color: '#FF375F', kind: 'income', group: 'Otros' },
+  { id: 'loan-income', name: 'Préstamo recibido', icon: 'Banknote', color: '#FF9F0A', kind: 'income', group: 'Otros' },
+  { id: 'from-savings', name: 'Retiro de ahorro', icon: 'PiggyBank', color: '#30D158', kind: 'income', group: 'Otros' },
   { id: 'other-income', name: 'Otros ingresos', icon: 'Ellipsis', color: '#98989F', kind: 'income', group: 'Otros' },
 ]
 
+/**
+ * Categoría por id, con «Otros» de comodín.
+ *
+ * El comodín se nombra explícito y no se toma del final de la lista: bastaba
+ * añadir una categoría nueva al final para que un id desconocido pasara a
+ * mostrarse como lo que fuera que quedara de último —«Otros ingresos», por
+ * ejemplo, para un gasto.
+ */
+const OTROS = DEFAULT_CATEGORIES.find((c) => c.id === 'other')!
+
 export const categoryById = (id: string) =>
-  DEFAULT_CATEGORIES.find((c) => c.id === id) ?? DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1]
+  DEFAULT_CATEGORIES.find((c) => c.id === id) ?? OTROS
 
 /** Agrupa por `group` conservando el orden de declaración. */
 export function categoriesByGroup(kind: 'expense' | 'income') {
@@ -159,3 +205,16 @@ export function institutionsByGroup() {
 /** Busca una entidad por nombre; útil para reconstruir el badge desde una cuenta. */
 export const institutionByName = (name: string) =>
   CO_INSTITUTIONS.find((i) => i.name === name)
+
+/**
+ * Plataformas donde se registran inversiones, en el orden en que se ofrecen.
+ *
+ * Es una lista cerrada y no se deriva de las cuentas que existan. Antes el
+ * selector de plataforma ofrecía toda cuenta de ahorros o de inversión, así
+ * que aparecían Nequi y Bancolombia —donde no se compran ETF— y faltaban las
+ * corredoras para las que aún no se había creado una cuenta a mano.
+ */
+export const INVESTMENT_PLATFORMS = ['ARQ', 'Insights', 'Tyba', 'Trii'] as const
+
+export const investmentPlatforms = () =>
+  INVESTMENT_PLATFORMS.map((name) => institutionByName(name)).filter((i): i is Institution => Boolean(i))

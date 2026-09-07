@@ -2,23 +2,26 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { BadgePercent, Check, CreditCard, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
+import { BadgePercent, Calculator, Check, CreditCard, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { formatKeypad, formatMoney, formatPercent, monthlyFromApy, parseKeypad } from '@/lib/format'
-import { accountTotal, useCashback, useFinance } from '@/lib/store'
+import { accountTotal, useCashback, useFinance, useSaldoConMovimientos } from '@/lib/store'
 import type { Account } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
 
 const POCKET_COLORS = ['#0A84FF', '#30D158', '#BF5AF2', '#FF9F0A', '#FF375F', '#40C8E0']
 
 export function AccountDetailSheet({
-  account, onClose,
+  account: seleccionada, onClose,
 }: {
   account: Account | null
   onClose: () => void
 }) {
-  const { addPocket, updatePocket, deletePocket, deleteAccount, updateAccount, fxRate } = useFinance()
+  const {
+    accounts, addPocket, updatePocket, deletePocket, deleteAccount, updateAccount,
+    aplicarMovimientosAlSaldo, fxRate,
+  } = useFinance()
   const [adding, setAdding] = useState(false)
   const [pName, setPName] = useState('')
   const [pAmount, setPAmount] = useState('')
@@ -35,9 +38,26 @@ export function AccountDetailSheet({
   const [saldoNeg, setSaldoNeg] = useState(false)
   const [editCupo, setEditCupo] = useState(false)
   const [cupoDraft, setCupoDraft] = useState('')
+  const [cuadrando, setCuadrando] = useState(false)
+
+  /**
+   * La cuenta viva del store, no la copia con la que se abrió la ficha.
+   *
+   * La página pasa el objeto que tenía en el momento del toque, y ese objeto
+   * ya no vuelve a cambiar: al editar desde aquí el saldo, el cupo, la tasa o
+   * un bolsillo, el dato se guardaba bien pero la pantalla seguía enseñando la
+   * cifra vieja hasta cerrar y volver a abrir. Con «Cuadrar con los
+   * movimientos» eso pasaba de confuso a peligroso — parecía que no había
+   * pasado nada, e invitaba a aplicarlo por segunda vez.
+   *
+   * Se conserva la copia como respaldo para el instante entre borrar la cuenta
+   * y que se cierre la hoja, cuando ya no existe en el store.
+   */
+  const account = accounts.find((a) => a.id === seleccionada?.id) ?? seleccionada
 
   // Los hooks se llaman antes del retorno temprano: no pueden ir condicionados.
   const cashback = useCashback(account?.id)
+  const cuadre = useSaldoConMovimientos(account?.id)
 
   if (!account) return null
 
@@ -147,6 +167,72 @@ export function AccountDetailSheet({
             </p>
           )}
         </div>
+
+        {/*
+          Cuadrar el saldo con los movimientos.
+          Hasta hace poco registrar un movimiento no tocaba el saldo de su
+          cuenta en el servidor, así que muchos saldos se quedaron en la cifra
+          del día que se creó la cuenta. Esto los pone al día de una vez.
+
+          No se presenta como una alarma sino como una herramienta, y a
+          propósito: el código no puede saber qué movimientos ya están
+          reflejados en el saldo, así que quien decide es quien conoce sus
+          cuentas. Por eso enseña antes la cifra que quedaría.
+        */}
+        {cuadre && cuadre.movimientos > 0 && (
+          <div className={cn(
+            'mb-5 rounded-2xl border px-4 py-3',
+            cuadrando ? 'border-accent-orange/30 bg-accent-orange/[0.08]' : 'border-hairline bg-white/[0.04]',
+          )}>
+            {cuadrando ? (
+              <>
+                <p className="text-[13px] font-semibold text-label">Cuadrar con los movimientos</p>
+                <p className="tnum mt-2 text-[15px] text-label-secondary">
+                  {formatMoney(cuadre.actual, cur)}
+                  {' → '}
+                  <span className={cn('font-semibold', cuadre.propuesto < 0 ? 'text-accent-red' : 'text-label')}>
+                    {formatMoney(cuadre.propuesto, cur)}
+                  </span>
+                </p>
+                <p className="mt-2 text-[12px] leading-relaxed text-label-tertiary">
+                  Suma al saldo guardado los {cuadre.movimientos} movimientos de esta cuenta.
+                  Hazlo una sola vez: repetirlo los contaría dos veces.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => setCuadrando(false)}
+                    className="press h-10 flex-1 rounded-xl border border-hairline text-[14px] font-medium text-label-secondary"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic([14, 40, 22])
+                      aplicarMovimientosAlSaldo(account!.id).catch(() => {})
+                      setCuadrando(false)
+                    }}
+                    className="press h-10 flex-1 rounded-xl bg-accent-orange text-[14px] font-semibold text-black"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                onClick={() => { haptic(6); setCuadrando(true) }}
+                className="flex w-full items-center gap-3 text-left"
+              >
+                <Calculator size={16} className="shrink-0 text-label-tertiary" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-medium text-label">Cuadrar con los movimientos</p>
+                  <p className="text-[12px] text-label-tertiary">
+                    Si el saldo se quedó atrás, aplica aquí los {cuadre.movimientos} registrados.
+                  </p>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Rendimiento, editable. No aplica a tarjetas de crédito: esas cobran
             intereses, no los pagan. */}
