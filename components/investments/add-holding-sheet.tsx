@@ -6,7 +6,7 @@ import { History, Loader2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
-import { IssuerBadge } from '@/components/ui/issuer-badge'
+import { HoldingPicker } from './holding-picker'
 import { investmentPlatforms } from '@/lib/categories'
 import { nombreDe } from '@/lib/issuers'
 import { formatKeypad, formatMoney, formatQuantity, parseKeypad } from '@/lib/format'
@@ -299,40 +299,22 @@ export function AddHoldingSheet({
         )}
 
         {/*
-          Los símbolos que ya están en cartera, para tocarlos en vez de
+          Los símbolos que ya están en cartera, para elegirlos en vez de
           teclearlos. Casi toda operación es sobre algo que ya se tiene, y
           escribir «BTC-USD» con el teclado del móvil, en mayúsculas y con el
           guion en su sitio, es donde se cuela el error que luego crea una
-          posición duplicada. Los que no están se siguen escribiendo.
+          posición duplicada. Los que no están se siguen escribiendo abajo.
         */}
         {!editing && enCartera.length > 0 && (
           <>
             <Label>En tu portafolio</Label>
-            <div className="-mx-5 mb-4 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-              {enCartera.map((h) => {
-                const activo = h.symbol === symbol.trim().toUpperCase()
-                return (
-                  <button
-                    key={h.symbol}
-                    onClick={() => { haptic(6); setSymbol(h.symbol) }}
-                    className={cn(
-                      'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 transition-colors',
-                      activo ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
-                    )}
-                  >
-                    <IssuerBadge symbol={h.symbol} size="xs" />
-                    <span className={cn('text-[13px] font-semibold', activo ? 'text-label' : 'text-label-secondary')}>
-                      {h.symbol}
-                    </span>
-                    <span className="tnum text-[11px] text-label-tertiary">{formatQuantity(h.quantity)}</span>
-                  </button>
-                )
-              })}
+            <div className="mb-4">
+              <HoldingPicker holdings={enCartera} value={symbol} onChange={setSymbol} />
             </div>
           </>
         )}
 
-        <Label>Símbolo</Label>
+        <Label>{enCartera.length > 0 && !editing ? 'O escribe otro símbolo' : 'Símbolo'}</Label>
         <div className={cn(caja, 'mb-1.5')}>
           <input
             value={symbol}
