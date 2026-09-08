@@ -238,13 +238,22 @@ que es la que cabe.
 
 Las posiciones muestran el logotipo de la gestora del fondo (Vanguard, iShares,
 State Street, Schwab, J.P. Morgan, VanEck, Avantis) en vez de una caja gris con
-el ticker. El mismo archivo lleva los **nombres oficiales** de los instrumentos habituales
+el ticker, y **el ticker delante del nombre**: es con lo que se busca, se
+compara y se opera, y antes había que deducirlo del logotipo.
+
+El mismo archivo lleva los **nombres oficiales de mercado**, 242 instrumentos
 (VOO → «Vanguard S&P 500 ETF»), que se resuelven sin red: la búsqueda de nombres
 depende de una API que puede estar caída, y entonces la posición se quedaba
-llamándose como su ticker. El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y
-es explícito, sin reglas por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una
-gestora a AVGO, que es Broadcom. Lo que no está en el mapa —acciones sueltas,
-cripto— sigue mostrando su ticker, que ahí es justo la información útil.
+llamándose como su ticker. La tabla cubre **todos** los tickers con gestora en
+el mapa: si un símbolo tiene logotipo, tiene nombre — tenerlo a medias sacaba
+filas con el logotipo de Vanguard y el nombre «VBR».
+
+El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y es explícito, sin reglas
+por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una gestora a
+AVGO, que es Broadcom — y por el mismo motivo GDXY no cuelga de VanEck, que es
+quien emite el GDX que ese fondo usa por debajo, sino de YieldMax, que es quien
+lo emite. Lo que no está en el mapa —acciones sueltas, cripto— sigue mostrando
+su ticker en la insignia, que ahí es justo la información útil.
 
 ---
 

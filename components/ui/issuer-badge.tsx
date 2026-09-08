@@ -1,6 +1,6 @@
 'use client'
 
-import { issuerOf } from '@/lib/issuers'
+import { logotipoDe } from '@/lib/issuers'
 import { cn } from '@/lib/utils'
 
 const CAJA = {
@@ -10,12 +10,16 @@ const CAJA = {
 } as const
 
 /**
- * Distintivo de una posición: el logotipo de la gestora del fondo si se
- * conoce, y si no el ticker en una caja neutra.
+ * Distintivo de una posición: su logotipo si se conoce, y si no el ticker en
+ * una caja neutra.
  *
- * El respaldo importa tanto como el logotipo: la mayoría de posiciones son
- * acciones sueltas, que no tienen gestora detrás, y ahí el ticker es
- * exactamente la información que hace falta.
+ * El logotipo puede venir de dos sitios —la gestora del fondo o la propia
+ * empresa, si es una acción— y aquí da igual cuál de los dos: `logotipoDe`
+ * resuelve esa pregunta y la insignia solo pinta lo que le den.
+ *
+ * El respaldo sigue importando tanto como el logotipo: de la mayoría de las
+ * acciones no se tiene ninguno, y ahí el ticker es exactamente la información
+ * que hace falta.
  */
 export function IssuerBadge({
   symbol, size = 'md', className,
@@ -24,18 +28,18 @@ export function IssuerBadge({
   size?: keyof typeof CAJA
   className?: string
 }) {
-  const issuer = issuerOf(symbol)
+  const marca = logotipoDe(symbol)
   const caja = CAJA[size]
 
-  if (issuer) {
+  if (marca) {
     return (
       // Imagen normal y no next/image: son PNG locales de 128 px que ya pesan
       // lo que deben, y así no pasan por el optimizador en cada despliegue.
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={issuer.logo}
-        alt={issuer.name}
-        title={issuer.name}
+        src={marca.logo}
+        alt={marca.name}
+        title={marca.name}
         loading="lazy"
         className={cn('shrink-0 object-cover', caja, className)}
       />
