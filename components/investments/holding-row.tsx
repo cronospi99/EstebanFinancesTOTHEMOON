@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { IssuerBadge } from '@/components/ui/issuer-badge'
-import { issuerOf, nombreVisible } from '@/lib/issuers'
+import { logotipoDe, nombreVisible } from '@/lib/issuers'
 import { formatMoney, formatPercent, formatQuantity } from '@/lib/format'
 import type { Currency, Holding, Quote } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -41,9 +41,9 @@ export function HoldingRow({
    * que deducirlo del logotipo. Va como código y no como texto corrido para
    * que se distinga de un vistazo del nombre comercial.
    *
-   * Solo cuando la insignia es un logotipo. Sin gestora conocida, la insignia
+   * Solo cuando la insignia es un logotipo. Sin logotipo conocido, la insignia
    * ya es el propio ticker en una caja, así que la etiqueta lo repetiría dos
-   * centímetros más a la derecha: «AAPL  AAPL  Apple Inc.».
+   * centímetros más a la derecha: «NVDA  NVDA  NVIDIA Corporation».
    *
    * Y si tampoco se conoce el nombre, `nombreVisible` devuelve el ticker; ahí
    * la etiqueta se queda sola, sin repetirlo detrás.
@@ -51,7 +51,7 @@ export function HoldingRow({
   const ticker = holding.symbol.trim().toUpperCase()
   const nombre = nombreVisible(holding.symbol, holding.name)
   const hayNombre = nombre.trim().toUpperCase() !== ticker
-  const enEtiqueta = Boolean(issuerOf(holding.symbol))
+  const enEtiqueta = Boolean(logotipoDe(holding.symbol))
 
   // Solo un precio real y fresco cuenta como "en vivo": sin esto mostraríamos
   // un 0,00 % en verde que se lee como sesión plana cuando no hay ni un dato.

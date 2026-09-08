@@ -14,6 +14,14 @@ export interface Issuer {
   logo: string
 }
 
+/**
+ * Un logotipo con su nombre: sirve igual para una gestora y para una empresa.
+ * Son la misma cosa en pantalla —la imagen de la insignia— y solo se
+ * diferencian en de dónde cuelgan: el fondo lo hereda de quien lo emite, la
+ * acción lo tiene por sí misma.
+ */
+export type Logotipo = Issuer
+
 export const ISSUERS: Record<string, Issuer> = {
   vanguard: { id: 'vanguard', name: 'Vanguard', logo: '/issuers/vanguard.png' },
   ishares: { id: 'ishares', name: 'iShares', logo: '/issuers/ishares.png' },
@@ -338,6 +346,7 @@ NFLX|Netflix Inc.
 AMD|Advanced Micro Devices Inc.
 INTC|Intel Corporation
 SNDK|SanDisk Corporation
+NVTS|Navitas Semiconductor Corporation
 TTWO|Take-Two Interactive Software Inc.
 
 # Cripto
@@ -379,8 +388,39 @@ export function nombreVisible(symbol: string, guardado?: string): string {
   return nombreDe(s) ?? guardado ?? s
 }
 
-/** Emisora de un símbolo, si se conoce. */
+/** Emisora de un símbolo, si se conoce. Solo fondos. */
 export function issuerOf(symbol: string): Issuer | undefined {
   const id = POR_TICKER[symbol.trim().toUpperCase()]
   return id ? ISSUERS[id] : undefined
+}
+
+/**
+ * Logotipo propio de una empresa, para las acciones sueltas.
+ *
+ * Va aparte de ISSUERS porque no es lo mismo: Vanguard le presta su logotipo a
+ * cuarenta y ocho fondos, mientras que el de Apple es de AAPL y de nada más.
+ * Mezclarlos invitaría a colgar de «Apple» cualquier cosa que empiece por AA.
+ *
+ * Mapa explícito, por el mismo motivo que el de gestoras: sin reglas.
+ */
+const EMPRESAS: Record<string, Logotipo> = {
+  AAPL: { id: 'apple', name: 'Apple', logo: '/brands/apple.png' },
+  MSFT: { id: 'microsoft', name: 'Microsoft', logo: '/brands/microsoft.png' },
+  GOOGL: { id: 'google', name: 'Google', logo: '/brands/google.png' },
+  GOOG: { id: 'google', name: 'Google', logo: '/brands/google.png' },
+  TTWO: { id: 'take-two', name: 'Take-Two Interactive', logo: '/brands/take-two.png' },
+  SNDK: { id: 'sandisk', name: 'SanDisk', logo: '/brands/sandisk.png' },
+  NVTS: { id: 'navitas', name: 'Navitas Semiconductor', logo: '/brands/navitas.png' },
+}
+
+/**
+ * El logotipo que le toca a un símbolo: el de su gestora si es un fondo, el de
+ * su empresa si es una acción. Es lo que necesita la insignia, que no tiene
+ * por qué saber de cuál de los dos vino.
+ *
+ * La gestora manda cuando hay las dos: un fondo se reconoce por quien lo
+ * emite, y el ticker de un fondo no es el de ninguna empresa de la lista.
+ */
+export function logotipoDe(symbol: string): Logotipo | undefined {
+  return issuerOf(symbol) ?? EMPRESAS[symbol.trim().toUpperCase()]
 }
