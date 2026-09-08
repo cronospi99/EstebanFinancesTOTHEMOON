@@ -24,6 +24,13 @@ const cache = new Map<string, { serie: Punto[]; at: number }>()
 const esCripto = (s: string) => /-(USD|USDT)$/i.test(s)
 const dia = (t: number) => new Date(t).toISOString().slice(0, 10)
 
+/** Resume un cuerpo inesperado: el HTML crudo llenaba el aviso sin decir nada. */
+function resumirCuerpo(cuerpo: string): string {
+  const t = cuerpo.trim()
+  if (/^<(!doctype|html|\?xml)/i.test(t)) return 'devolvió una página HTML (bloqueado o redirigido)'
+  return t.slice(0, 70) || 'respuesta vacía'
+}
+
 type Resultado = Punto[] | { error: string }
 const esError = (r: Resultado): r is { error: string } => !Array.isArray(r)
 
@@ -62,7 +69,7 @@ async function stooq(symbol: string, days: number): Promise<Resultado> {
 
   const cuerpo = (await res.text()).trim()
   const filas = cuerpo.split('\n').slice(1).filter(Boolean)
-  if (!filas.length) return { error: cuerpo.slice(0, 60) || 'sin filas' }
+  if (!filas.length) return { error: resumirCuerpo(cuerpo) }
 
   const serie: Punto[] = []
   for (const fila of filas) {
@@ -70,7 +77,7 @@ async function stooq(symbol: string, days: number): Promise<Resultado> {
     const c = Number(p[4])
     if (p[0] && c > 0) serie.push({ d: p[0], c })
   }
-  return serie.length ? serie : { error: cuerpo.slice(0, 60) || 'sin cierres' }
+  return serie.length ? serie : { error: resumirCuerpo(cuerpo) }
 }
 
 /** Velas diarias públicas de Coinbase para los pares cripto. */
@@ -97,11 +104,39 @@ async function coinbase(symbol: string, days: number): Promise<Resultado> {
   return serie.length ? serie : { error: 'velas sin cierre' }
 }
 
+/**
+ * Twelve Data, con llave. Es la salida cuando ninguna fuente abierta sirve:
+ * Yahoo responde 429 a las IP de Vercel y Stooq devuelve HTML en vez de CSV.
+ * La misma llave cubre precio e histórico. Variable: TWELVE_DATA_API_KEY.
+ */
+async function twelveData(symbol: string, days: number): Promise<Resultado> {
+  const key = process.env.TWELVE_DATA_API_KEY
+  if (!key) return { error: 'sin TWELVE_DATA_API_KEY' }
+
+  const s = esCripto(symbol) ? symbol.toUpperCase().replace('-', '/') : symbol.toUpperCase()
+  // Su tope por llamada es 5.000 velas; de sobra para cinco años diarios.
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(s)}`
+    + `&interval=1day&outputsize=${Math.min(days + 20, 5000)}&order=ASC&apikey=${key}`
+
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+
+  const j = await res.json()
+  if (j?.status === 'error') return { error: String(j.message ?? 'error').slice(0, 70) }
+
+  const valores: { datetime: string; close: string }[] = j?.values ?? []
+  const serie = valores
+    .map((v) => ({ d: String(v.datetime).slice(0, 10), c: Number(v.close) }))
+    .filter((p) => p.d && p.c > 0)
+  return serie.length ? serie : { error: 'serie vacía' }
+}
+
 const FUENTES: [string, (s: string, d: number) => Promise<Resultado>][] = [
   ['yahoo:query1', (s, d) => yahoo(s, d, 'query1')],
   ['yahoo:query2', (s, d) => yahoo(s, d, 'query2')],
   ['coinbase', coinbase],
   ['stooq', stooq],
+  ['twelve-data', twelveData],
 ]
 
 async function getSerie(symbol: string, days: number, fallos: string[]): Promise<Punto[]> {

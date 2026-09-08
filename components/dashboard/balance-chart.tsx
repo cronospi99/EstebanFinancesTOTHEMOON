@@ -9,13 +9,19 @@ import { formatCompact } from '@/lib/format'
  * ya está en el titular de arriba. Igual que la app Bolsa de Apple.
  */
 export function BalanceChart({
-  data, positive = true, id = 'balanceFill', label = 'Patrimonio',
+  data, positive = true, id = 'balanceFill', label = 'Patrimonio', format = formatCompact,
 }: {
   data: { date: string; value: number }[]
   positive?: boolean
   /** Identificador del degradado: dos gráficos en la misma página chocarían. */
   id?: string
   label?: string
+  /**
+   * Cómo se escribe el valor en el tooltip. Lo decide quien llama porque la
+   * serie viene siempre en pesos, pero la pantalla de inversiones puede estar
+   * enseñando dólares — y ahí el tooltip cantaba una cifra en otra moneda.
+   */
+  format?: (v: number) => string
 }) {
   const stroke = positive ? '#30D158' : '#FF453A'
   // El dominio ajustado al rango real (no a 0) es lo que revela el movimiento;
@@ -52,7 +58,7 @@ export function BalanceChart({
                   )
                 : ''
             }
-            formatter={(v: number) => [formatCompact(v), label]}
+            formatter={(v: number) => [format(v), label]}
           />
           <Area
             type="monotone"

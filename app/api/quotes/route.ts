@@ -21,7 +21,9 @@ import type { Quote } from '@/lib/types'
 export const runtime = 'nodejs'
 export const revalidate = 0
 
-const CACHE_TTL_MS = 60_000
+// Cinco minutos, no uno. Los proveedores gratuitos racionan por día, y un
+// portafolio personal no cambia de decisión por 60 segundos de precio.
+const CACHE_TTL_MS = 5 * 60_000
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36'
 
 // Caché en memoria: evita golpear a los proveedores en cada render y respeta
@@ -30,6 +32,20 @@ const cache = new Map<string, { quote: Quote; at: number }>()
 
 /** Un par cripto del estilo BTC-USD; el resto se trata como renta variable. */
 const esCripto = (symbol: string) => /-(USD|USDT)$/i.test(symbol)
+
+/**
+ * Resume el cuerpo de una respuesta que no era lo esperado.
+ *
+ * Volcarlo tal cual llenaba el aviso de la app de «<!DOCTYPE html><html>…»,
+ * que ocupa tres líneas y no dice nada. Cuando llega HTML es que el proveedor
+ * nos ha mandado a una página —bloqueo, consentimiento o redirección—, y eso
+ * es lo que hay que leer.
+ */
+function resumirCuerpo(cuerpo: string): string {
+  const t = cuerpo.trim()
+  if (/^<(!doctype|html|\?xml)/i.test(t)) return 'devolvió una página HTML (bloqueado o redirigido)'
+  return t.slice(0, 70) || 'respuesta vacía'
+}
 
 const arma = (symbol: string, price: number, prev: number, source: string, currency = 'USD'): Quote => ({
   symbol,
@@ -85,11 +101,11 @@ async function stooq(symbol: string): Promise<Resultado> {
   const filas = cuerpo.split('\n').slice(1).filter(Boolean)
   // Stooq contesta 200 con un texto plano cuando raciona ("Exceeded the daily
   // hits limit"). Sin mirar el cuerpo, eso se confundía con "no hay datos".
-  if (!filas.length) return { error: cuerpo.slice(0, 60) || 'sin filas' }
+  if (!filas.length) return { error: resumirCuerpo(cuerpo) }
 
   const cierre = (fila: string) => Number(fila.split(',')[4])
   const price = cierre(filas[filas.length - 1])
-  if (!price) return { error: cuerpo.slice(0, 60) || 'cierre no numérico' }
+  if (!price) return { error: resumirCuerpo(cuerpo) }
   const prev = filas.length > 1 ? cierre(filas[filas.length - 2]) || price : price
   return arma(symbol, price, prev, 'stooq')
 }
@@ -114,6 +130,35 @@ async function coinbase(symbol: string): Promise<Resultado> {
   return arma(symbol, price, prev, 'coinbase')
 }
 
+/**
+ * Twelve Data: la salida cuando ninguna fuente abierta sirve.
+ *
+ * Yahoo responde 429 a las IP de Vercel y Stooq devuelve una página HTML en
+ * vez del CSV, así que desplegado no queda ninguna gratuita en pie. Su plan
+ * libre da 800 llamadas al día —de sobra para una cartera personal con la
+ * caché de este proxy— y cubre tanto el precio como el histórico, que es la
+ * otra mitad del problema.
+ *
+ * Se pide la llave en https://twelvedata.com y se guarda en la variable
+ * TWELVE_DATA_API_KEY. Sin ella no se intenta.
+ */
+async function twelveData(symbol: string): Promise<Resultado> {
+  const key = process.env.TWELVE_DATA_API_KEY
+  if (!key) return { error: 'sin TWELVE_DATA_API_KEY' }
+
+  // Su convención para cripto es BTC/USD, no BTC-USD.
+  const s = esCripto(symbol) ? symbol.toUpperCase().replace('-', '/') : symbol.toUpperCase()
+  const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(s)}&apikey=${key}`
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+
+  const q = await res.json()
+  if (q?.status === 'error') return { error: String(q.message ?? 'error').slice(0, 70) }
+  const price = Number(q?.close)
+  if (!price) return { error: 'respuesta sin precio' }
+  return arma(symbol, price, Number(q?.previous_close ?? price), 'twelve-data', q?.currency ?? 'USD')
+}
+
 /** Respaldo opcional. Solo se intenta si hay llave configurada. */
 async function alphaVantage(symbol: string): Promise<Resultado> {
   const key = process.env.ALPHA_VANTAGE_API_KEY
@@ -134,6 +179,7 @@ const FUENTES: [string, (s: string) => Promise<Resultado>][] = [
   ['yahoo:query2', (s) => yahoo(s, 'query2')],
   ['coinbase', coinbase],
   ['stooq', stooq],
+  ['twelve-data', twelveData],
   ['alpha-vantage', alphaVantage],
 ]
 

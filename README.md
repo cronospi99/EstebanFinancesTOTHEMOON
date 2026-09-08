@@ -273,10 +273,15 @@ Lo que falta, en orden de lo que más duele.
       URLs* con el dominio de Vercel (`https://tu-app.vercel.app/auth/callback`).
       Sin esto el enlace mágico redirige a `localhost` y no se puede entrar
       desde el teléfono.
-- [ ] **Variables de entorno en Vercel:** `NEXT_PUBLIC_SUPABASE_URL`,
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY` y, si se quiere respaldo de precios,
-      `ALPHA_VANTAGE_API_KEY`. Sin las dos primeras el despliegue queda en Modo
+- [ ] **Variables de entorno en Vercel:** `NEXT_PUBLIC_SUPABASE_URL` y
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Sin ellas el despliegue queda en Modo
       Demo y **público**: cualquiera con el enlace entra.
+- [ ] **`TWELVE_DATA_API_KEY` para que haya precios.** Las fuentes sin llave no
+      funcionan desde un centro de datos: Yahoo responde `429` a las IP de
+      Vercel y Stooq devuelve una página HTML en vez del CSV. La llave gratuita
+      de [twelvedata.com](https://twelvedata.com) da 800 llamadas al día y
+      cubre precio e histórico. Sin ella la app funciona, pero el portafolio se
+      queda «valorado al costo».
 
 ### Código
 

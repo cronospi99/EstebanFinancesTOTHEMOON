@@ -5,7 +5,7 @@ import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { RangePicker } from '@/components/dashboard/range-picker'
 import { BalanceChart } from '@/components/dashboard/balance-chart'
-import { formatMoney, formatPercent } from '@/lib/format'
+import { formatCompact, formatMoney, formatPercent } from '@/lib/format'
 import { calcularSeriePortafolio } from '@/lib/portfolio-series'
 import { RANGE_DAYS, RANGE_LABEL, useFinance, type RangeKey } from '@/lib/store'
 import { useHistory } from '@/lib/use-history'
@@ -73,7 +73,20 @@ export function PerformanceCard({ moneda, enMoneda }: { moneda: Currency; enMone
       </div>
 
       {datos.serie.length > 1 && (
-        <BalanceChart data={datos.serie} positive={sube} id="portafolioFill" label="Portafolio" />
+        /*
+         * El color de la curva sigue a la curva —dónde acabó frente a dónde
+         * empezó—, no al rendimiento del titular. Son cosas distintas: una
+         * cartera puede valer más porque se le metió dinero y aun así no haber
+         * rendido nada, y pintar de rojo una línea que sube es desconcertante.
+         * El titular ya dice lo otro, y con su propio color.
+         */
+        <BalanceChart
+          data={datos.serie}
+          positive={datos.fin >= datos.inicio}
+          id="portafolioFill"
+          label="Portafolio"
+          format={(v) => formatCompact(enMoneda(v), moneda)}
+        />
       )}
 
       <div className="mt-3 grid grid-cols-3 gap-3 border-t border-hairline pt-3">
