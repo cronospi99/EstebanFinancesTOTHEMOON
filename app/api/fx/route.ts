@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
+import { fetchConPlazo } from '@/lib/fetch-plazo'
 
 /**
  * Tasa USD → COP.
  *
  * Va aparte de /api/quotes porque la divisa es el dato del que cuelga todo el
  * patrimonio: si falla, las cuentas en dólares quedan mal valoradas y el
- * total miente. Por eso se consultan tres fuentes en cadena y se informa de
+ * total miente. Por eso se consultan dos fuentes en cadena y se informa de
  * cuál respondió, en vez de devolver un número sin procedencia.
+ *
+ * Yahoo iba en cabeza y se quitó: devuelve 429 a las IP de los centros de
+ * datos, así que desplegado no acertaba nunca y lo único que aportaba era la
+ * espera antes de llegar a las dos que sí contestan. Las dos que quedan son
+ * abiertas, sin llave y sin cupo.
  */
 
 export const runtime = 'nodejs'
@@ -15,33 +21,24 @@ export const revalidate = 0
 const TTL = 10 * 60_000
 let cache: { rate: number; source: string; at: number } | null = null
 
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36'
-
-async function yahoo(): Promise<number | null> {
-  const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/COP=X?interval=1d&range=1d', {
-    headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store',
-  })
-  if (!r.ok) return null
-  const price = (await r.json())?.chart?.result?.[0]?.meta?.regularMarketPrice
-  return typeof price === 'number' && price > 0 ? price : null
-}
+/** Plazo por fuente: sin él, una que no cierre la conexión cuelga la cadena. */
+const PLAZO_MS = 3_500
 
 async function erApi(): Promise<number | null> {
-  const r = await fetch('https://open.er-api.com/v6/latest/USD', { cache: 'no-store' })
+  const r = await fetchConPlazo('https://open.er-api.com/v6/latest/USD', { cache: 'no-store' }, PLAZO_MS)
   if (!r.ok) return null
   const rate = (await r.json())?.rates?.COP
   return typeof rate === 'number' && rate > 0 ? rate : null
 }
 
 async function frankfurter(): Promise<number | null> {
-  const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=COP', { cache: 'no-store' })
+  const r = await fetchConPlazo('https://api.frankfurter.app/latest?from=USD&to=COP', { cache: 'no-store' }, PLAZO_MS)
   if (!r.ok) return null
   const rate = (await r.json())?.rates?.COP
   return typeof rate === 'number' && rate > 0 ? rate : null
 }
 
 const FUENTES: [string, () => Promise<number | null>][] = [
-  ['yahoo', yahoo],
   ['er-api', erApi],
   ['frankfurter', frankfurter],
 ]

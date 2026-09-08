@@ -129,26 +129,30 @@ export default function SettingsPage() {
         <Card className="divide-y divide-hairline overflow-hidden">
           <Row
             icon={<KeyRound size={17} />}
-            title="Twelve Data"
+            title="Finnhub · precios"
             subtitle={
               mercado.cargando
                 ? 'Comprobando…'
                 : mercado.error
                   ? 'No se pudo comprobar con el servidor'
-                  : mercado.claves?.twelveData
+                  : mercado.claves?.finnhub
                     ? 'Llave activa en el servidor'
-                    : 'Sin llave — solo fuentes públicas'
+                    : 'Sin llave — el portafolio se queda al costo'
+            }
+            status={Boolean(mercado.claves?.finnhub)}
+          />
+          <Row
+            icon={<KeyRound size={17} />}
+            title="Twelve Data · histórico"
+            subtitle={
+              mercado.cargando
+                ? 'Comprobando…'
+                : mercado.claves?.twelveData
+                  ? 'Llave activa en el servidor'
+                  : 'Sin llave — no hay gráfico de rendimiento'
             }
             status={Boolean(mercado.claves?.twelveData)}
           />
-          {mercado.claves?.alphaVantage && (
-            <Row
-              icon={<KeyRound size={17} />}
-              title="Alpha Vantage"
-              subtitle="Llave activa como último respaldo"
-              status
-            />
-          )}
           <Row
             icon={<LineChart size={17} />}
             title="Precios en vivo"
@@ -167,31 +171,31 @@ export default function SettingsPage() {
 
         {/* Sin llave, el paso siguiente. Con llave y sin precios, el motivo:
             son las dos únicas situaciones en las que hay algo que hacer. */}
-        {!mercado.cargando && !mercado.error && !mercado.claves?.twelveData && (
+        {!mercado.cargando && !mercado.error && !mercado.claves?.finnhub && (
           <Card className="mt-3 p-4">
-            <p className="mb-2 text-[13px] font-semibold text-label">Cómo activar Twelve Data</p>
+            <p className="mb-2 text-[13px] font-semibold text-label">Cómo activar Finnhub</p>
             <ol className="space-y-1.5 text-[13px] leading-relaxed text-label-secondary">
-              <li>1. Pide la llave gratuita en twelvedata.com</li>
+              <li>1. Pide la llave gratuita en finnhub.io</li>
               <li>
-                2. Guárdala como <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">TWELVE_DATA_API_KEY</code>
+                2. Guárdala como <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">FINNHUB_API_KEY</code>
                 {' '}en las variables de entorno
               </li>
               <li>3. Vuelve a desplegar: las variables solo entran en el despliegue siguiente</li>
             </ol>
             <p className="mt-2 text-[12px] leading-relaxed text-label-tertiary">
-              Mientras tanto los precios dependen de Yahoo y Stooq, que suelen
-              bloquear las peticiones hechas desde un servidor.
+              Es la que pone los precios de acciones y ETF. Su plan gratuito da
+              sesenta llamadas por minuto, de sobra para toda la cartera.
             </p>
           </Card>
         )}
 
-        {mercado.claves?.twelveData && !fuentesEnUso.length && !quotesLoading && quotesFallos.length > 0 && (
+        {mercado.claves?.finnhub && !fuentesEnUso.length && !quotesLoading && quotesFallos.length > 0 && (
           <Card className="mt-3 p-4">
             <p className="mb-1.5 text-[13px] font-semibold text-accent-orange">
               La llave está, pero no hay precios
             </p>
-            {/* Un solo símbolo: los motivos se repiten iguales en todos, y las
-                seis cadenas completas ocupaban media pantalla sin añadir nada. */}
+            {/* Un solo símbolo: los motivos se repiten iguales en todos, y
+                enumerarlos todos ocupaba media pantalla sin añadir nada. */}
             <p className="break-words text-[12px] leading-relaxed text-label-secondary">
               {quotesFallos[0]}
             </p>

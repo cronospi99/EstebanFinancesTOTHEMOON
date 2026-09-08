@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { esCancelacion, fetchConTimeout } from './net'
 
 export interface ClavesMercado {
+  /** Precios en vivo. Sin ella el portafolio se queda valorado al costo. */
+  finnhub: boolean
+  /** Histórico. Sin ella no hay gráfico de rendimiento, pero sí precios. */
   twelveData: boolean
-  alphaVantage: boolean
 }
 
 /**

@@ -23,7 +23,7 @@ arranca en **Modo Demo** con datos de ejemplo guardados en el navegador.
 
 | Capa            | Elección                        | Por qué |
 |-----------------|---------------------------------|---------|
-| Framework       | Next.js 15 (App Router)         | Los *route handlers* permiten el proxy de cotizaciones — Yahoo Finance no envía cabeceras CORS y la llave de Alpha Vantage no debe llegar al cliente |
+| Framework       | Next.js 15 (App Router)         | Los *route handlers* permiten el proxy de cotizaciones — los proveedores no envían cabeceras CORS y sus llaves no deben llegar al cliente |
 | Estilos         | Tailwind CSS 3                  | Tokens del sistema de color de iOS en `tailwind.config.ts` |
 | Animación       | Framer Motion                   | Curva `cubic-bezier(0.32, 0.72, 0, 1)` — la de iOS |
 | Iconos          | Lucide                          | Trazo consistente con SF Symbols |
@@ -64,17 +64,37 @@ sesión. En Modo Demo no hace nada, para que la app siga usable sin configurar.
 
 `GET /api/quotes?symbols=AAPL,VOO,BTC-USD,COP=X`
 
-- Fuente principal: **Yahoo Finance** (sin llave).
-- Respaldo opcional: **Alpha Vantage**, solo si defines `ALPHA_VANTAGE_API_KEY`.
-- Caché en memoria de 60 s.
-- Si un proveedor falla, devuelve el último precio conocido marcado como `stale`.
+Tres fuentes en cadena, elegidas por su cupo gratuito:
+
+| Fuente | Cubre | Cupo gratuito | Llave |
+|---|---|---|---|
+| **Coinbase** | pares cripto | sin límite práctico | no |
+| **Finnhub** | acciones y ETF | 60 llamadas/minuto | `FINNHUB_API_KEY` |
+| **Twelve Data** | respaldo | 8/minuto, 800/día | `TWELVE_DATA_API_KEY` |
+
+El cupo es el criterio, no un detalle. Una cartera de diez posiciones pide diez
+precios por refresco: con Finnhub eso es la sexta parte del minuto, y con
+Twelve Data por delante las dos últimas volvían siempre con `429` y el
+portafolio no se podía valorar entero ni una vez.
+
+Caché en memoria de 5 minutos. Si un proveedor falla, se devuelve el último
+precio conocido marcado como `stale`.
+
+### Las que se quitaron
+
+- **Yahoo Finance** — devuelve `429` a las IP de los centros de datos. Funciona
+  en local y nunca en el despliegue, que es la peor combinación posible.
+- **Stooq** — contesta `200` con una página HTML en vez del CSV.
+- **Alpha Vantage** — 25 llamadas al día. Con diez posiciones son dos refrescos
+  y medio.
+
+Las tres gastaban plazo en cada consulta y llenaban el aviso de la app de ruido
+que no se podía accionar.
 
 La interfaz **nunca inventa un rendimiento**: sin cotización real muestra
 «Valorado al costo · sin datos de mercado» y las posiciones aparecen a precio de
-compra, en gris, no como una ganancia del 0 %.
-
-> Nota: si tu red bloquea `query1.finance.yahoo.com`, verás ese estado. Es el
-> comportamiento esperado, no un fallo.
+compra, en gris, no como una ganancia del 0 %. Si falta un precio, *Ajustes →
+Datos de mercado* dice qué llaves ve el servidor y qué proveedor respondió.
 
 ---
 
@@ -163,8 +183,8 @@ en el plan gratuito.
    |---|---|
    | `NEXT_PUBLIC_SUPABASE_URL` | tu URL de Supabase |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | tu llave anónima |
-   | `TWELVE_DATA_API_KEY` | para que haya precios (ver abajo) |
-   | `ALPHA_VANTAGE_API_KEY` | opcional |
+   | `FINNHUB_API_KEY` | precios en vivo (ver abajo) |
+   | `TWELVE_DATA_API_KEY` | histórico del gráfico |
 
 4. Deploy. Obtienes una URL HTTPS que abre en cualquier lugar.
 
@@ -284,13 +304,19 @@ Lo que falta, en orden de lo que más duele.
 - [ ] **Variables de entorno en Vercel:** `NEXT_PUBLIC_SUPABASE_URL` y
       `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Sin ellas el despliegue queda en Modo
       Demo y **público**: cualquiera con el enlace entra.
-- [ ] **`TWELVE_DATA_API_KEY` para que haya precios.** Las fuentes sin llave no
-      funcionan desde un centro de datos: Yahoo responde `429` a las IP de
-      Vercel y Stooq devuelve una página HTML en vez del CSV. La llave gratuita
-      de [twelvedata.com](https://twelvedata.com) da 800 llamadas al día y
-      cubre precio e histórico. Sin ella la app funciona, pero el portafolio se
-      queda «valorado al costo». Tras añadirla hay que **volver a desplegar**;
-      *Ajustes → Datos de mercado* confirma si el servidor la ve.
+- [ ] **`FINNHUB_API_KEY` para que haya precios.** Ninguna fuente sin llave
+      funciona desde un centro de datos. La llave gratuita de
+      [finnhub.io](https://finnhub.io) da 60 llamadas por minuto y cubre
+      acciones y ETF estadounidenses. Sin ella la app funciona, pero el
+      portafolio se queda «valorado al costo».
+- [ ] **`TWELVE_DATA_API_KEY` para el gráfico de rendimiento.** Las velas
+      históricas de Finnhub son de pago, así que el histórico sale de
+      [twelvedata.com](https://twelvedata.com). Sus 8 llamadas por minuto
+      bastan porque las series se guardan seis horas. Sin ella hay precios pero
+      no gráfico.
+- [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
+      build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
+      pie de esa pantalla dice qué commit está sirviendo la app.
 
 ### Código
 
