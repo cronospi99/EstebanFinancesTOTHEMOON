@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, Database, DollarSign, KeyRound, LineChart, RefreshCw, ShieldCheck, User, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { useFinance } from '@/lib/store'
+import { BUILD_REF, BUILD_SHA, esBuildLocal, fechaBuild } from '@/lib/build-info'
 import { useMarketStatus } from '@/lib/use-market-status'
 import { useProfileName } from '@/lib/use-profile'
 import { formatKeypad, parseKeypad } from '@/lib/format'
@@ -269,10 +270,12 @@ export default function SettingsPage() {
         </button>
       )}
 
-      <p className="px-1 pb-2 text-center text-[12px] leading-relaxed text-label-tertiary">
+      <p className="px-1 text-center text-[12px] leading-relaxed text-label-tertiary">
         Los precios de mercado se consultan desde el servidor, probando varias
         fuentes en cadena. Ninguna llave de API se expone en el navegador.
       </p>
+
+      <VersionDesplegada />
     </div>
   )
 }
@@ -303,6 +306,30 @@ function Row({
         {status ? <Check size={14} strokeWidth={3} /> : <X size={14} strokeWidth={3} />}
       </div>
     </div>
+  )
+}
+
+/**
+ * Qué compilación estás viendo.
+ *
+ * Existe para cerrar la duda de «mezclé el cambio y la app sigue igual», que
+ * de otro modo solo se resuelve abriendo el panel de Vercel: si el commit no
+ * es el que acabas de mezclar, lo que falta es el despliegue, y si la rama no
+ * es la que esperas, la rama de producción del proyecto apunta a otro sitio.
+ */
+function VersionDesplegada() {
+  // La fecha se calcula tras montar: el servidor prerenderiza esta página y no
+  // comparte zona horaria con el teléfono, así que formatearla al pintar
+  // rompería la hidratación.
+  const [fecha, setFecha] = useState('')
+  useEffect(() => setFecha(fechaBuild()), [])
+
+  return (
+    <p className="px-1 pb-2 text-center text-[11px] text-label-tertiary">
+      {esBuildLocal ? 'Compilación local' : `Versión ${BUILD_SHA}`}
+      {BUILD_REF && ` · ${BUILD_REF}`}
+      {fecha && ` · ${fecha}`}
+    </p>
   )
 }
 
