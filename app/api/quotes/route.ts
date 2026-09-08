@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { fetchConPlazo } from '@/lib/fetch-plazo'
+import { motivoTwelveData, simboloTwelveData, twelveDataKey } from '@/lib/twelve-data'
 import type { Quote } from '@/lib/types'
 
 /**
@@ -24,6 +26,16 @@ export const revalidate = 0
 // Cinco minutos, no uno. Los proveedores gratuitos racionan por día, y un
 // portafolio personal no cambia de decisión por 60 segundos de precio.
 const CACHE_TTL_MS = 5 * 60_000
+
+/**
+ * Plazo por fuente. `fetch` no tiene límite propio: una fuente que acepta la
+ * conexión y no contesta se lleva por delante a las que vienen detrás, y el
+ * cliente corta a los doce segundos sin haber llegado a la que sí funcionaba.
+ *
+ * Tres segundos y medio salen de ahí: las tres fuentes que de verdad viajan
+ * por red en el peor caso caben en el plazo del cliente con margen.
+ */
+const PLAZO_MS = 3_500
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36'
 
 // Caché en memoria: evita golpear a los proveedores en cada render y respeta
@@ -70,7 +82,7 @@ const esError = (r: Resultado): r is { error: string } => 'error' in r
 /** Yahoo, en sus dos hosts: query2 a veces contesta cuando query1 rechaza. */
 async function yahoo(symbol: string, host: 'query1' | 'query2'): Promise<Resultado> {
   const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' })
+  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' }, PLAZO_MS)
   if (!res.ok) return { error: `HTTP ${res.status}` }
 
   const meta = (await res.json())?.chart?.result?.[0]?.meta
@@ -93,7 +105,7 @@ async function stooq(symbol: string): Promise<Resultado> {
   const s = `${symbol.toLowerCase()}.us`
   const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(s)}&i=d&d1=${dia(desde)}&d2=${dia(hoy)}`
 
-  const res = await fetch(url, { headers: { 'User-Agent': UA }, cache: 'no-store' })
+  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA }, cache: 'no-store' }, PLAZO_MS)
   if (!res.ok) return { error: `HTTP ${res.status}` }
 
   // Date,Open,High,Low,Close,Volume — una fila por sesión, la última al final.
@@ -117,7 +129,7 @@ async function coinbase(symbol: string): Promise<Resultado> {
   const par = symbol.toUpperCase().replace(/-USDT$/, '-USD')
   const spot = async (fecha?: string) => {
     const url = `https://api.coinbase.com/v2/prices/${encodeURIComponent(par)}/spot${fecha ? `?date=${fecha}` : ''}`
-    const r = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+    const r = await fetchConPlazo(url, { headers: { Accept: 'application/json' }, cache: 'no-store' }, PLAZO_MS)
     if (!r.ok) return null
     const v = Number((await r.json())?.data?.amount)
     return v > 0 ? v : null
@@ -143,17 +155,17 @@ async function coinbase(symbol: string): Promise<Resultado> {
  * TWELVE_DATA_API_KEY. Sin ella no se intenta.
  */
 async function twelveData(symbol: string): Promise<Resultado> {
-  const key = process.env.TWELVE_DATA_API_KEY
+  const key = twelveDataKey()
   if (!key) return { error: 'sin TWELVE_DATA_API_KEY' }
 
-  // Su convención para cripto es BTC/USD, no BTC-USD.
-  const s = esCripto(symbol) ? symbol.toUpperCase().replace('-', '/') : symbol.toUpperCase()
+  const s = simboloTwelveData(symbol, esCripto(symbol))
   const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(s)}&apikey=${key}`
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return { error: `HTTP ${res.status}` }
+  const res = await fetchConPlazo(url, { cache: 'no-store' }, PLAZO_MS)
 
-  const q = await res.json()
-  if (q?.status === 'error') return { error: String(q.message ?? 'error').slice(0, 70) }
+  const q = await res.json().catch(() => null)
+  const fallo = motivoTwelveData(res.status, q)
+  if (fallo) return { error: fallo }
+
   const price = Number(q?.close)
   if (!price) return { error: 'respuesta sin precio' }
   return arma(symbol, price, Number(q?.previous_close ?? price), 'twelve-data', q?.currency ?? 'USD')
@@ -161,11 +173,11 @@ async function twelveData(symbol: string): Promise<Resultado> {
 
 /** Respaldo opcional. Solo se intenta si hay llave configurada. */
 async function alphaVantage(symbol: string): Promise<Resultado> {
-  const key = process.env.ALPHA_VANTAGE_API_KEY
+  const key = process.env.ALPHA_VANTAGE_API_KEY?.trim()
   if (!key) return { error: 'sin ALPHA_VANTAGE_API_KEY' }
 
   const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${key}`
-  const res = await fetch(url, { cache: 'no-store' })
+  const res = await fetchConPlazo(url, { cache: 'no-store' }, PLAZO_MS)
   if (!res.ok) return { error: `HTTP ${res.status}` }
 
   const q = (await res.json())?.['Global Quote']
@@ -174,21 +186,45 @@ async function alphaVantage(symbol: string): Promise<Resultado> {
   return arma(symbol, price, Number(q?.['08. previous close'] ?? price), 'alpha-vantage')
 }
 
-const FUENTES: [string, (s: string) => Promise<Resultado>][] = [
-  ['yahoo:query1', (s) => yahoo(s, 'query1')],
-  ['yahoo:query2', (s) => yahoo(s, 'query2')],
-  ['coinbase', coinbase],
-  ['stooq', stooq],
-  ['twelve-data', twelveData],
-  ['alpha-vantage', alphaVantage],
-]
+type Fuente = [string, (s: string) => Promise<Resultado>]
+
+/**
+ * Orden de consulta, decidido en cada petición porque depende de la llave.
+ *
+ * Con TWELVE_DATA_API_KEY configurada, Twelve Data va delante de las fuentes
+ * abiertas en vez de al final. Quien pone la llave lo hace justo porque las
+ * abiertas no le responden: dejándolas primero, cada símbolo arrastraba tres
+ * intentos condenados a fallar antes de llegar a la única que iba a
+ * contestar — tiempo suficiente para que el cliente cortara por plazo. El
+ * síntoma era exactamente ese: configurar la llave y no ver ningún cambio.
+ *
+ * Coinbase se queda en cabeza pase lo que pase: para cripto es gratis, no
+ * gasta cupo y descarta al instante lo que no es un par cripto.
+ */
+function fuentes(): Fuente[] {
+  const abiertas: Fuente[] = [
+    ['coinbase', coinbase],
+    ['yahoo:query1', (s) => yahoo(s, 'query1')],
+    ['yahoo:query2', (s) => yahoo(s, 'query2')],
+    ['stooq', stooq],
+  ]
+  // Alpha Vantage no se adelanta nunca: su plan gratuito da 25 llamadas al
+  // día, así que solo tiene sentido como último recurso.
+  const respaldo: Fuente[] = [['alpha-vantage', alphaVantage]]
+  const td: Fuente = ['twelve-data', twelveData]
+
+  const [cripto, ...resto] = abiertas
+  return twelveDataKey()
+    ? [cripto, td, ...resto, ...respaldo]
+    : [...abiertas, td, ...respaldo]
+}
 
 async function getQuote(symbol: string, fallos: string[]): Promise<Quote> {
   const hit = cache.get(symbol)
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.quote
 
   const motivos: string[] = []
-  for (const [nombre, fn] of FUENTES) {
+  for (const [nombre, fn] of fuentes()) {
     try {
       const r = await fn(symbol)
       if (!esError(r)) {

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { fetchConPlazo } from '@/lib/fetch-plazo'
+import { motivoTwelveData, simboloTwelveData, twelveDataKey } from '@/lib/twelve-data'
 
 /**
  * Series históricas de cierre, para dibujar el rendimiento del portafolio.
@@ -15,6 +17,13 @@ export const runtime = 'nodejs'
 export const revalidate = 0
 
 const TTL_MS = 6 * 60 * 60_000
+
+/**
+ * Plazo por fuente. Más holgado que en /api/quotes porque aquí viaja una serie
+ * entera y no un número, pero acotado: sin él, una fuente que acepta la
+ * conexión y no contesta se lleva por delante a las que vienen detrás.
+ */
+const PLAZO_MS = 6_000
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36'
 
 export interface Punto { d: string; c: number }
@@ -38,7 +47,7 @@ const esError = (r: Resultado): r is { error: string } => !Array.isArray(r)
 async function yahoo(symbol: string, days: number, host: 'query1' | 'query2'): Promise<Resultado> {
   const range = days <= 7 ? '1mo' : days <= 35 ? '3mo' : days <= 100 ? '6mo' : days <= 400 ? '2y' : '10y'
   const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' })
+  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' }, PLAZO_MS)
   if (!res.ok) return { error: `HTTP ${res.status}` }
 
   const r = (await res.json())?.chart?.result?.[0]
@@ -64,7 +73,7 @@ async function stooq(symbol: string, days: number): Promise<Resultado> {
   const desde = hoy - (days + 20) * 86_400_000
   const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol.toLowerCase())}.us&i=d&d1=${fmt(desde)}&d2=${fmt(hoy)}`
 
-  const res = await fetch(url, { headers: { 'User-Agent': UA }, cache: 'no-store' })
+  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA }, cache: 'no-store' }, PLAZO_MS)
   if (!res.ok) return { error: `HTTP ${res.status}` }
 
   const cuerpo = (await res.text()).trim()
@@ -90,7 +99,7 @@ async function coinbase(symbol: string, days: number): Promise<Resultado> {
   const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(par)}/candles`
     + `?granularity=86400&start=${desde}&end=${new Date().toISOString()}`
 
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' })
+  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' }, PLAZO_MS)
   if (!res.ok) return { error: `HTTP ${res.status}` }
 
   // [time, low, high, open, close, volume], de más reciente a más antigua.
@@ -110,19 +119,19 @@ async function coinbase(symbol: string, days: number): Promise<Resultado> {
  * La misma llave cubre precio e histórico. Variable: TWELVE_DATA_API_KEY.
  */
 async function twelveData(symbol: string, days: number): Promise<Resultado> {
-  const key = process.env.TWELVE_DATA_API_KEY
+  const key = twelveDataKey()
   if (!key) return { error: 'sin TWELVE_DATA_API_KEY' }
 
-  const s = esCripto(symbol) ? symbol.toUpperCase().replace('-', '/') : symbol.toUpperCase()
+  const s = simboloTwelveData(symbol, esCripto(symbol))
   // Su tope por llamada es 5.000 velas; de sobra para cinco años diarios.
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(s)}`
     + `&interval=1day&outputsize=${Math.min(days + 20, 5000)}&order=ASC&apikey=${key}`
 
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return { error: `HTTP ${res.status}` }
+  const res = await fetchConPlazo(url, { cache: 'no-store' }, PLAZO_MS)
 
-  const j = await res.json()
-  if (j?.status === 'error') return { error: String(j.message ?? 'error').slice(0, 70) }
+  const j = await res.json().catch(() => null)
+  const fallo = motivoTwelveData(res.status, j)
+  if (fallo) return { error: fallo }
 
   const valores: { datetime: string; close: string }[] = j?.values ?? []
   const serie = valores
@@ -131,13 +140,20 @@ async function twelveData(symbol: string, days: number): Promise<Resultado> {
   return serie.length ? serie : { error: 'serie vacía' }
 }
 
-const FUENTES: [string, (s: string, d: number) => Promise<Resultado>][] = [
-  ['yahoo:query1', (s, d) => yahoo(s, d, 'query1')],
-  ['yahoo:query2', (s, d) => yahoo(s, d, 'query2')],
-  ['coinbase', coinbase],
-  ['stooq', stooq],
-  ['twelve-data', twelveData],
-]
+type Fuente = [string, (s: string, d: number) => Promise<Resultado>]
+
+/** Mismo criterio que en /api/quotes: con llave, Twelve Data delante. */
+function fuentes(): Fuente[] {
+  const abiertas: Fuente[] = [
+    ['coinbase', coinbase],
+    ['yahoo:query1', (s, d) => yahoo(s, d, 'query1')],
+    ['yahoo:query2', (s, d) => yahoo(s, d, 'query2')],
+    ['stooq', stooq],
+  ]
+  const [cripto, ...resto] = abiertas
+  const td: Fuente = ['twelve-data', twelveData]
+  return twelveDataKey() ? [cripto, td, ...resto] : [...abiertas, td]
+}
 
 async function getSerie(symbol: string, days: number, fallos: string[]): Promise<Punto[]> {
   const clave = `${symbol}|${days}`
@@ -145,7 +161,7 @@ async function getSerie(symbol: string, days: number, fallos: string[]): Promise
   if (hit && Date.now() - hit.at < TTL_MS) return hit.serie
 
   const motivos: string[] = []
-  for (const [nombre, fn] of FUENTES) {
+  for (const [nombre, fn] of fuentes()) {
     try {
       const r = await fn(symbol, days)
       if (!esError(r)) {
