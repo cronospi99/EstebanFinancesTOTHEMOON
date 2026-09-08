@@ -32,7 +32,10 @@ export function AccountsStrip() {
   return (
     <section>
       <CardHeader title="Cuentas" />
-      <div className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-2 no-scrollbar">
+      {/* El sangrado negativo lleva la tira hasta los bordes de la pantalla en
+          móvil. En escritorio la tarjeta vive dentro de una columna, y ese
+          mismo sangrado la metía por debajo de la columna vecina. */}
+      <div className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-2 no-scrollbar lg:mx-0 lg:px-0">
         {accounts.map((acc, i) => (
           <motion.button
             key={acc.id}

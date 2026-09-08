@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
+import { IssuerBadge } from '@/components/ui/issuer-badge'
 import { formatMoney, formatPercent, formatQuantity } from '@/lib/format'
 import type { Currency, Holding, Quote } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -78,9 +79,7 @@ export function HoldingRow({
         onClick={() => { if (!arrastrando.current) onEdit?.() }}
         className="press-soft relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3.5 text-left active:bg-white/[0.03]"
       >
-        <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[11px] font-bold tracking-tight text-label">
-          {holding.symbol.replace('-USD', '').slice(0, 5)}
-        </div>
+        <IssuerBadge symbol={holding.symbol} />
 
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-medium text-label">{holding.name}</div>

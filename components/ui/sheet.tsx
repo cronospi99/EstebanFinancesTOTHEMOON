@@ -101,8 +101,17 @@ export function Sheet({
         dragElastic={{ top: 0, bottom: 0.55 }}
         onDragEnd={handleDragEnd}
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col',
-          'rounded-t-sheet border-t border-hairline',
+          'fixed z-50 flex flex-col',
+          'inset-x-0 bottom-0 max-h-[92dvh] rounded-t-sheet border-t border-hairline',
+          /*
+           * En escritorio deja de ser una hoja pegada abajo y pasa a ser un
+           * diálogo centrado. El centrado se hace con `inset-0 + m-auto` y no
+           * con `-translate-x/y-1/2` a propósito: framer-motion escribe un
+           * `transform` en línea para animar la entrada, y las clases de
+           * traslación se perderían — el panel saltaría a una esquina.
+           */
+          'lg:inset-0 lg:m-auto lg:h-fit lg:max-h-[86vh] lg:w-[min(560px,92vw)]',
+          'lg:rounded-3xl lg:border',
           'bg-[#141416]/85 backdrop-blur-sheet shadow-sheet',
           !open && 'pointer-events-none',
           className,
@@ -112,7 +121,7 @@ export function Sheet({
             interprete el gesto como scroll antes de que llegue a Framer. */}
         <div
           onPointerDown={(e) => dragControls.start(e)}
-          className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing"
+          className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing lg:hidden"
         >
           <div className="h-[5px] w-9 rounded-full bg-white/25" />
         </div>
@@ -121,7 +130,7 @@ export function Sheet({
             scroll-pb deja aire para alcanzar el último campo. */}
         <div
           ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe [scrollbar-width:none]"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe [scrollbar-width:none] lg:pt-5"
         >
           {children}
         </div>

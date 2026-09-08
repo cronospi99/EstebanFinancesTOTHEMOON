@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { ArrowDownLeft, ArrowUpRight, Flag } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { IssuerBadge } from '@/components/ui/issuer-badge'
 import { EditTradeSheet } from './edit-trade-sheet'
 import { formatMoney, formatQuantity } from '@/lib/format'
 import { useFinance, useOperacionesPorSimbolo } from '@/lib/store'
@@ -44,13 +45,16 @@ export function TradeHistory() {
     <div className="space-y-6">
       {grupos.map((g) => (
         <section key={g.symbol}>
-          <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
-            <div className="min-w-0">
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <IssuerBadge symbol={g.symbol} size="sm" />
+              <div className="min-w-0">
               <h2 className="text-[15px] font-semibold text-label">{g.symbol}</h2>
               {/* Sin nombre propio, repetir el símbolo debajo solo hace ruido. */}
               {g.nombre !== g.symbol && (
                 <p className="truncate text-[12px] text-label-tertiary">{g.nombre}</p>
               )}
+              </div>
             </div>
             <div className="shrink-0 text-right">
               <p className="tnum text-[13px] font-semibold text-label">
