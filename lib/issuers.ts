@@ -160,6 +160,7 @@ AVDV|Avantis International Small Cap Value ETF
 AVUS|Avantis U.S. Equity ETF
 AVEM|Avantis Emerging Markets Equity ETF
 AVLV|Avantis U.S. Large Cap Value ETF
+EMXC|iShares MSCI Emerging Markets ex China ETF
 QQQ|Invesco QQQ Trust
 QQQM|Invesco NASDAQ 100 ETF
 RSP|Invesco S&P 500 Equal Weight ETF
@@ -186,6 +187,8 @@ DIS|The Walt Disney Company
 NFLX|Netflix Inc.
 AMD|Advanced Micro Devices Inc.
 INTC|Intel Corporation
+SNDK|SanDisk Corporation
+TTWO|Take-Two Interactive Software Inc.
 BTC-USD|Bitcoin
 ETH-USD|Ethereum
 SOL-USD|Solana
