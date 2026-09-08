@@ -6,6 +6,7 @@ import { History, Loader2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { IssuerBadge } from '@/components/ui/issuer-badge'
 import { investmentPlatforms } from '@/lib/categories'
 import { nombreDe } from '@/lib/issuers'
 import { formatKeypad, formatMoney, formatQuantity, parseKeypad } from '@/lib/format'
@@ -106,6 +107,15 @@ export function AddHoldingSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing])
 
+  /** Lo que ya se tiene, para elegirlo sin teclear. Lo más grande primero. */
+  const enCartera = useMemo(
+    () => holdings
+      .filter((h) => h.quantity > 0)
+      .slice()
+      .sort((a, b) => b.quantity * b.avgCost - a.quantity * a.avgCost),
+    [holdings],
+  )
+
   /** Posición ya existente con el mismo símbolo: una compra se suma a ella. */
   const existente = useMemo(
     () => (editing ? null : holdings.find((h) => h.symbol === symbol.trim().toUpperCase())),
@@ -162,14 +172,25 @@ export function AddHoldingSheet({
   const cantidad = modo === 'cantidad' ? parseKeypad(qty) : (precioNum > 0 ? montoNum / precioNum : 0)
 
   /*
-   * Al reconocer una posición que ya existe se propone su plataforma: lo
-   * normal es seguir comprando donde ya se tiene. Si el usuario elige otra,
-   * manda la suya — esto solo vuelve a correr al cambiar de símbolo.
+   * Al reconocer una posición que ya existe se heredan sus datos: la
+   * plataforma —lo normal es seguir comprando donde ya se tiene—, el tipo de
+   * activo y la moneda.
+   *
+   * Los dos últimos no son cosmética. Cuando el símbolo ya existe, la hoja
+   * oculta esos campos por redundantes, pero su estado se quedaba en los
+   * valores por defecto (ETF, dólares). Como la posición toma tipo y moneda de
+   * su última operación, sumar a una posición en pesos la convertía en una
+   * posición en dólares sin que nadie lo pidiera.
+   *
+   * Si el usuario cambia algo después, manda lo suyo: esto solo vuelve a
+   * correr al cambiar de símbolo.
    */
   useEffect(() => {
     if (editing || !existente) return
     const inst = accounts.find((a) => a.id === existente.accountId)?.institution
     if (inst) setPlataforma(inst)
+    setAssetType(existente.assetType)
+    setCurrency(existente.currency)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existente?.id])
 
@@ -275,6 +296,40 @@ export function AddHoldingSheet({
             value={operacion} onChange={setOperacion}
             options={[{ value: 'compra' as const, label: 'Compra' }, { value: 'venta' as const, label: 'Venta' }]}
           />
+        )}
+
+        {/*
+          Los símbolos que ya están en cartera, para tocarlos en vez de
+          teclearlos. Casi toda operación es sobre algo que ya se tiene, y
+          escribir «BTC-USD» con el teclado del móvil, en mayúsculas y con el
+          guion en su sitio, es donde se cuela el error que luego crea una
+          posición duplicada. Los que no están se siguen escribiendo.
+        */}
+        {!editing && enCartera.length > 0 && (
+          <>
+            <Label>En tu portafolio</Label>
+            <div className="-mx-5 mb-4 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+              {enCartera.map((h) => {
+                const activo = h.symbol === symbol.trim().toUpperCase()
+                return (
+                  <button
+                    key={h.symbol}
+                    onClick={() => { haptic(6); setSymbol(h.symbol) }}
+                    className={cn(
+                      'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 transition-colors',
+                      activo ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
+                    )}
+                  >
+                    <IssuerBadge symbol={h.symbol} size="xs" />
+                    <span className={cn('text-[13px] font-semibold', activo ? 'text-label' : 'text-label-secondary')}>
+                      {h.symbol}
+                    </span>
+                    <span className="tnum text-[11px] text-label-tertiary">{formatQuantity(h.quantity)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </>
         )}
 
         <Label>Símbolo</Label>
