@@ -190,6 +190,33 @@ Arranca en pantalla completa, con icono propio y sin barra del navegador.
 
 ---
 
+## Escritorio y móvil
+
+La misma app en los dos sitios, decidido con CSS y no leyendo el user-agent:
+a partir de 1024 px de ancho aparece una **barra lateral** con la navegación y
+el botón de registrar, el contenido se centra en una columna más ancha, el
+resumen pasa a dos columnas y las hojas dejan de estar pegadas abajo para salir
+como diálogos centrados. Por debajo de ese ancho, la app de siempre: barra
+inferior, botón flotante y hojas desde el borde.
+
+Decidirlo por ancho y no por dispositivo tiene dos ventajas concretas: no hay
+parpadeo al hidratar —el servidor no tiene que adivinar qué pantalla hay al
+otro lado— y una ventana estrecha en un portátil recibe la interfaz de móvil,
+que es la que cabe.
+
+---
+
+## Iconos de las gestoras
+
+Las posiciones muestran el logotipo de la gestora del fondo (Vanguard, iShares,
+State Street, Schwab, J.P. Morgan, VanEck, Avantis) en vez de una caja gris con
+el ticker. El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y es explícito, sin
+reglas por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una
+gestora a AVGO, que es Broadcom. Lo que no está en el mapa —acciones sueltas,
+cripto— sigue mostrando su ticker, que ahí es justo la información útil.
+
+---
+
 ## Historial de inversiones
 
 Cada compra y cada venta se guardan como una **operación**, y la posición

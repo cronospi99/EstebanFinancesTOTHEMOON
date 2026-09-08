@@ -35,17 +35,41 @@ export default function DashboardPage() {
 
       <DemoBanner />
 
-      {[
-        <NetWorthCard key="nw" />,
-        <AccountsStrip key="acc" />,
-        <WealthDistribution key="dist" />,
-        <BudgetRings key="bud" />,
-        <RecentTransactions key="tx" />,
-      ].map((child, i) => (
-        <motion.div key={i} custom={i} variants={stagger} initial="hidden" animate="show">
-          {child}
-        </motion.div>
-      ))}
+      {/*
+        En escritorio el resumen pasa a dos columnas. Apiladas en una ventana
+        ancha, estas tarjetas obligaban a bajar por una tira estrecha con medio
+        monitor en negro; el patrimonio y las cuentas mandan, y ocupan la
+        columna ancha.
+
+        Las columnas van con `minmax(0, …)` y no con `1.35fr` a secas: un `fr`
+        pelado no baja del tamaño mínimo de su contenido, así que la tira de
+        cuentas —que se desplaza en horizontal— estiraba su columna hasta
+        1.220 px dentro de un contenedor de 936 y el resumen se salía de la
+        pantalla por la derecha.
+      */}
+      <div className="space-y-6 lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
+        <div className="space-y-6">
+          {[
+            <NetWorthCard key="nw" />,
+            <AccountsStrip key="acc" />,
+            <RecentTransactions key="tx" />,
+          ].map((child, i) => (
+            <motion.div key={i} custom={i} variants={stagger} initial="hidden" animate="show">
+              {child}
+            </motion.div>
+          ))}
+        </div>
+        <div className="space-y-6">
+          {[
+            <WealthDistribution key="dist" />,
+            <BudgetRings key="bud" />,
+          ].map((child, i) => (
+            <motion.div key={i} custom={i + 1} variants={stagger} initial="hidden" animate="show">
+              {child}
+            </motion.div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
