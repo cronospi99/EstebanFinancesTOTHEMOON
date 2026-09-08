@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { IssuerBadge } from '@/components/ui/issuer-badge'
-import { nombreVisible } from '@/lib/issuers'
+import { issuerOf, nombreVisible } from '@/lib/issuers'
 import { formatMoney, formatPercent, formatQuantity } from '@/lib/format'
 import type { Currency, Holding, Quote } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -32,6 +32,26 @@ export function HoldingRow({
    * eventos, cuando el click ya pasó.
    */
   const arrastrando = useRef(false)
+
+  /*
+   * El ticker, delante del nombre.
+   *
+   * La fila enseñaba solo «VanEck Semiconductor ETF», y el ticker —que es con
+   * lo que se busca, se compara y se opera— no salía por ningún lado: había
+   * que deducirlo del logotipo. Va como código y no como texto corrido para
+   * que se distinga de un vistazo del nombre comercial.
+   *
+   * Solo cuando la insignia es un logotipo. Sin gestora conocida, la insignia
+   * ya es el propio ticker en una caja, así que la etiqueta lo repetiría dos
+   * centímetros más a la derecha: «AAPL  AAPL  Apple Inc.».
+   *
+   * Y si tampoco se conoce el nombre, `nombreVisible` devuelve el ticker; ahí
+   * la etiqueta se queda sola, sin repetirlo detrás.
+   */
+  const ticker = holding.symbol.trim().toUpperCase()
+  const nombre = nombreVisible(holding.symbol, holding.name)
+  const hayNombre = nombre.trim().toUpperCase() !== ticker
+  const enEtiqueta = Boolean(issuerOf(holding.symbol))
 
   // Solo un precio real y fresco cuenta como "en vivo": sin esto mostraríamos
   // un 0,00 % en verde que se lee como sesión plana cuando no hay ni un dato.
@@ -83,8 +103,17 @@ export function HoldingRow({
         <IssuerBadge symbol={holding.symbol} />
 
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium text-label">
-            {nombreVisible(holding.symbol, holding.name)}
+          <div className="flex min-w-0 items-center gap-1.5">
+            {enEtiqueta && (
+              <span className="shrink-0 rounded bg-white/[0.08] px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.02em] text-label-secondary">
+                {ticker}
+              </span>
+            )}
+            {(hayNombre || !enEtiqueta) && (
+              <span className="truncate text-[15px] font-medium text-label">
+                {hayNombre ? nombre : ticker}
+              </span>
+            )}
           </div>
           <div className="tnum truncate text-[12px] text-label-tertiary">
             {formatQuantity(holding.quantity)} · {TYPE_BADGE[holding.assetType]}
