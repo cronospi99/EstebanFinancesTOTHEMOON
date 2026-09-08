@@ -210,10 +210,31 @@ que es la que cabe.
 
 Las posiciones muestran el logotipo de la gestora del fondo (Vanguard, iShares,
 State Street, Schwab, J.P. Morgan, VanEck, Avantis) en vez de una caja gris con
-el ticker. El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y es explícito, sin
-reglas por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una
+el ticker. El mismo archivo lleva los **nombres oficiales** de los instrumentos habituales
+(VOO → «Vanguard S&P 500 ETF»), que se resuelven sin red: la búsqueda de nombres
+depende de una API que puede estar caída, y entonces la posición se quedaba
+llamándose como su ticker. El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y
+es explícito, sin reglas por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una
 gestora a AVGO, que es Broadcom. Lo que no está en el mapa —acciones sueltas,
 cripto— sigue mostrando su ticker, que ahí es justo la información útil.
+
+---
+
+## Rendimiento histórico
+
+La pestaña de Inversiones lleva una tarjeta con el valor del portafolio a lo
+largo del tiempo y los mismos rangos que el patrimonio: 1D, 5D, 1S, 1M, 3M, 6M,
+1A y 5A.
+
+La serie se reconstruye hacia atrás desde lo único que se sabe con certeza —las
+posiciones de hoy— deshaciendo las operaciones del libro, y cada cantidad se
+multiplica por el cierre de mercado de ese día (`/api/history`). El porcentaje
+**descuenta las aportaciones del período**: sin eso, meter dinero se leería como
+haber ganado, que es la forma más fácil de engañarse con una cartera.
+
+Dos aproximaciones, dichas para que no se lean como exactitud: la tasa de
+cambio es la de hoy en toda la serie (no se guarda el histórico de la divisa), y
+un símbolo sin cierres se valora a su coste promedio y se avisa en pantalla.
 
 ---
 

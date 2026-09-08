@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
 import { institutionByName } from './categories'
+import { nombreVisible } from './issuers'
 import { monthKey, monthlyFromApy } from './format'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
@@ -980,7 +981,7 @@ export function useOperacionesPorSimbolo() {
         const operaciones = [...ops].sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt))
         return {
           symbol,
-          nombre: holdings.find((h) => h.symbol === symbol)?.name || operaciones[0].name || symbol,
+          nombre: nombreVisible(symbol, holdings.find((h) => h.symbol === symbol)?.name || operaciones[0].name),
           operaciones,
           ...posicionDesdeOperaciones(ops),
         }
