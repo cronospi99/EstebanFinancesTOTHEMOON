@@ -9,6 +9,17 @@ import { motivoTwelveData, simboloTwelveData, twelveDataKey } from '@/lib/twelve
  * aquí, no cuánto vale ahora— y porque se pide mucho menos a menudo: los
  * cierres de días pasados no cambian, así que se guardan seis horas.
  *
+ * Dos fuentes, no cinco. Yahoo (sus dos hosts) devuelve 429 a las IP de los
+ * centros de datos y Stooq contesta 200 con una página HTML en vez del CSV:
+ * ninguna de las tres sirve desde el despliegue, y cada una gastaba plazo y
+ * llenaba el aviso de la app de ruido inaccionable.
+ *
+ * Queda Coinbase para cripto y Twelve Data para lo demás. El histórico se
+ * queda en Twelve Data —y no pasa a Finnhub con los precios en vivo— porque
+ * las velas de Finnhub son de pago. Aquí su cupo de ocho llamadas por minuto
+ * no estorba: al guardarse seis horas, una cartera de diez posiciones gasta
+ * unos cuarenta créditos al día sobre los ochocientos del plan.
+ *
  * GET /api/history?symbols=VOO,SCHD&days=365
  * → { series: { VOO: [{ d: '2026-01-02', c: 512.3 }, …] }, fallos: [...] }
  */
@@ -33,61 +44,8 @@ const cache = new Map<string, { serie: Punto[]; at: number }>()
 const esCripto = (s: string) => /-(USD|USDT)$/i.test(s)
 const dia = (t: number) => new Date(t).toISOString().slice(0, 10)
 
-/** Resume un cuerpo inesperado: el HTML crudo llenaba el aviso sin decir nada. */
-function resumirCuerpo(cuerpo: string): string {
-  const t = cuerpo.trim()
-  if (/^<(!doctype|html|\?xml)/i.test(t)) return 'devolvió una página HTML (bloqueado o redirigido)'
-  return t.slice(0, 70) || 'respuesta vacía'
-}
-
 type Resultado = Punto[] | { error: string }
 const esError = (r: Resultado): r is { error: string } => !Array.isArray(r)
-
-/** Yahoo devuelve toda la serie en una sola llamada; es la fuente ideal. */
-async function yahoo(symbol: string, days: number, host: 'query1' | 'query2'): Promise<Resultado> {
-  const range = days <= 7 ? '1mo' : days <= 35 ? '3mo' : days <= 100 ? '6mo' : days <= 400 ? '2y' : '10y'
-  const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`
-  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' }, PLAZO_MS)
-  if (!res.ok) return { error: `HTTP ${res.status}` }
-
-  const r = (await res.json())?.chart?.result?.[0]
-  const ts: number[] = r?.timestamp ?? []
-  const cierres: (number | null)[] = r?.indicators?.quote?.[0]?.close ?? []
-  if (!ts.length) return { error: 'respuesta sin serie' }
-
-  const serie: Punto[] = []
-  for (let i = 0; i < ts.length; i++) {
-    const c = cierres[i]
-    if (typeof c === 'number' && c > 0) serie.push({ d: dia(ts[i] * 1000), c })
-  }
-  return serie.length ? serie : { error: 'serie vacía' }
-}
-
-/** Stooq: CSV diario, sin llave. Acciones y ETF estadounidenses. */
-async function stooq(symbol: string, days: number): Promise<Resultado> {
-  if (esCripto(symbol)) return { error: 'no aplica a cripto' }
-
-  const fmt = (t: number) => dia(t).replace(/-/g, '')
-  const hoy = Date.now()
-  // Un margen generoso: los fines de semana y festivos no cotizan.
-  const desde = hoy - (days + 20) * 86_400_000
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol.toLowerCase())}.us&i=d&d1=${fmt(desde)}&d2=${fmt(hoy)}`
-
-  const res = await fetchConPlazo(url, { headers: { 'User-Agent': UA }, cache: 'no-store' }, PLAZO_MS)
-  if (!res.ok) return { error: `HTTP ${res.status}` }
-
-  const cuerpo = (await res.text()).trim()
-  const filas = cuerpo.split('\n').slice(1).filter(Boolean)
-  if (!filas.length) return { error: resumirCuerpo(cuerpo) }
-
-  const serie: Punto[] = []
-  for (const fila of filas) {
-    const p = fila.split(',')
-    const c = Number(p[4])
-    if (p[0] && c > 0) serie.push({ d: p[0], c })
-  }
-  return serie.length ? serie : { error: resumirCuerpo(cuerpo) }
-}
 
 /** Velas diarias públicas de Coinbase para los pares cripto. */
 async function coinbase(symbol: string, days: number): Promise<Resultado> {
@@ -113,11 +71,7 @@ async function coinbase(symbol: string, days: number): Promise<Resultado> {
   return serie.length ? serie : { error: 'velas sin cierre' }
 }
 
-/**
- * Twelve Data, con llave. Es la salida cuando ninguna fuente abierta sirve:
- * Yahoo responde 429 a las IP de Vercel y Stooq devuelve HTML en vez de CSV.
- * La misma llave cubre precio e histórico. Variable: TWELVE_DATA_API_KEY.
- */
+/** Twelve Data: series diarias de acciones y ETF. Variable TWELVE_DATA_API_KEY. */
 async function twelveData(symbol: string, days: number): Promise<Resultado> {
   const key = twelveDataKey()
   if (!key) return { error: 'sin TWELVE_DATA_API_KEY' }
@@ -140,20 +94,10 @@ async function twelveData(symbol: string, days: number): Promise<Resultado> {
   return serie.length ? serie : { error: 'serie vacía' }
 }
 
-type Fuente = [string, (s: string, d: number) => Promise<Resultado>]
-
-/** Mismo criterio que en /api/quotes: con llave, Twelve Data delante. */
-function fuentes(): Fuente[] {
-  const abiertas: Fuente[] = [
-    ['coinbase', coinbase],
-    ['yahoo:query1', (s, d) => yahoo(s, d, 'query1')],
-    ['yahoo:query2', (s, d) => yahoo(s, d, 'query2')],
-    ['stooq', stooq],
-  ]
-  const [cripto, ...resto] = abiertas
-  const td: Fuente = ['twelve-data', twelveData]
-  return twelveDataKey() ? [cripto, td, ...resto] : [...abiertas, td]
-}
+const FUENTES: [string, (s: string, d: number) => Promise<Resultado>][] = [
+  ['coinbase', coinbase],
+  ['twelve-data', twelveData],
+]
 
 async function getSerie(symbol: string, days: number, fallos: string[]): Promise<Punto[]> {
   const clave = `${symbol}|${days}`
@@ -161,7 +105,7 @@ async function getSerie(symbol: string, days: number, fallos: string[]): Promise
   if (hit && Date.now() - hit.at < TTL_MS) return hit.serie
 
   const motivos: string[] = []
-  for (const [nombre, fn] of fuentes()) {
+  for (const [nombre, fn] of FUENTES) {
     try {
       const r = await fn(symbol, days)
       if (!esError(r)) {
