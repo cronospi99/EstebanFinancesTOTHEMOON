@@ -163,9 +163,17 @@ en el plan gratuito.
    |---|---|
    | `NEXT_PUBLIC_SUPABASE_URL` | tu URL de Supabase |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | tu llave anónima |
+   | `TWELVE_DATA_API_KEY` | para que haya precios (ver abajo) |
    | `ALPHA_VANTAGE_API_KEY` | opcional |
 
 4. Deploy. Obtienes una URL HTTPS que abre en cualquier lugar.
+
+> **Añadir una variable no basta: hay que volver a desplegar.** Vercel congela
+> las variables de entorno en el momento del build, así que el despliegue que
+> ya estaba en línea sigue sin verlas por mucho que las guardes en el panel.
+> Es el motivo habitual de «puse la llave y no cambió nada»: *Deployments → …
+> → Redeploy*. Para comprobar si llegó, **Ajustes → Datos de mercado** dice
+> qué llaves ve el servidor y qué proveedor está poniendo los precios.
 
 Después, en Supabase → **Authentication → URL Configuration**, añade tu dominio
 de Vercel a *Site URL* y a *Redirect URLs* (`https://tu-app.vercel.app/auth/callback`),
@@ -210,10 +218,31 @@ que es la que cabe.
 
 Las posiciones muestran el logotipo de la gestora del fondo (Vanguard, iShares,
 State Street, Schwab, J.P. Morgan, VanEck, Avantis) en vez de una caja gris con
-el ticker. El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y es explícito, sin
-reglas por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una
+el ticker. El mismo archivo lleva los **nombres oficiales** de los instrumentos habituales
+(VOO → «Vanguard S&P 500 ETF»), que se resuelven sin red: la búsqueda de nombres
+depende de una API que puede estar caída, y entonces la posición se quedaba
+llamándose como su ticker. El mapa vive en [`lib/issuers.ts`](lib/issuers.ts) y
+es explícito, sin reglas por prefijo: «empieza por AV → Avantis» le pondría el logotipo de una
 gestora a AVGO, que es Broadcom. Lo que no está en el mapa —acciones sueltas,
 cripto— sigue mostrando su ticker, que ahí es justo la información útil.
+
+---
+
+## Rendimiento histórico
+
+La pestaña de Inversiones lleva una tarjeta con el valor del portafolio a lo
+largo del tiempo y los mismos rangos que el patrimonio: 1D, 5D, 1S, 1M, 3M, 6M,
+1A y 5A.
+
+La serie se reconstruye hacia atrás desde lo único que se sabe con certeza —las
+posiciones de hoy— deshaciendo las operaciones del libro, y cada cantidad se
+multiplica por el cierre de mercado de ese día (`/api/history`). El porcentaje
+**descuenta las aportaciones del período**: sin eso, meter dinero se leería como
+haber ganado, que es la forma más fácil de engañarse con una cartera.
+
+Dos aproximaciones, dichas para que no se lean como exactitud: la tasa de
+cambio es la de hoy en toda la serie (no se guarda el histórico de la divisa), y
+un símbolo sin cierres se valora a su coste promedio y se avisa en pantalla.
 
 ---
 
@@ -252,10 +281,16 @@ Lo que falta, en orden de lo que más duele.
       URLs* con el dominio de Vercel (`https://tu-app.vercel.app/auth/callback`).
       Sin esto el enlace mágico redirige a `localhost` y no se puede entrar
       desde el teléfono.
-- [ ] **Variables de entorno en Vercel:** `NEXT_PUBLIC_SUPABASE_URL`,
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY` y, si se quiere respaldo de precios,
-      `ALPHA_VANTAGE_API_KEY`. Sin las dos primeras el despliegue queda en Modo
+- [ ] **Variables de entorno en Vercel:** `NEXT_PUBLIC_SUPABASE_URL` y
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Sin ellas el despliegue queda en Modo
       Demo y **público**: cualquiera con el enlace entra.
+- [ ] **`TWELVE_DATA_API_KEY` para que haya precios.** Las fuentes sin llave no
+      funcionan desde un centro de datos: Yahoo responde `429` a las IP de
+      Vercel y Stooq devuelve una página HTML en vez del CSV. La llave gratuita
+      de [twelvedata.com](https://twelvedata.com) da 800 llamadas al día y
+      cubre precio e histórico. Sin ella la app funciona, pero el portafolio se
+      queda «valorado al costo». Tras añadirla hay que **volver a desplegar**;
+      *Ajustes → Datos de mercado* confirma si el servidor la ve.
 
 ### Código
 

@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { IssuerBadge } from '@/components/ui/issuer-badge'
+import { nombreVisible } from '@/lib/issuers'
 import { formatMoney, formatPercent, formatQuantity } from '@/lib/format'
 import type { Currency, Holding, Quote } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -82,7 +83,9 @@ export function HoldingRow({
         <IssuerBadge symbol={holding.symbol} />
 
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium text-label">{holding.name}</div>
+          <div className="truncate text-[15px] font-medium text-label">
+            {nombreVisible(holding.symbol, holding.name)}
+          </div>
           <div className="tnum truncate text-[12px] text-label-tertiary">
             {formatQuantity(holding.quantity)} · {TYPE_BADGE[holding.assetType]}
             {/* El precio unitario en vivo: es el dato que uno mira para saber

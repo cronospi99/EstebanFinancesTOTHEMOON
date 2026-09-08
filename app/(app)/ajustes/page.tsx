@@ -1,20 +1,39 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Database, DollarSign, RefreshCw, ShieldCheck, User, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Check, Database, DollarSign, KeyRound, LineChart, RefreshCw, ShieldCheck, User, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { useFinance } from '@/lib/store'
+import { useMarketStatus } from '@/lib/use-market-status'
 import { useProfileName } from '@/lib/use-profile'
 import { formatKeypad, parseKeypad } from '@/lib/format'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { cn, haptic } from '@/lib/utils'
 
 export default function SettingsPage() {
-  const { synced, syncError, transactions, accounts, holdings, resetDemo, fx, fxRate } = useFinance()
+  const {
+    synced, syncError, transactions, accounts, holdings, resetDemo, fx, fxRate,
+    quotes, quotesLoading, quotesFallos,
+  } = useFinance()
   const { name, setName } = useProfileName()
   const [editTasa, setEditTasa] = useState(false)
   const [tasaDraft, setTasaDraft] = useState('')
+
+  const mercado = useMarketStatus()
+
+  /*
+   * Qué proveedor está poniendo los precios ahora mismo. Es la otra mitad de
+   * la respuesta: saber que la llave llegó al servidor no basta si luego el
+   * proveedor rechaza el símbolo o se acabó el cupo del día.
+   */
+  const fuentesEnUso = useMemo(() => {
+    const vistas = new Set<string>()
+    for (const q of Object.values(quotes)) {
+      if (q && !q.stale && q.price > 0 && q.source) vistas.add(q.source)
+    }
+    return [...vistas]
+  }, [quotes])
 
   return (
     <div className="space-y-6 px-5">
@@ -105,6 +124,87 @@ export default function SettingsPage() {
       </section>
 
       <section>
+        <CardHeader title="Datos de mercado" />
+        <Card className="divide-y divide-hairline overflow-hidden">
+          <Row
+            icon={<KeyRound size={17} />}
+            title="Twelve Data"
+            subtitle={
+              mercado.cargando
+                ? 'Comprobando…'
+                : mercado.error
+                  ? 'No se pudo comprobar con el servidor'
+                  : mercado.claves?.twelveData
+                    ? 'Llave activa en el servidor'
+                    : 'Sin llave — solo fuentes públicas'
+            }
+            status={Boolean(mercado.claves?.twelveData)}
+          />
+          {mercado.claves?.alphaVantage && (
+            <Row
+              icon={<KeyRound size={17} />}
+              title="Alpha Vantage"
+              subtitle="Llave activa como último respaldo"
+              status
+            />
+          )}
+          <Row
+            icon={<LineChart size={17} />}
+            title="Precios en vivo"
+            subtitle={
+              !holdings.length
+                ? 'Sin posiciones que cotizar'
+                : fuentesEnUso.length
+                  ? `Respondiendo: ${fuentesEnUso.join(', ')}`
+                  : quotesLoading
+                    ? 'Consultando…'
+                    : 'Ninguna fuente está respondiendo'
+            }
+            status={fuentesEnUso.length > 0}
+          />
+        </Card>
+
+        {/* Sin llave, el paso siguiente. Con llave y sin precios, el motivo:
+            son las dos únicas situaciones en las que hay algo que hacer. */}
+        {!mercado.cargando && !mercado.error && !mercado.claves?.twelveData && (
+          <Card className="mt-3 p-4">
+            <p className="mb-2 text-[13px] font-semibold text-label">Cómo activar Twelve Data</p>
+            <ol className="space-y-1.5 text-[13px] leading-relaxed text-label-secondary">
+              <li>1. Pide la llave gratuita en twelvedata.com</li>
+              <li>
+                2. Guárdala como <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">TWELVE_DATA_API_KEY</code>
+                {' '}en las variables de entorno
+              </li>
+              <li>3. Vuelve a desplegar: las variables solo entran en el despliegue siguiente</li>
+            </ol>
+            <p className="mt-2 text-[12px] leading-relaxed text-label-tertiary">
+              Mientras tanto los precios dependen de Yahoo y Stooq, que suelen
+              bloquear las peticiones hechas desde un servidor.
+            </p>
+          </Card>
+        )}
+
+        {mercado.claves?.twelveData && !fuentesEnUso.length && !quotesLoading && quotesFallos.length > 0 && (
+          <Card className="mt-3 p-4">
+            <p className="mb-1.5 text-[13px] font-semibold text-accent-orange">
+              La llave está, pero no hay precios
+            </p>
+            {/* Un solo símbolo: los motivos se repiten iguales en todos, y las
+                seis cadenas completas ocupaban media pantalla sin añadir nada. */}
+            <p className="break-words text-[12px] leading-relaxed text-label-secondary">
+              {quotesFallos[0]}
+            </p>
+            {quotesFallos.length > 1 && (
+              <p className="mt-1 text-[12px] text-label-tertiary">
+                Y lo mismo en {quotesFallos.length - 1}{' '}
+                {quotesFallos.length === 2 ? 'símbolo más' : 'símbolos más'}.
+              </p>
+            )}
+          </Card>
+        )}
+      </section>
+
+      <section>
         <CardHeader title="Almacenamiento" />
         <Card className="divide-y divide-hairline overflow-hidden">
           <Row
@@ -170,8 +270,8 @@ export default function SettingsPage() {
       )}
 
       <p className="px-1 pb-2 text-center text-[12px] leading-relaxed text-label-tertiary">
-        Los precios de mercado provienen de Yahoo Finance a través de un proxy en el
-        servidor. Ninguna llave de API se expone en el navegador.
+        Los precios de mercado se consultan desde el servidor, probando varias
+        fuentes en cadena. Ninguna llave de API se expone en el navegador.
       </p>
     </div>
   )

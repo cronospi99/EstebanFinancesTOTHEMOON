@@ -10,6 +10,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { HoldingRow } from '@/components/investments/holding-row'
 import { AddHoldingSheet } from '@/components/investments/add-holding-sheet'
+import { PerformanceCard } from '@/components/investments/performance-card'
 import { TradeHistory } from '@/components/investments/trade-history'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { accountTotal, precioDe, useFinance, useInvestmentsValue } from '@/lib/store'
@@ -204,6 +205,9 @@ export default function InvestmentsPage() {
           <p className="mt-3 text-[11px] text-label-tertiary">Se refresca cada minuto</p>
         )}
       </Card>
+
+      {/* Cuánto vale hoy arriba; cómo llegó hasta ahí, justo debajo. */}
+      <PerformanceCard moneda={divisa} enMoneda={enMoneda} />
 
       {/* Las posiciones dicen qué tienes; el historial, cómo llegaste ahí. */}
       <Segmented

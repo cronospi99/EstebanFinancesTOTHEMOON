@@ -6,7 +6,9 @@ import { History, Loader2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { HoldingPicker } from './holding-picker'
 import { investmentPlatforms } from '@/lib/categories'
+import { nombreDe } from '@/lib/issuers'
 import { formatKeypad, formatMoney, formatQuantity, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { AssetType, Currency, Holding } from '@/lib/types'
@@ -105,6 +107,15 @@ export function AddHoldingSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing])
 
+  /** Lo que ya se tiene, para elegirlo sin teclear. Lo más grande primero. */
+  const enCartera = useMemo(
+    () => holdings
+      .filter((h) => h.quantity > 0)
+      .slice()
+      .sort((a, b) => b.quantity * b.avgCost - a.quantity * a.avgCost),
+    [holdings],
+  )
+
   /** Posición ya existente con el mismo símbolo: una compra se suma a ella. */
   const existente = useMemo(
     () => (editing ? null : holdings.find((h) => h.symbol === symbol.trim().toUpperCase())),
@@ -117,6 +128,21 @@ export function AddHoldingSheet({
   useEffect(() => {
     const s = symbol.trim().toUpperCase()
     if (!s || s === ultimo.current || editing) return
+
+    /*
+     * Primero la tabla local, y sin esperar: cubre lo que de verdad se compra,
+     * acierta al instante y no depende de que el proveedor esté en pie —ahora
+     * mismo no lo está desde los servidores de despliegue, y las posiciones se
+     * quedaban llamándose como su ticker.
+     */
+    const local = nombreDe(s)
+    if (local) {
+      ultimo.current = s
+      setName(local)
+      if (/-(USD|USDT)$/.test(s)) setAssetType('crypto')
+      return
+    }
+
     const t = setTimeout(async () => {
       ultimo.current = s
       setBuscando(true)
@@ -146,14 +172,25 @@ export function AddHoldingSheet({
   const cantidad = modo === 'cantidad' ? parseKeypad(qty) : (precioNum > 0 ? montoNum / precioNum : 0)
 
   /*
-   * Al reconocer una posición que ya existe se propone su plataforma: lo
-   * normal es seguir comprando donde ya se tiene. Si el usuario elige otra,
-   * manda la suya — esto solo vuelve a correr al cambiar de símbolo.
+   * Al reconocer una posición que ya existe se heredan sus datos: la
+   * plataforma —lo normal es seguir comprando donde ya se tiene—, el tipo de
+   * activo y la moneda.
+   *
+   * Los dos últimos no son cosmética. Cuando el símbolo ya existe, la hoja
+   * oculta esos campos por redundantes, pero su estado se quedaba en los
+   * valores por defecto (ETF, dólares). Como la posición toma tipo y moneda de
+   * su última operación, sumar a una posición en pesos la convertía en una
+   * posición en dólares sin que nadie lo pidiera.
+   *
+   * Si el usuario cambia algo después, manda lo suyo: esto solo vuelve a
+   * correr al cambiar de símbolo.
    */
   useEffect(() => {
     if (editing || !existente) return
     const inst = accounts.find((a) => a.id === existente.accountId)?.institution
     if (inst) setPlataforma(inst)
+    setAssetType(existente.assetType)
+    setCurrency(existente.currency)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existente?.id])
 
@@ -261,7 +298,23 @@ export function AddHoldingSheet({
           />
         )}
 
-        <Label>Símbolo</Label>
+        {/*
+          Los símbolos que ya están en cartera, para elegirlos en vez de
+          teclearlos. Casi toda operación es sobre algo que ya se tiene, y
+          escribir «BTC-USD» con el teclado del móvil, en mayúsculas y con el
+          guion en su sitio, es donde se cuela el error que luego crea una
+          posición duplicada. Los que no están se siguen escribiendo abajo.
+        */}
+        {!editing && enCartera.length > 0 && (
+          <>
+            <Label>En tu portafolio</Label>
+            <div className="mb-4">
+              <HoldingPicker holdings={enCartera} value={symbol} onChange={setSymbol} />
+            </div>
+          </>
+        )}
+
+        <Label>{enCartera.length > 0 && !editing ? 'O escribe otro símbolo' : 'Símbolo'}</Label>
         <div className={cn(caja, 'mb-1.5')}>
           <input
             value={symbol}

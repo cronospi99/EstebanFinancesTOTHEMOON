@@ -9,10 +9,19 @@ import { formatCompact } from '@/lib/format'
  * ya está en el titular de arriba. Igual que la app Bolsa de Apple.
  */
 export function BalanceChart({
-  data, positive = true,
+  data, positive = true, id = 'balanceFill', label = 'Patrimonio', format = formatCompact,
 }: {
   data: { date: string; value: number }[]
   positive?: boolean
+  /** Identificador del degradado: dos gráficos en la misma página chocarían. */
+  id?: string
+  label?: string
+  /**
+   * Cómo se escribe el valor en el tooltip. Lo decide quien llama porque la
+   * serie viene siempre en pesos, pero la pantalla de inversiones puede estar
+   * enseñando dólares — y ahí el tooltip cantaba una cifra en otra moneda.
+   */
+  format?: (v: number) => string
 }) {
   const stroke = positive ? '#30D158' : '#FF453A'
   // El dominio ajustado al rango real (no a 0) es lo que revela el movimiento;
@@ -27,7 +36,7 @@ export function BalanceChart({
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
           <defs>
-            <linearGradient id="balanceFill" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={stroke} stopOpacity={0.34} />
               <stop offset="100%" stopColor={stroke} stopOpacity={0} />
             </linearGradient>
@@ -49,14 +58,14 @@ export function BalanceChart({
                   )
                 : ''
             }
-            formatter={(v: number) => [formatCompact(v), 'Patrimonio']}
+            formatter={(v: number) => [format(v), label]}
           />
           <Area
             type="monotone"
             dataKey="value"
             stroke={stroke}
             strokeWidth={2.2}
-            fill="url(#balanceFill)"
+            fill={`url(#${id})`}
             // Sin puntos: aparecen solo al hacer hover/touch vía activeDot.
             dot={false}
             activeDot={{ r: 4, fill: stroke, stroke: '#000', strokeWidth: 2 }}
