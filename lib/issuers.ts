@@ -346,6 +346,7 @@ NFLX|Netflix Inc.
 AMD|Advanced Micro Devices Inc.
 INTC|Intel Corporation
 SNDK|SanDisk Corporation
+NVTS|Navitas Semiconductor Corporation
 TTWO|Take-Two Interactive Software Inc.
 
 # Cripto
@@ -409,6 +410,7 @@ const EMPRESAS: Record<string, Logotipo> = {
   GOOG: { id: 'google', name: 'Google', logo: '/brands/google.png' },
   TTWO: { id: 'take-two', name: 'Take-Two Interactive', logo: '/brands/take-two.png' },
   SNDK: { id: 'sandisk', name: 'SanDisk', logo: '/brands/sandisk.png' },
+  NVTS: { id: 'navitas', name: 'Navitas Semiconductor', logo: '/brands/navitas.png' },
 }
 
 /**
