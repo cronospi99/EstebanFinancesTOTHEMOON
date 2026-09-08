@@ -7,6 +7,7 @@ import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { investmentPlatforms } from '@/lib/categories'
+import { nombreDe } from '@/lib/issuers'
 import { formatKeypad, formatMoney, formatQuantity, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { AssetType, Currency, Holding } from '@/lib/types'
@@ -117,6 +118,21 @@ export function AddHoldingSheet({
   useEffect(() => {
     const s = symbol.trim().toUpperCase()
     if (!s || s === ultimo.current || editing) return
+
+    /*
+     * Primero la tabla local, y sin esperar: cubre lo que de verdad se compra,
+     * acierta al instante y no depende de que el proveedor esté en pie —ahora
+     * mismo no lo está desde los servidores de despliegue, y las posiciones se
+     * quedaban llamándose como su ticker.
+     */
+    const local = nombreDe(s)
+    if (local) {
+      ultimo.current = s
+      setName(local)
+      if (/-(USD|USDT)$/.test(s)) setAssetType('crypto')
+      return
+    }
+
     const t = setTimeout(async () => {
       ultimo.current = s
       setBuscando(true)

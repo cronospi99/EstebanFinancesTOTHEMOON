@@ -41,15 +41,25 @@ const arma = (symbol: string, price: number, prev: number, source: string, curre
   source,
 })
 
+/**
+ * Resultado de un proveedor: la cotización, o el motivo de que no la haya.
+ *
+ * Devolver `null` a secas era el problema: «no hay precio» y «nos están
+ * devolviendo 429» se veían igual desde fuera, así que no había forma de saber
+ * si el ticker estaba mal escrito o si la fuente nos había cerrado la puerta.
+ */
+type Resultado = Quote | { error: string }
+const esError = (r: Resultado): r is { error: string } => 'error' in r
+
 /** Yahoo, en sus dos hosts: query2 a veces contesta cuando query1 rechaza. */
-async function yahoo(symbol: string, host: 'query1' | 'query2'): Promise<Quote | null> {
+async function yahoo(symbol: string, host: 'query1' | 'query2'): Promise<Resultado> {
   const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`
   const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cache: 'no-store' })
-  if (!res.ok) return null
+  if (!res.ok) return { error: `HTTP ${res.status}` }
 
   const meta = (await res.json())?.chart?.result?.[0]?.meta
   const price = Number(meta?.regularMarketPrice)
-  if (!price) return null
+  if (!price) return { error: 'respuesta sin precio' }
   const prev = Number(meta.chartPreviousClose ?? meta.previousClose ?? price)
   return arma(symbol, price, prev, `yahoo:${host}`, meta.currency ?? 'USD')
 }
@@ -58,8 +68,8 @@ async function yahoo(symbol: string, host: 'query1' | 'query2'): Promise<Quote |
  * Stooq: CSV sin llave ni límites agresivos, y responde bien desde servidores.
  * Cubre acciones y ETF estadounidenses con el sufijo `.us`.
  */
-async function stooq(symbol: string): Promise<Quote | null> {
-  if (esCripto(symbol)) return null
+async function stooq(symbol: string): Promise<Resultado> {
+  if (esCripto(symbol)) return { error: 'no aplica a cripto' }
 
   const dia = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '')
   const hoy = new Date()
@@ -68,22 +78,25 @@ async function stooq(symbol: string): Promise<Quote | null> {
   const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(s)}&i=d&d1=${dia(desde)}&d2=${dia(hoy)}`
 
   const res = await fetch(url, { headers: { 'User-Agent': UA }, cache: 'no-store' })
-  if (!res.ok) return null
+  if (!res.ok) return { error: `HTTP ${res.status}` }
 
   // Date,Open,High,Low,Close,Volume — una fila por sesión, la última al final.
-  const filas = (await res.text()).trim().split('\n').slice(1).filter(Boolean)
-  if (!filas.length) return null
+  const cuerpo = (await res.text()).trim()
+  const filas = cuerpo.split('\n').slice(1).filter(Boolean)
+  // Stooq contesta 200 con un texto plano cuando raciona ("Exceeded the daily
+  // hits limit"). Sin mirar el cuerpo, eso se confundía con "no hay datos".
+  if (!filas.length) return { error: cuerpo.slice(0, 60) || 'sin filas' }
 
   const cierre = (fila: string) => Number(fila.split(',')[4])
   const price = cierre(filas[filas.length - 1])
-  if (!price) return null
+  if (!price) return { error: cuerpo.slice(0, 60) || 'cierre no numérico' }
   const prev = filas.length > 1 ? cierre(filas[filas.length - 2]) || price : price
   return arma(symbol, price, prev, 'stooq')
 }
 
 /** Coinbase para los pares cripto: sin llave y estable desde servidores. */
-async function coinbase(symbol: string): Promise<Quote | null> {
-  if (!esCripto(symbol)) return null
+async function coinbase(symbol: string): Promise<Resultado> {
+  if (!esCripto(symbol)) return { error: 'solo cripto' }
 
   const par = symbol.toUpperCase().replace(/-USDT$/, '-USD')
   const spot = async (fecha?: string) => {
@@ -95,28 +108,28 @@ async function coinbase(symbol: string): Promise<Quote | null> {
   }
 
   const price = await spot()
-  if (!price) return null
+  if (!price) return { error: 'sin precio spot' }
   const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
   const prev = (await spot(ayer).catch(() => null)) ?? price
   return arma(symbol, price, prev, 'coinbase')
 }
 
 /** Respaldo opcional. Solo se intenta si hay llave configurada. */
-async function alphaVantage(symbol: string): Promise<Quote | null> {
+async function alphaVantage(symbol: string): Promise<Resultado> {
   const key = process.env.ALPHA_VANTAGE_API_KEY
-  if (!key) return null
+  if (!key) return { error: 'sin ALPHA_VANTAGE_API_KEY' }
 
   const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${key}`
   const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return null
+  if (!res.ok) return { error: `HTTP ${res.status}` }
 
   const q = (await res.json())?.['Global Quote']
   const price = Number(q?.['05. price'])
-  if (!price) return null
+  if (!price) return { error: 'respuesta sin precio (¿límite de llamadas?)' }
   return arma(symbol, price, Number(q?.['08. previous close'] ?? price), 'alpha-vantage')
 }
 
-const FUENTES: [string, (s: string) => Promise<Quote | null>][] = [
+const FUENTES: [string, (s: string) => Promise<Resultado>][] = [
   ['yahoo:query1', (s) => yahoo(s, 'query1')],
   ['yahoo:query2', (s) => yahoo(s, 'query2')],
   ['coinbase', coinbase],
@@ -128,22 +141,21 @@ async function getQuote(symbol: string, fallos: string[]): Promise<Quote> {
   const hit = cache.get(symbol)
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.quote
 
+  const motivos: string[] = []
   for (const [nombre, fn] of FUENTES) {
     try {
-      const quote = await fn(symbol)
-      if (quote) {
-        cache.set(symbol, { quote, at: Date.now() })
-        return quote
+      const r = await fn(symbol)
+      if (!esError(r)) {
+        cache.set(symbol, { quote: r, at: Date.now() })
+        return r
       }
+      motivos.push(`${nombre} ${r.error}`)
     } catch (e) {
-      fallos.push(`${symbol} · ${nombre}: ${(e as Error).message}`)
+      motivos.push(`${nombre} ${(e as Error).message}`)
     }
   }
 
-  // Sin esto, un proveedor que responde 401 o 429 —en vez de lanzar— no dejaba
-  // rastro, y desde fuera «no hay precio» y «nos están bloqueando» se veían
-  // exactamente igual.
-  fallos.push(`${symbol}: ninguna fuente devolvió precio`)
+  fallos.push(`${symbol}: ${motivos.join(' · ')}`)
 
   // Degradación elegante: preferimos un precio viejo marcado como tal antes que
   // romper el portafolio entero por un símbolo.
