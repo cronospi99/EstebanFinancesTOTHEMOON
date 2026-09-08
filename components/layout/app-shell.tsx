@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { BottomNav } from './bottom-nav'
+import { SideNav } from './side-nav'
 import { QuickAddSheet } from '@/components/quick-add/quick-add-sheet'
 import { WelcomeScreen } from './welcome-screen'
 
@@ -31,7 +32,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md">
+    /*
+     * Móvil: una columna estrecha centrada, como siempre.
+     * Escritorio: barra lateral fija y el contenido corrido hacia la derecha,
+     * con un ancho máximo mayor para que la ventana no quede vacía a los lados
+     * sin que las líneas se hagan ilegibles de largas.
+     */
+    <div className="relative mx-auto min-h-dvh w-full max-w-md lg:max-w-none lg:pl-[248px]">
       {/* Halo de color detrás del contenido: rompe el negro plano sin
           introducir una superficie visible. */}
       <div
@@ -46,8 +53,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {mostrarBienvenida && <WelcomeScreen key="bienvenida" onStart={empezar} />}
       </AnimatePresence>
 
-      <main className="relative pb-nav">{children}</main>
-      <BottomNav onQuickAdd={() => setQuickAddOpen(true)} />
+      <SideNav onQuickAdd={() => setQuickAddOpen(true)} />
+
+      <main className="relative pb-nav lg:mx-auto lg:max-w-5xl lg:px-6 lg:pb-16 lg:pt-4">
+        {children}
+      </main>
+
+      {/* La barra inferior solo existe donde manda el pulgar. */}
+      <div className="lg:hidden">
+        <BottomNav onQuickAdd={() => setQuickAddOpen(true)} />
+      </div>
       <QuickAddSheet open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </div>
   )

@@ -48,7 +48,7 @@ export function BudgetRings() {
   return (
     <section>
       <CardHeader title="Presupuestos del mes" />
-      <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-2 no-scrollbar">
+      <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-2 no-scrollbar lg:mx-0 lg:px-0">
         {rows.map((row) => {
           const cat = categoryById(row.categoryId)
           const over = row.progress > 1
