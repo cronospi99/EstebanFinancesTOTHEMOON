@@ -1,6 +1,25 @@
+/*
+ * Sello de la compilación.
+ *
+ * Responde a «he mezclado el cambio y no lo veo en la app», que sin esto solo
+ * se puede contestar abriendo el panel de Vercel: dice qué commit y qué rama
+ * está sirviendo la versión que tienes delante. Si el commit no es el que
+ * acabas de mezclar, el despliegue es viejo; si la rama no es la que esperas,
+ * es que la rama de producción del proyecto apunta a otro sitio.
+ *
+ * Vercel pone estas variables en el entorno del build. En local no existen y
+ * se marca como tal.
+ */
+const build = {
+  NEXT_PUBLIC_BUILD_SHA: (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || 'local',
+  NEXT_PUBLIC_BUILD_REF: process.env.VERCEL_GIT_COMMIT_REF ?? '',
+  NEXT_PUBLIC_BUILD_AT: new Date().toISOString(),
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: build,
   experimental: {
     // Keeps Framer Motion / Recharts out of the server bundle graph where possible.
     optimizePackageImports: ['lucide-react', 'recharts'],
