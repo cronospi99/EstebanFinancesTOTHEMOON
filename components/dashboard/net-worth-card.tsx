@@ -6,15 +6,17 @@ import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, Eye, EyeOff, TrendingUp, TriangleAlert } from 'lucide-react'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { tasaCongelada } from '@/components/ui/fx-note'
 import { BalanceChart } from './balance-chart'
 import { RangePicker } from './range-picker'
 import { Card } from '@/components/ui/card'
 import { formatMoney, formatPercent } from '@/lib/format'
-import { RANGE_LABEL, useBalanceSeries, useExpectedYield, useMonthSummary, useNetWorthDetail, useYieldBreakdown, type RangeKey } from '@/lib/store'
+import { RANGE_LABEL, useBalanceSeries, useExpectedYield, useFinance, useMonthSummary, useNetWorthDetail, useYieldBreakdown, type RangeKey } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 
 export function NetWorthCard() {
   const { total: netWorth, incompleto, sinConvertir } = useNetWorthDetail()
+  const { fx } = useFinance()
   const [range, setRange] = useState<RangeKey>('1M')
   const series = useBalanceSeries(range)
   const { income, expense } = useMonthSummary()
@@ -75,6 +77,28 @@ export function NetWorthCard() {
           <span className="text-[12px] leading-snug text-accent-orange">
             {sinConvertir === 1 ? 'Una cuenta en dólares queda' : `${sinConvertir} cuentas en dólares quedan`}{' '}
             fuera del total: falta la tasa de cambio. Tócalo para fijarla.
+          </span>
+        </Link>
+      )}
+
+      {/*
+        Una tasa congelada mueve esta cifra entera y en silencio.
+
+        Todo lo que está en dólares —el portafolio, las cuentas en USD— se
+        convierte con la misma tasa, así que si dejó de seguir al mercado el
+        patrimonio de arriba es de otro día. Con la tasa en vivo no se dice
+        nada: lo normal no necesita aviso.
+      */}
+      {!incompleto && tasaCongelada(fx) && (
+        <Link
+          href="/ajustes"
+          className="mb-3 flex items-center gap-2 rounded-xl border border-accent-orange/25 bg-accent-orange/[0.08] px-3 py-2"
+        >
+          <TriangleAlert size={15} className="shrink-0 text-accent-orange" />
+          <span className="text-[12px] leading-snug text-accent-orange">
+            {fx.origin === 'manual'
+              ? 'La tasa USD/COP está fijada a mano, así que este total no sigue al mercado.'
+              : 'La tasa USD/COP no se ha podido actualizar; este total puede estar desfasado.'}
           </span>
         </Link>
       )}

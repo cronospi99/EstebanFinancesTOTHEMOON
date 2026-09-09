@@ -7,6 +7,7 @@ import { ArrowDownRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
+import { FxNote, tasaCongelada } from '@/components/ui/fx-note'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { HoldingRow } from '@/components/investments/holding-row'
 import { AddHoldingSheet } from '@/components/investments/add-holding-sheet'
@@ -169,17 +170,26 @@ export default function InvestmentsPage() {
               <div className="text-[15px] font-semibold text-label-tertiary">—</div>
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="mb-0.5 text-[12px] text-label-secondary">USD / COP</div>
             {fxRate > 0 ? (
-              <div className="tnum text-[15px] font-semibold">
-                {fxRate.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-                {fx.origin !== 'live' && (
-                  <span className="ml-1 text-[11px] font-normal text-label-tertiary">
-                    {fx.origin === 'manual' ? 'fijada' : 'guardada'}
-                  </span>
-                )}
-              </div>
+              <>
+                <div className="tnum flex items-baseline gap-1.5 text-[15px] font-semibold">
+                  {fxRate.toLocaleString('es-CO', { maximumFractionDigits: 2 })}
+                  {/* Un punto que late mientras la tasa es la del mercado. Es
+                      la diferencia entre un número vivo y uno congelado, y
+                      hasta ahora los dos se veían igual. */}
+                  {!tasaCongelada(fx) && fx.origin === 'live' && (
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-green opacity-60" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-green" />
+                    </span>
+                  )}
+                </div>
+                {/* Esta es la tasa de la que cuelga todo el patrimonio, así
+                    que aquí es donde tiene que decirse de cuándo es. */}
+                <FxNote fx={fx} onAutomatica={() => fx.setManual(null)} className="mt-0.5" />
+              </>
             ) : (
               <Link href="/ajustes" className="text-[13px] font-medium text-accent-orange">
                 Sin tasa · fijar

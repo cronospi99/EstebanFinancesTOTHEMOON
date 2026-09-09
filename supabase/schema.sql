@@ -321,3 +321,26 @@ create policy "own rows" on public.settings for all
 drop trigger if exists set_user_id_trg on public.settings;
 create trigger set_user_id_trg before insert on public.settings
   for each row execute function public.set_user_id();
+
+-- ===========================================================================
+--  Transferencias entre cuentas
+-- ===========================================================================
+--  El tipo 'transfer' existía en la restricción desde el principio, pero no
+--  había dónde escribir el destino, así que una transferencia solo restaba de
+--  la cuenta de origen y el dinero desaparecía.
+--
+--  Va en la misma fila y no en dos: partirla en un gasto y un ingreso obliga a
+--  mantener las dos mitades sincronizadas al editar y al borrar, y basta con
+--  que una se pierda para que aparezca —o se esfume— dinero.
+alter table public.transactions
+  add column if not exists to_account_id uuid references public.accounts (id) on delete set null;
+alter table public.transactions
+  add column if not exists to_pocket_id text;
+
+-- Una transferencia sin destino no es una transferencia, y un destino igual al
+-- origen no mueve nada. Las dos cosas se cuelan solas desde un formulario.
+alter table public.transactions drop constraint if exists transactions_transfer_check;
+alter table public.transactions add constraint transactions_transfer_check check (
+  type <> 'transfer'
+  or (to_account_id is not null and to_account_id is distinct from account_id)
+);

@@ -38,7 +38,13 @@ export interface Category {
   name: string
   icon: string
   color: string
-  kind: 'expense' | 'income'
+  /**
+   * 'transfer' no sale en ningún selector: es la etiqueta interna de los
+   * movimientos entre cuentas, que no son ni gasto ni ingreso. Sin ella, la
+   * transferencia tendría que colgar de una categoría de gasto y aparecería
+   * ofrecida como presupuestable.
+   */
+  kind: 'expense' | 'income' | 'transfer'
   /** Agrupa en el selector para que la lista larga siga siendo navegable. */
   group: string
 }
@@ -48,6 +54,16 @@ export interface Transaction {
   accountId: string
   /** Bolsillo concreto dentro de la cuenta, si aplica. */
   pocketId?: string
+  /**
+   * Cuenta de destino. Solo en las transferencias, y ahí es obligatoria.
+   *
+   * Una transferencia es un movimiento con dos puntas y no dos movimientos:
+   * guardarla partida en un gasto y un ingreso obliga a mantenerlos
+   * sincronizados al editar y al borrar, y basta con que uno se pierda para
+   * que aparezca dinero de la nada.
+   */
+  toAccountId?: string
+  toPocketId?: string
   categoryId: string
   amount: number
   type: TxType
