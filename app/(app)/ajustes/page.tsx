@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { useFinance } from '@/lib/store'
 import { BUILD_REF, BUILD_SHA, esBuildLocal, fechaBuild } from '@/lib/build-info'
+import { FxNote } from '@/components/ui/fx-note'
 import { useMarketStatus } from '@/lib/use-market-status'
 import { useProfileName } from '@/lib/use-profile'
 import { formatKeypad, parseKeypad } from '@/lib/format'
@@ -113,12 +114,13 @@ export default function SettingsPage() {
                   Fijar
                 </button>
               </div>
-              <p className="mt-2 px-1 text-[12px] text-label-tertiary">
-                {fx.origin === 'live' && `En vivo, vía ${fx.source}.`}
-                {fx.origin === 'cached' && 'Última conocida: no se pudo consultar en línea.'}
-                {fx.origin === 'manual' && 'Fijada por ti. Toca Fijar y deja el campo vacío para volver a la automática.'}
-                {fx.origin === 'none' && 'No se pudo obtener. Las cuentas en dólares quedan fuera del patrimonio hasta que la fijes.'}
-              </p>
+              {fx.origin === 'none' ? (
+                <p className="mt-2 px-1 text-[12px] text-label-tertiary">
+                  No se pudo obtener. Las cuentas en dólares quedan fuera del patrimonio hasta que la fijes.
+                </p>
+              ) : (
+                <FxNote fx={fx} onAutomatica={() => fx.setManual(null)} className="mt-2 px-1" />
+              )}
             </>
           )}
         </Card>

@@ -3,12 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ChartPie, LayoutGrid, Plus, Settings, TrendingUp } from 'lucide-react'
+import { ChartPie, LayoutGrid, Plus, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
 import { cn, haptic } from '@/lib/utils'
 
 const TABS = [
   { href: '/', label: 'Resumen', icon: LayoutGrid },
   { href: '/gastos', label: 'Gastos', icon: ChartPie },
+  { href: '/cuentas', label: 'Cuentas', icon: Wallet },
+  { href: '/metas', label: 'Metas', icon: Target },
   { href: '/inversiones', label: 'Inversión', icon: TrendingUp },
   { href: '/ajustes', label: 'Ajustes', icon: Settings },
 ]
@@ -45,12 +47,13 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
         className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-black/70 backdrop-blur-2xl pb-safe"
         style={{ height: 'calc(var(--nav-h) + var(--sab))' }}
       >
-        <div className="mx-auto grid h-[var(--nav-h)] max-w-md grid-cols-5 items-center px-2">
+        <div className="mx-auto grid h-[var(--nav-h)] max-w-md grid-cols-7 items-center px-1">
           {TABS.map((tab, i) => {
             const active = pathname === tab.href
             const Icon = tab.icon
-            // La tercera columna queda libre para el botón flotante.
-            const col = i < 2 ? i + 1 : i + 2
+            // La cuarta columna queda libre para el botón flotante, con tres
+            // destinos a cada lado. Con seis ya no cabía dejarlo descentrado.
+            const col = i < 3 ? i + 1 : i + 2
             return (
               <Link
                 key={tab.href}
@@ -62,8 +65,10 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
                   active ? 'text-accent-blue' : 'text-label-tertiary',
                 )}
               >
-                <Icon size={21} strokeWidth={active ? 2.4 : 2} />
-                <span className="text-[10px] font-medium tracking-tight">{tab.label}</span>
+                <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+                {/* A siete columnas cada etiqueta tiene unos 55 px: se aprieta
+                    el interletraje antes que dejar que «Inversión» se parta. */}
+                <span className="text-[9.5px] font-medium tracking-[-0.02em]">{tab.label}</span>
               </Link>
             )
           })}
