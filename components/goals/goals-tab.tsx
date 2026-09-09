@@ -209,7 +209,9 @@ export function GoalsTab() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[15px] font-medium text-label">{cat.name}</p>
                       <p className="tnum text-[12px] text-label-tertiary">
-                        {formatMoney(b.gastado)} de {formatMoney(b.amount)}
+                        {/* Con la palabra delante: «X de Y» a secas no dice si
+                            X es lo gastado o lo que llevas guardado. */}
+                        Gastado {formatMoney(b.gastado)} de {formatMoney(b.amount)}
                       </p>
                     </div>
                     <button

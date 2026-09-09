@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Sheet } from '@/components/ui/sheet'
 import { MoneyInput } from '@/components/ui/money-input'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { ScrollStrip } from '@/components/ui/scroll-strip'
 import { CategoryIcon } from '@/components/ui/category-icon'
 import { categoryById } from '@/lib/categories'
 import { formatMoney, parseKeypad } from '@/lib/format'
@@ -71,7 +72,7 @@ export function AllocateSheet({
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
           {modo === 'apartar' ? 'De qué cuenta sale' : 'A qué cuenta vuelve'}
         </label>
-        <div className="-mx-5 mb-4 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+        <ScrollStrip className="mb-4">
           {elegibles.map((acc) => {
             const activa = acc.id === cuentaId
             const saldo = disponible.get(acc.id)
@@ -95,7 +96,7 @@ export function AllocateSheet({
               </button>
             )
           })}
-        </div>
+        </ScrollStrip>
 
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
           Cuánto

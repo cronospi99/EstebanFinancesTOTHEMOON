@@ -1,8 +1,27 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { InstitutionBadge } from './institution-badge'
-import { useFinance } from '@/lib/store'
+import { ScrollStrip } from './scroll-strip'
+import { accountTotal, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
+import type { Account } from '@/lib/types'
+
+/**
+ * ¿Se puede gastar desde esta cuenta?
+ *
+ * Con saldo positivo, sí. Una tarjeta de crédito casi nunca lo tiene —su saldo
+ * es lo que se debe— y sin embargo es de donde más se gasta: lo que decide ahí
+ * es el cupo que queda. Sin cupo declarado se deja pasar, porque no saber no
+ * es lo mismo que no poder.
+ */
+function puedeGastar(a: Account): boolean {
+  if (a.type === 'credit') {
+    if (!a.creditLimit) return true
+    return a.creditLimit - Math.abs(Math.min(a.balance, 0)) > 0
+  }
+  return accountTotal(a) > 0
+}
 
 /**
  * Medio de pago: la cuenta y, dentro de ella, el bolsillo.
@@ -12,20 +31,42 @@ import { cn, haptic } from '@/lib/utils'
  * bolsillo inexistente y el saldo se descuadraría en silencio.
  */
 export function AccountPicker({
-  accountId, pocketId, onChange,
+  accountId, pocketId, onChange, soloConSaldo = false,
 }: {
   accountId: string
   pocketId?: string
   onChange: (accountId: string, pocketId?: string) => void
+  /**
+   * Esconde las cuentas de las que no se puede gastar.
+   *
+   * Al registrar un gasto, ofrecer las cuentas vacías es ruido: son las que
+   * nunca se eligen y empujan a la derecha a las que sí. En un ingreso no
+   * aplica —el dinero puede entrar en una cuenta a cero, que es justo cuando
+   * más falta hace registrarlo— así que lo decide quien llama.
+   */
+  soloConSaldo?: boolean
 }) {
   const { accounts } = useFinance()
+  const [verTodas, setVerTodas] = useState(false)
+
+  const visibles = useMemo(() => {
+    if (!soloConSaldo || verTodas) return accounts
+    // La seleccionada nunca se esconde: quitarla de debajo dejaría el
+    // formulario apuntando a una cuenta que no se ve.
+    const conSaldo = accounts.filter((a) => a.id === accountId || puedeGastar(a))
+    // Y si ninguna tiene saldo, se enseñan todas: quedarse sin opciones es
+    // peor que enseñar una cuenta vacía.
+    return conSaldo.length ? conSaldo : accounts
+  }, [accounts, accountId, soloConSaldo, verTodas])
+
+  const escondidas = accounts.length - visibles.length
   const cuenta = accounts.find((a) => a.id === accountId)
   const bolsillos = cuenta?.pockets ?? []
 
   return (
     <>
-      <div className="-mx-5 mb-2 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
-        {accounts.map((acc) => {
+      <ScrollStrip className="mb-2">
+        {visibles.map((acc) => {
           const activa = acc.id === accountId
           return (
             <button
@@ -42,10 +83,19 @@ export function AccountPicker({
             </button>
           )
         })}
-      </div>
+        {/* Nada queda inalcanzable: si se escondió alguna, se puede pedir. */}
+        {escondidas > 0 && (
+          <button
+            onClick={() => { haptic(6); setVerTodas(true) }}
+            className="press shrink-0 rounded-pill border border-dashed border-hairline px-3 py-1 text-[12px] font-medium text-label-tertiary"
+          >
+            Ver {escondidas} más
+          </button>
+        )}
+      </ScrollStrip>
 
       {bolsillos.length > 0 && (
-        <div className="-mx-5 mb-3 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+        <ScrollStrip className="mb-3">
           <button
             onClick={() => { haptic(6); onChange(accountId, undefined) }}
             className={cn(
@@ -68,7 +118,7 @@ export function AccountPicker({
               {p.name}
             </button>
           ))}
-        </div>
+        </ScrollStrip>
       )}
     </>
   )

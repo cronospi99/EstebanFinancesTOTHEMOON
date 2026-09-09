@@ -237,6 +237,9 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
           accountId={accountId}
           pocketId={pocketId}
           onChange={(cuenta, bolsillo) => { setAccountId(cuenta); setPocketId(bolsillo) }}
+          // Solo en el gasto: un ingreso puede entrar en una cuenta a cero, y
+          // ahí esconderla sería esconder justo la que hace falta.
+          soloConSaldo={mode === 'expense'}
         />
 
         {/* Fecha: por defecto hoy, para no estorbar el caso rápido. */}
