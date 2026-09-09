@@ -60,6 +60,40 @@ export interface Transaction {
 export interface Budget {
   categoryId: string
   amount: number
+  /**
+   * Tope de gasto en un solo día para esta categoría, si se quiere.
+   *
+   * Convive con `amount` porque son la misma decisión a dos plazos: «500.000
+   * al mes» dice cuánto cabe, «40.000 en un día» impide gastárselo el martes.
+   */
+  dailyCap?: number
+}
+
+/**
+ * Dinero de una cuenta asignado a un presupuesto — un bolsillo virtual.
+ *
+ * Asignar NO mueve dinero: el saldo de la cuenta sigue siendo el del banco.
+ * Lo único que cambia es cuánto de ese saldo está libre. Por eso son filas y
+ * no un campo del presupuesto: un mismo presupuesto puede fondearse desde
+ * varias cuentas, y hay que poder restar de cada una lo que salió de ella.
+ *
+ * Un importe negativo retira dinero del bolsillo. Se guarda como fila nueva en
+ * vez de editar la anterior, así el historial queda entero.
+ */
+export interface BudgetAllocation {
+  id: string
+  categoryId: string
+  /** Cuenta de origen. Se queda vacía si la cuenta se borra después. */
+  accountId?: string
+  amount: number
+  note?: string
+  createdAt: string
+}
+
+/** Preferencias que no cuelgan de ninguna entidad. */
+export interface Settings {
+  /** Tope de gasto diario para todo, sin distinguir categoría. */
+  dailyCap?: number
 }
 
 /** Meta de ahorro: un objetivo con importe y, si se quiere, fecha límite. */

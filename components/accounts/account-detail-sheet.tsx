@@ -5,8 +5,9 @@ import { motion } from 'framer-motion'
 import { BadgePercent, Calculator, Check, CreditCard, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { institutionCanonicalName } from '@/lib/categories'
 import { formatKeypad, formatMoney, formatPercent, monthlyFromApy, parseKeypad } from '@/lib/format'
-import { accountTotal, useCashback, useFinance, useSaldoConMovimientos } from '@/lib/store'
+import { accountTotal, useAccountsAvailable, useCashback, useFinance, useSaldoConMovimientos } from '@/lib/store'
 import type { Account } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
 
@@ -58,12 +59,15 @@ export function AccountDetailSheet({
   // Los hooks se llaman antes del retorno temprano: no pueden ir condicionados.
   const cashback = useCashback(account?.id)
   const cuadre = useSaldoConMovimientos(account?.id)
+  const disponibles = useAccountsAvailable()
 
   if (!account) return null
 
   const cur = account.currency
   const total = accountTotal(account)
   const pockets = account.pockets ?? []
+  const apartado = disponibles.get(account.id)?.apartado ?? 0
+  const libre = total - apartado
   const monthly = account.apy ? account.balance * monthlyFromApy(account.apy) : 0
 
   async function handleAddPocket() {
@@ -86,7 +90,9 @@ export function AccountDetailSheet({
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[19px] font-semibold">{account.name}</h2>
             <p className="text-[13px] text-label-secondary">
-              {account.institution}
+              {/* Por el nombre canónico: una cuenta guardada como «RappiPay»
+                  se enseña como «RappiCuenta», que es como se llama hoy. */}
+              {institutionCanonicalName(account.institution)}
               {cur === 'USD' && ' · USD'}
             </p>
           </div>
@@ -165,6 +171,25 @@ export function AccountDetailSheet({
               General {formatMoney(account.balance, cur)} · Bolsillos{' '}
               {formatMoney(total - account.balance, cur)}
             </p>
+          )}
+          {/*
+            Lo apartado en presupuestos.
+
+            El saldo de arriba es el del banco y no se toca al apartar: eso es
+            todo el punto de los bolsillos virtuales. Lo que cambia es cuánto
+            de ese saldo queda libre, y esa es la cifra con la que se decide si
+            se puede gastar, así que tiene que estar aquí y no solo dentro del
+            presupuesto que se lo llevó.
+          */}
+          {apartado > 0 && (
+            <div className="mt-2 border-t border-hairline pt-2">
+              <p className="tnum text-[12px] text-label-tertiary">
+                Apartado en presupuestos {formatMoney(apartado, cur)}
+              </p>
+              <p className={cn('tnum text-[13px] font-semibold', libre < 0 ? 'text-accent-orange' : 'text-accent-green')}>
+                {formatMoney(libre, cur)} libre
+              </p>
+            </div>
           )}
         </div>
 

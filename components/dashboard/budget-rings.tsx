@@ -5,7 +5,7 @@ import { CardHeader } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
 import { categoryById } from '@/lib/categories'
 import { formatCompact } from '@/lib/format'
-import { useFinance, useSpendByCategory } from '@/lib/store'
+import { useBolsillos } from '@/lib/store'
 
 /** Anillo de progreso tipo Actividad de Apple. */
 function Ring({ progress, color, size = 78 }: { progress: number; color: string; size?: number }) {
@@ -33,16 +33,12 @@ function Ring({ progress, color, size = 78 }: { progress: number; color: string;
 }
 
 export function BudgetRings() {
-  const { budgets } = useFinance()
-  const spend = useSpendByCategory()
+  const bolsillos = useBolsillos()
 
-  if (!budgets.length) return null
+  if (!bolsillos.length) return null
 
-  const rows = budgets
-    .map((b) => {
-      const spent = spend.find((s) => s.categoryId === b.categoryId)?.amount ?? 0
-      return { ...b, spent, progress: b.amount > 0 ? spent / b.amount : 0 }
-    })
+  const rows = bolsillos
+    .map((b) => ({ ...b, progress: b.amount > 0 ? b.gastado / b.amount : 0 }))
     .sort((a, b) => b.progress - a.progress)
 
   return (
@@ -69,8 +65,19 @@ export function BudgetRings() {
               <div className="mt-2.5 text-center">
                 <div className="text-[13px] font-semibold text-label">{cat.name}</div>
                 <div className="tnum mt-0.5 text-[11px] text-label-tertiary">
-                  {formatCompact(row.spent)} / {formatCompact(row.amount)}
+                  {formatCompact(row.gastado)} / {formatCompact(row.amount)}
                 </div>
+                {/* Lo que queda del dinero apartado. Es otra pregunta que el
+                    porcentaje del mes no responde: se puede ir por el 40 % del
+                    mes y no quedar nada en el bolsillo. */}
+                {row.asignado > 0 && (
+                  <div
+                    className="tnum mt-0.5 text-[11px] font-medium"
+                    style={{ color: row.disponible < 0 ? '#FF453A' : '#30D158' }}
+                  >
+                    {formatCompact(row.disponible)} en bolsillo
+                  </div>
+                )}
                 <div
                   className="tnum mt-1 text-[12px] font-semibold"
                   style={{ color: over ? '#FF453A' : '#98989F' }}

@@ -14,12 +14,12 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Finanzas',
-  description: 'Gastos, cuentas e inversiones — privado y en tiempo real.',
+  title: 'To The Moon - Finances',
+  description: 'Tus gastos, cuentas e inversiones. Sólo tuyos.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
-    title: 'Finanzas',
+    title: 'To The Moon - Finances',
     statusBarStyle: 'black-translucent', // deja que el fondo suba bajo el notch
   },
   formatDetection: { telephone: false },
