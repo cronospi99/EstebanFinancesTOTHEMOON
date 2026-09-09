@@ -102,8 +102,25 @@ function aplicarDelta(
   })
 }
 
-/** Lo que un movimiento le suma al saldo: los ingresos entran, los gastos salen. */
+/** Lo que un movimiento le suma al saldo de su cuenta de origen. */
 const deltaDe = (t: Pick<Transaction, 'type' | 'amount'>) => (t.type === 'income' ? t.amount : -t.amount)
+
+/**
+ * Aplica —o deshace, con `signo` a -1— un movimiento sobre los saldos.
+ *
+ * Existe por las transferencias, que tienen dos puntas. Antes cada mutación
+ * llamaba a `aplicarDelta` una sola vez con la cuenta de origen, así que una
+ * transferencia restaba de una cuenta y no sumaba en ninguna: el dinero
+ * desaparecía del patrimonio. Ahora el movimiento se aplica entero o no se
+ * aplica, y deshacerlo es el mismo camino con el signo cambiado.
+ */
+function aplicarMovimiento(accounts: Account[], t: Transaction, signo: 1 | -1): Account[] {
+  let res = aplicarDelta(accounts, t.accountId, t.pocketId, signo * deltaDe(t))
+  if (t.type === 'transfer' && t.toAccountId) {
+    res = aplicarDelta(res, t.toAccountId, t.toPocketId, signo * t.amount)
+  }
+  return res
+}
 
 /**
  * Reconstruye una posición a partir de sus operaciones.
@@ -479,8 +496,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       // toca, así que comparar identidades basta para saber cuáles guardar.
       let tocadas: Account[] = []
       setState((s) => {
-        // Si va a un bolsillo, el saldo se mueve ahí y no en el general.
-        const accounts = aplicarDelta(s.accounts, full.accountId, full.pocketId, deltaDe(full))
+        // Si va a un bolsillo, el saldo se mueve ahí y no en el general. Y si
+        // es una transferencia, se mueve también en la cuenta de destino.
+        const accounts = aplicarMovimiento(s.accounts, full, 1)
         tocadas = accounts.filter((a, i) => a !== s.accounts[i])
         return { ...s, transactions: [full, ...s.transactions], accounts }
       })
@@ -508,8 +526,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         if (!anterior) return s
         const nuevo: Transaction = { ...anterior, ...patch }
 
-        let accounts = aplicarDelta(s.accounts, anterior.accountId, anterior.pocketId, -deltaDe(anterior))
-        accounts = aplicarDelta(accounts, nuevo.accountId, nuevo.pocketId, deltaDe(nuevo))
+        let accounts = aplicarMovimiento(s.accounts, anterior, -1)
+        accounts = aplicarMovimiento(accounts, nuevo, 1)
         tocadas = accounts.filter((a, i) => a !== s.accounts[i])
 
         return {
@@ -532,7 +550,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       setState((s) => {
         const tx = s.transactions.find((t) => t.id === id)
         if (!tx) return s
-        const accounts = aplicarDelta(s.accounts, tx.accountId, tx.pocketId, -deltaDe(tx))
+        const accounts = aplicarMovimiento(s.accounts, tx, -1)
         tocadas = accounts.filter((a, i) => a !== s.accounts[i])
         return {
           ...s,
@@ -1479,11 +1497,13 @@ const accountPatchToRow = (p: Partial<Account>) => {
 }
 const rowToTx = (r: Row): Transaction => ({
   id: r.id, accountId: r.account_id, pocketId: r.pocket_id ?? undefined,
+  toAccountId: r.to_account_id ?? undefined, toPocketId: r.to_pocket_id ?? undefined,
   categoryId: r.category_id, amount: Number(r.amount), type: r.type,
   description: r.description ?? '', occurredAt: r.occurred_at, currency: r.currency ?? undefined,
 })
 const txToRow = (t: Transaction) => ({
   id: t.id, account_id: t.accountId, pocket_id: t.pocketId ?? null,
+  to_account_id: t.toAccountId ?? null, to_pocket_id: t.toPocketId ?? null,
   category_id: t.categoryId, amount: t.amount, type: t.type,
   description: t.description, occurred_at: t.occurredAt, currency: t.currency ?? null,
 })
@@ -1493,6 +1513,8 @@ const txPatchToRow = (p: Partial<Transaction>) => {
   // pocketId se envía siempre que venga en el patch, incluido undefined: pasar
   // de un bolsillo al saldo general es precisamente borrar la referencia.
   if ('pocketId' in p) r.pocket_id = p.pocketId ?? null
+  if ('toAccountId' in p) r.to_account_id = p.toAccountId ?? null
+  if ('toPocketId' in p) r.to_pocket_id = p.toPocketId ?? null
   if (p.categoryId !== undefined) r.category_id = p.categoryId
   if (p.amount !== undefined) r.amount = p.amount
   if (p.type !== undefined) r.type = p.type

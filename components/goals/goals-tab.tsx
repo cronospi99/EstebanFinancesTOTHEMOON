@@ -10,8 +10,9 @@ import { MoneyInput } from '@/components/ui/money-input'
 import { AllocateSheet } from '@/components/budgets/allocate-sheet'
 import { BudgetSheet } from '@/components/budgets/budget-sheet'
 import { DailyCapCard } from '@/components/budgets/daily-cap-card'
+import { NewBudgetSheet } from '@/components/budgets/new-budget-sheet'
 import { GoalSheet } from '@/components/goals/goal-sheet'
-import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoryById } from '@/lib/categories'
 import { formatMoney, parseKeypad } from '@/lib/format'
 import { useBolsillos, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
@@ -19,13 +20,14 @@ import type { Bolsillo } from '@/lib/store'
 import type { Goal } from '@/lib/types'
 
 export function GoalsTab() {
-  const { accounts, budgets, goals, setBudget, updateGoal } = useFinance()
+  const { accounts, goals, updateGoal } = useFinance()
   const bolsillos = useBolsillos()
 
   const [hojaMeta, setHojaMeta] = useState(false)
   const [metaEditando, setMetaEditando] = useState<Goal | null>(null)
   const [presuEditando, setPresuEditando] = useState<Bolsillo | null>(null)
   const [asignandoA, setAsignandoA] = useState<string | null>(null)
+  const [nuevoPresu, setNuevoPresu] = useState(false)
   const [abonoId, setAbonoId] = useState<string | null>(null)
   const [abono, setAbono] = useState('')
 
@@ -163,15 +165,31 @@ export function GoalsTab() {
 
       {/* ---- Presupuestos, con su bolsillo -------------------------------- */}
       <section>
-        <CardHeader title="Presupuestos del mes" />
+        <CardHeader
+          title="Presupuestos del mes"
+          action={
+            <button
+              onClick={() => { haptic(6); setNuevoPresu(true) }}
+              className="flex items-center gap-1 text-[13px] font-medium text-accent-blue"
+            >
+              <Plus size={14} /> Nuevo
+            </button>
+          }
+        />
 
         {!bolsillos.length ? (
           <Card className="p-6 text-center">
             <Wallet size={22} className="mx-auto mb-2 text-label-tertiary" />
             <p className="text-[15px] font-medium text-label">Sin presupuestos</p>
             <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
-              Añade una categoría abajo para vigilarla y apartarle dinero.
+              Crea uno para vigilar una categoría y apartarle dinero.
             </p>
+            <button
+              onClick={() => { haptic(6); setNuevoPresu(true) }}
+              className="press mt-3 rounded-xl border border-hairline bg-white/[0.04] px-4 py-2 text-[14px] font-medium text-accent-blue"
+            >
+              Crear presupuesto
+            </button>
           </Card>
         ) : (
           <div className="space-y-3">
@@ -274,26 +292,6 @@ export function GoalsTab() {
           </div>
         )}
 
-        {/* Alta rápida de categorías sin presupuesto. */}
-        {DEFAULT_CATEGORIES.some((c) => c.kind === 'expense' && !budgets.some((b) => b.categoryId === c.id)) && (
-          <div className="mt-3">
-            <p className="mb-2 px-1 text-[12px] text-label-tertiary">Añadir categoría</p>
-            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:px-0">
-              {DEFAULT_CATEGORIES
-                .filter((c) => c.kind === 'expense' && !budgets.some((b) => b.categoryId === c.id))
-                .map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => { haptic(6); setBudget(c.id, 200_000) }}
-                    className="press flex shrink-0 items-center gap-1.5 rounded-pill border border-hairline py-1 pl-1 pr-3 text-[12px] text-label-secondary"
-                  >
-                    <CategoryIcon icon={c.icon} color={c.color} size="xs" />
-                    {c.name}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
       </section>
 
       <GoalSheet
@@ -302,7 +300,12 @@ export function GoalsTab() {
         indice={goals.length}
         onClose={() => { setHojaMeta(false); setMetaEditando(null) }}
       />
-      <BudgetSheet bolsillo={presuEditando} onClose={() => setPresuEditando(null)} />
+      <BudgetSheet
+        bolsillo={presuEditando}
+        onClose={() => setPresuEditando(null)}
+        onApartar={(categoryId) => { setPresuEditando(null); setAsignandoA(categoryId) }}
+      />
+      <NewBudgetSheet open={nuevoPresu} onClose={() => setNuevoPresu(false)} />
       <AllocateSheet categoryId={asignandoA} onClose={() => setAsignandoA(null)} />
     </div>
   )

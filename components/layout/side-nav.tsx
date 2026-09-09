@@ -2,13 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChartPie, LayoutGrid, Plus, Settings, TrendingUp } from 'lucide-react'
+import { ChartPie, LayoutGrid, Plus, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
 import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { cn } from '@/lib/utils'
 
 const TABS = [
   { href: '/', label: 'Resumen', icon: LayoutGrid },
   { href: '/gastos', label: 'Gastos', icon: ChartPie },
+  { href: '/cuentas', label: 'Cuentas', icon: Wallet },
+  { href: '/metas', label: 'Metas', icon: Target },
   { href: '/inversiones', label: 'Inversión', icon: TrendingUp },
   { href: '/ajustes', label: 'Ajustes', icon: Settings },
 ]

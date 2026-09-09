@@ -1,31 +1,59 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { CardHeader } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { AllocateSheet } from '@/components/budgets/allocate-sheet'
+import { BudgetSheet } from '@/components/budgets/budget-sheet'
 import { categoryById } from '@/lib/categories'
 import { formatCompact } from '@/lib/format'
 import { useBolsillos } from '@/lib/store'
+import { haptic } from '@/lib/utils'
+import type { Bolsillo } from '@/lib/store'
 
-/** Anillo de progreso tipo Actividad de Apple. */
-function Ring({ progress, color, size = 78 }: { progress: number; color: string; size?: number }) {
+/**
+ * Anillo de progreso tipo Actividad de Apple, con dos arcos.
+ *
+ * El de dentro es lo apartado y el de fuera lo gastado. Con uno solo, un
+ * presupuesto de 287 K con sus 287 K ya apartados y nada gastado se veía
+ * exactamente igual que uno vacío y sin fondear: un aro gris al 0 %. Y son
+ * dos situaciones opuestas — en la primera el dinero está listo y en la
+ * segunda no existe.
+ */
+function Ring({
+  gastado, apartado, color, size = 78,
+}: {
+  /** Fracción gastada del tope, 0..1+. */
+  gastado: number
+  /** Fracción del tope que ya está apartada, 0..1+. */
+  apartado: number
+  color: string
+  size?: number
+}) {
   const stroke = 7
   const r = (size - stroke) / 2
-  const circumference = 2 * Math.PI * r
-  const clamped = Math.min(progress, 1)
+  const c = 2 * Math.PI * r
 
   return (
     <svg width={size} height={size} className="-rotate-90">
-      <circle
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeOpacity={0.14} strokeWidth={stroke} />
+      {/* Lo apartado: el mismo color, apagado. Es el suelo sobre el que se
+          lee el gasto, no una segunda métrica que compita con él. */}
+      <motion.circle
         cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke={color} strokeOpacity={0.16} strokeWidth={stroke}
+        fill="none" stroke={color} strokeOpacity={0.42} strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={c}
+        initial={{ strokeDashoffset: c }}
+        animate={{ strokeDashoffset: c * (1 - Math.min(apartado, 1)) }}
+        transition={{ duration: 1, ease: [0.32, 0.72, 0, 1] }}
       />
       <motion.circle
         cx={size / 2} cy={size / 2} r={r}
         fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
-        strokeDasharray={circumference}
-        initial={{ strokeDashoffset: circumference }}
-        animate={{ strokeDashoffset: circumference * (1 - clamped) }}
+        strokeDasharray={c}
+        initial={{ strokeDashoffset: c }}
+        animate={{ strokeDashoffset: c * (1 - Math.min(gastado, 1)) }}
         transition={{ duration: 1.1, ease: [0.32, 0.72, 0, 1] }}
       />
     </svg>
@@ -34,6 +62,8 @@ function Ring({ progress, color, size = 78 }: { progress: number; color: string;
 
 export function BudgetRings() {
   const bolsillos = useBolsillos()
+  const [editando, setEditando] = useState<Bolsillo | null>(null)
+  const [asignandoA, setAsignandoA] = useState<string | null>(null)
 
   if (!bolsillos.length) return null
 
@@ -50,19 +80,23 @@ export function BudgetRings() {
           const over = row.progress > 1
           // Rojo al pasarse: el color comunica el estado antes que el número.
           const color = over ? '#FF453A' : cat.color
+          const fondeado = row.amount > 0 ? row.asignado / row.amount : 0
 
           return (
-            <div
+            // Un botón, no un div: el presupuesto se abre desde aquí en las
+            // dos versiones. Antes había que ir a Metas para tocar nada.
+            <button
               key={row.categoryId}
-              className="glass flex w-[128px] shrink-0 flex-col items-center rounded-card px-3 py-4"
+              onClick={() => { haptic(6); setEditando(row) }}
+              className="glass press-soft flex w-[128px] shrink-0 flex-col items-center rounded-card px-3 py-4 text-center"
             >
               <div className="relative flex items-center justify-center">
-                <Ring progress={row.progress} color={color} />
+                <Ring gastado={row.progress} apartado={fondeado} color={color} />
                 <div className="absolute">
                   <CategoryIcon icon={cat.icon} color={color} size="sm" />
                 </div>
               </div>
-              <div className="mt-2.5 text-center">
+              <div className="mt-2.5">
                 <div className="text-[13px] font-semibold text-label">{cat.name}</div>
                 <div className="tnum mt-0.5 text-[11px] text-label-tertiary">
                   {formatCompact(row.gastado)} / {formatCompact(row.amount)}
@@ -85,10 +119,17 @@ export function BudgetRings() {
                   {Math.round(row.progress * 100)} %
                 </div>
               </div>
-            </div>
+            </button>
           )
         })}
       </div>
+
+      <BudgetSheet
+        bolsillo={editando}
+        onClose={() => setEditando(null)}
+        onApartar={(categoryId) => { setEditando(null); setAsignandoA(categoryId) }}
+      />
+      <AllocateSheet categoryId={asignandoA} onClose={() => setAsignandoA(null)} />
     </section>
   )
 }

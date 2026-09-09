@@ -27,7 +27,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
 
   // ---- Gastos: hogar -------------------------------------------------------
   { id: 'home', name: 'Arriendo', icon: 'House', color: '#BF5AF2', kind: 'expense', group: 'Hogar' },
-  { id: 'utilities', name: 'Servicios', icon: 'Zap', color: '#FFD60A', kind: 'expense', group: 'Hogar' },
+  { id: 'utilities', name: 'Servicios públicos', icon: 'Zap', color: '#FFD60A', kind: 'expense', group: 'Hogar' },
   { id: 'internet', name: 'Internet', icon: 'Wifi', color: '#5E5CE6', kind: 'expense', group: 'Hogar' },
   { id: 'phone', name: 'Celular', icon: 'Smartphone', color: '#64D2FF', kind: 'expense', group: 'Hogar' },
   { id: 'repairs', name: 'Reparaciones', icon: 'Wrench', color: '#8E8E93', kind: 'expense', group: 'Hogar' },
@@ -93,6 +93,9 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'to-investment', name: 'Paso a inversión', icon: 'TrendingUp', color: '#BF5AF2', kind: 'expense', group: 'Financiero' },
   { id: 'withdrawal', name: 'Retiro en cajero', icon: 'Landmark', color: '#8E8E93', kind: 'expense', group: 'Financiero' },
   { id: 'other', name: 'Otros', icon: 'Ellipsis', color: '#98989F', kind: 'expense', group: 'Financiero' },
+
+  // ---- Interna: no se ofrece en ningún selector ----------------------------
+  { id: 'transfer', name: 'Transferencia', icon: 'ArrowLeftRight', color: '#64D2FF', kind: 'transfer', group: 'Financiero' },
 
   // ---- Ingresos ------------------------------------------------------------
   { id: 'salary', name: 'Salario', icon: 'Wallet', color: '#30D158', kind: 'income', group: 'Trabajo' },

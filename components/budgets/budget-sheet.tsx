@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { PiggyBank, Trash2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { MoneyInput } from '@/components/ui/money-input'
 import { CategoryIcon } from '@/components/ui/category-icon'
 import { categoryById } from '@/lib/categories'
 import { formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
-import { haptic } from '@/lib/utils'
+import { cn, haptic } from '@/lib/utils'
 import type { Bolsillo } from '@/lib/store'
 
 /**
@@ -20,11 +20,13 @@ import type { Bolsillo } from '@/lib/store'
  * gastar de una sentada.
  */
 export function BudgetSheet({
-  bolsillo, onClose,
+  bolsillo, onClose, onApartar,
 }: {
   /** El presupuesto a editar, o `null` con la hoja cerrada. */
   bolsillo: Bolsillo | null
   onClose: () => void
+  /** Salta a apartar dinero. Sin esto habría que cerrar e ir a buscarlo. */
+  onApartar?: (categoryId: string) => void
 }) {
   const { setBudget, removeBudget } = useFinance()
   const [mes, setMes] = useState('')
@@ -48,6 +50,34 @@ export function BudgetSheet({
           {cat && <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />}
           <h2 className="text-[17px] font-semibold">{cat?.name ?? 'Presupuesto'}</h2>
         </div>
+
+        {/* El estado del bolsillo, arriba: es lo que se viene a mirar cuando
+            se abre esto desde un anillo del resumen. */}
+        {bolsillo && bolsillo.asignado > 0 && (
+          <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-white/[0.04] p-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-label-tertiary">Apartado</p>
+              <p className="tnum text-[15px] font-semibold text-label">{formatMoney(bolsillo.asignado)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-label-tertiary">Queda</p>
+              <p className={cn('tnum text-[15px] font-semibold', bolsillo.disponible < 0 ? 'text-accent-red' : 'text-accent-green')}>
+                {formatMoney(bolsillo.disponible)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {onApartar && bolsillo && (
+          <button
+            onClick={() => { haptic(6); onApartar(bolsillo.categoryId) }}
+            className="press mb-4 flex h-[46px] w-full items-center justify-center gap-2 rounded-2xl
+                       border border-hairline bg-white/[0.04] text-[15px] font-medium text-accent-blue"
+          >
+            <PiggyBank size={16} />
+            Apartar dinero
+          </button>
+        )}
 
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
           Tope del mes

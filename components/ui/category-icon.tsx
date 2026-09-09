@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  ArrowLeftRight,
   Award,
   Baby,
   BadgePercent,
@@ -82,7 +83,7 @@ import {
 import { cn } from '@/lib/utils'
 
 /** Mapa explícito (no dinámico) para que el bundler pueda hacer tree-shaking. */
-const ICONS: Record<string, LucideIcon> = { Award, Baby, BadgePercent, Banknote, Bike, BookOpen, Brain, Briefcase, Building, Building2, Car, CarTaxiFront, ChartPie, Clapperboard, Coffee, Cog, Coins, Cookie, CreditCard, Croissant, Droplet, Dumbbell, Ellipsis, FileText, Flame, Footprints, Fuel, Gamepad2, Gift, Glasses, GraduationCap, Hammer, HandCoins, HeartPulse, Hotel, House, Landmark, Languages, Laptop, Milestone, MonitorPlay, Music, Package, Palette, PawPrint, Percent, PiggyBank, Pill, Plane, Popcorn, Receipt, Repeat, Scissors, ShieldCheck, Shirt, ShoppingBag, ShoppingCart, Smartphone, Sofa, SprayCan, SquareParking, Stamp, Stethoscope, Ticket, TrainFront, TrendingUp, Undo2, Users, UtensilsCrossed, Volleyball, Wallet, WashingMachine, Wifi, Wine, Wrench, Zap }
+const ICONS: Record<string, LucideIcon> = { ArrowLeftRight, Award, Baby, BadgePercent, Banknote, Bike, BookOpen, Brain, Briefcase, Building, Building2, Car, CarTaxiFront, ChartPie, Clapperboard, Coffee, Cog, Coins, Cookie, CreditCard, Croissant, Droplet, Dumbbell, Ellipsis, FileText, Flame, Footprints, Fuel, Gamepad2, Gift, Glasses, GraduationCap, Hammer, HandCoins, HeartPulse, Hotel, House, Landmark, Languages, Laptop, Milestone, MonitorPlay, Music, Package, Palette, PawPrint, Percent, PiggyBank, Pill, Plane, Popcorn, Receipt, Repeat, Scissors, ShieldCheck, Shirt, ShoppingBag, ShoppingCart, Smartphone, Sofa, SprayCan, SquareParking, Stamp, Stethoscope, Ticket, TrainFront, TrendingUp, Undo2, Users, UtensilsCrossed, Volleyball, Wallet, WashingMachine, Wifi, Wine, Wrench, Zap }
 
 export function CategoryIcon({
   icon, color, size = 'md', className,
