@@ -5,6 +5,7 @@ import { ArrowDown } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { MoneyInput } from '@/components/ui/money-input'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { ScrollStrip } from '@/components/ui/scroll-strip'
 import { formatMoney, parseKeypad } from '@/lib/format'
 import { accountTotal, useAccountsAvailable, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
@@ -67,14 +68,14 @@ export function TransferSheet({ open, onClose }: { open: boolean; onClose: () =>
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
           Desde
         </label>
-        <div className="-mx-5 mb-3 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+        <ScrollStrip className="mb-3">
           {accounts.map((a) => fila(a, a.id === origenId, () => {
             setOrigenId(a.id)
             // Cambiar de origen puede dejar el destino en otra moneda, o en la
             // misma cuenta. Se limpia en vez de quedarse en un estado inválido.
             if (a.id === destinoId) setDestinoId('')
           }))}
-        </div>
+        </ScrollStrip>
 
         <div className="mb-3 flex justify-center">
           <ArrowDown size={18} className="text-label-tertiary" />
@@ -89,9 +90,9 @@ export function TransferSheet({ open, onClose }: { open: boolean; onClose: () =>
             necesitaría fijar a qué tasa se convirtió.
           </p>
         ) : (
-          <div className="-mx-5 mb-4 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+          <ScrollStrip className="mb-4">
             {(origen ? destinos : accounts).map((a) => fila(a, a.id === destinoId, () => setDestinoId(a.id)))}
-          </div>
+          </ScrollStrip>
         )}
 
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
