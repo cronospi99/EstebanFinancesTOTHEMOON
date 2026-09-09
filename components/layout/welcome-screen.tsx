@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, RefreshCw } from 'lucide-react'
+import { APP_NAME } from '@/components/ui/brand'
 import { consejoAlAzar, consejoDelDia } from '@/lib/tips'
 import { saludo, useProfileName } from '@/lib/use-profile'
 import { haptic } from '@/lib/utils'
@@ -54,9 +55,9 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
         <motion.h1
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.14, duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
-          className="text-[34px] font-bold leading-tight tracking-[-0.03em]"
+          className="text-balance text-[30px] font-bold leading-tight tracking-[-0.03em]"
         >
-          To The Moon
+          {APP_NAME}
         </motion.h1>
 
         <motion.p

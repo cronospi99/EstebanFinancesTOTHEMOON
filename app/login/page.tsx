@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, Mail, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { cn, haptic } from '@/lib/utils'
 
@@ -114,11 +115,14 @@ export default function LoginPage() {
         className="w-full max-w-sm"
       >
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-5 h-16 w-16 rounded-[18px] bg-gradient-to-br from-accent-blue to-accent-violet shadow-glow" />
-          <h1 className="text-[28px] font-bold tracking-[-0.02em]">Finanzas</h1>
-          <p className="mt-1 text-[14px] text-label-secondary">
-            Tus gastos, cuentas e inversiones. Solo tuyos.
-          </p>
+          <BrandMark size={64} className="mx-auto mb-5 shadow-glow" />
+          {/* El nombre va con guion y en una sola línea: partirlo en dos deja
+              «To The Moon» arriba y «Finances» suelto debajo, que se lee como
+              dos productos. */}
+          <h1 className="text-balance text-[26px] font-bold leading-tight tracking-[-0.02em]">
+            {APP_NAME}
+          </h1>
+          <p className="mt-1.5 text-[14px] text-label-secondary">{APP_TAGLINE}</p>
         </div>
 
         {falloEnlace && (

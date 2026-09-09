@@ -6,7 +6,9 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { CHART_REST, chartColor } from '@/lib/chart-palette'
 import { formatCompact, formatMoney, formatPercent } from '@/lib/format'
-import { accountTotal, toCOP, useFinance, useNetWorth } from '@/lib/store'
+import {
+  accountTotal, toCOP, useFinance, useHoldingsValueByAccount, useInvestmentsValue, useNetWorth,
+} from '@/lib/store'
 
 /** Más de esto y las porciones dejan de ser legibles; el resto se agrupa. */
 const MAX_SLICES = 6
@@ -14,28 +16,57 @@ const MAX_SLICES = 6
 export function WealthDistribution() {
   const { accounts, fxRate } = useFinance()
   const netWorth = useNetWorth()
+  const porCuenta = useHoldingsValueByAccount()
+  const inversiones = useInvestmentsValue()
   const [active, setActive] = useState<number | null>(null)
 
   const slices = useMemo(() => {
-    // Solo lo que suma: una tarjeta de crédito en negativo no es una porción
-    // del patrimonio, es una deuda, y mezclarla falsearía las proporciones.
+    /*
+     * Cada porción es una plataforma, no una cuenta de efectivo.
+     *
+     * El donut sumaba solo los saldos y el patrimonio de arriba ya incluía el
+     * portafolio, así que las dos cifras no cuadraban: en ARQ o Trii conviven
+     * el efectivo sin invertir y las posiciones, y enseñar solo la mitad hacía
+     * parecer que la plataforma no tenía casi nada. Ahora el valor de mercado
+     * de las posiciones se suma a su plataforma, que además es de quien es el
+     * logotipo que se ve en la leyenda.
+     */
     const positivos = accounts
-      .map((a) => ({
-        id: a.id,
-        name: a.name,
-        institution: a.institution,
-        color: a.color,
+      .map((a) => {
         // null cuando es una cuenta en dólares y no se conoce la tasa.
-        value: toCOP(accountTotal(a), a.currency, fxRate),
-      }))
+        const efectivo = toCOP(accountTotal(a), a.currency, fxRate)
+        const invertido = porCuenta.get(a.id) ?? 0
+        return {
+          id: a.id,
+          name: a.name,
+          institution: a.institution,
+          color: a.color,
+          invertido,
+          value: efectivo === null ? (invertido > 0 ? invertido : null) : efectivo + invertido,
+        }
+      })
       .filter((r): r is typeof r & { value: number } => r.value !== null && r.value > 0)
-      .sort((a, b) => b.value - a.value)
+
+    // Lo que se compró sin decir en qué plataforma. Sin esto se perdería del
+    // donut y el total volvería a no cuadrar con el patrimonio.
+    const conCuenta = [...porCuenta.values()].reduce((t, v) => t + v, 0)
+    const sueltas = inversiones.value - conCuenta
+    if (sueltas > 1) {
+      positivos.push({
+        id: '__inversiones', name: 'Inversiones', institution: '', color: CHART_REST,
+        invertido: sueltas, value: sueltas,
+      })
+    }
+
+    positivos.sort((a, b) => b.value - a.value)
 
     if (positivos.length <= MAX_SLICES) return positivos
     const visibles = positivos.slice(0, MAX_SLICES)
     const resto = positivos.slice(MAX_SLICES).reduce((s, r) => s + r.value, 0)
-    return [...visibles, { id: '__resto', name: 'Otros', institution: '', color: CHART_REST, value: resto }]
-  }, [accounts, fxRate])
+    return [...visibles, {
+      id: '__resto', name: 'Otros', institution: '', color: CHART_REST, invertido: 0, value: resto,
+    }]
+  }, [accounts, fxRate, porCuenta, inversiones.value])
 
   const total = slices.reduce((s, r) => s + r.value, 0)
   const deudas = netWorth - total
@@ -113,6 +144,15 @@ export function WealthDistribution() {
                 ? <InstitutionBadge institution={s.institution} color={s.color} size="xs" />
                 : <span className="h-5 w-5" />}
               <span className="min-w-0 flex-1 truncate text-[14px] text-label">{s.name}</span>
+              {/* Fuera del nombre y sin encoger: dentro se truncaba a «$ 20,3 M
+                  inv…», que es justo la palabra que le daba sentido. Que una
+                  porción lleve inversiones cambia cómo se lee — no es dinero
+                  disponible, es valor de mercado. */}
+              {s.invertido > 0 && (
+                <span className="tnum shrink-0 text-[11px] text-label-tertiary">
+                  {formatCompact(s.invertido)} inv.
+                </span>
+              )}
               <span className="tnum shrink-0 text-[13px] text-label-tertiary">
                 {formatPercent((s.value / total) * 100, false, 0)}
               </span>

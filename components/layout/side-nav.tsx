@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChartPie, LayoutGrid, Plus, Settings, TrendingUp } from 'lucide-react'
+import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -30,11 +31,15 @@ export function SideNav({ onQuickAdd }: { onQuickAdd: () => void }) {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-hairline bg-black/40 px-4 py-6 backdrop-blur-2xl lg:flex">
+      {/* La esquina de la marca. En el móvil no hay sitio para esto; aquí
+          sobra ancho y es donde se espera encontrar de qué app se trata. */}
       <div className="mb-8 flex items-center gap-3 px-2">
-        <div className="h-9 w-9 rounded-[11px] bg-gradient-to-br from-accent-blue to-accent-violet shadow-glow" />
+        <BrandMark size={36} className="shadow-glow" />
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold leading-tight tracking-[-0.01em]">Finanzas</p>
-          <p className="truncate text-[11px] text-label-tertiary">Gastos e inversiones</p>
+          <p className="text-[14px] font-semibold leading-tight tracking-[-0.01em]">{APP_NAME}</p>
+          {/* Sin `truncate`: el eslogan cortado en «Tus gastos, cuentas e
+              inve…» no dice nada. Cabe en dos líneas y aquí sobra alto. */}
+          <p className="text-[11px] leading-snug text-label-tertiary">{APP_TAGLINE}</p>
         </div>
       </div>
 

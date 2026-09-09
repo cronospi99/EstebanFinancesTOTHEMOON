@@ -257,3 +257,67 @@ create trigger set_user_id_trg before insert on public.goals
 -- El upsert de presupuestos necesita esta restricción con nombre.
 alter table public.budgets drop constraint if exists budgets_user_id_category_id_key;
 alter table public.budgets add constraint budgets_user_id_category_id_key unique (user_id, category_id);
+
+-- ===========================================================================
+--  Bolsillos virtuales: dinero asignado a un presupuesto desde una cuenta
+-- ===========================================================================
+--  El saldo de la cuenta NO se toca al asignar. La cuenta sigue valiendo lo
+--  que dice el banco, y el dinero asignado solo deja de estar "libre": es una
+--  etiqueta sobre dinero que ya estaba ahí, no un movimiento.
+--
+--  Por eso esto es una tabla y no una columna en `budgets`: un presupuesto
+--  puede fondearse desde varias cuentas, y hay que saber cuánto salió de cada
+--  una para poder restarlo del disponible de esa cuenta y solo de esa.
+--
+--  El gasto real sí mueve las dos cosas, pero por vías distintas: la
+--  transacción baja el saldo de la cuenta (como cualquier gasto) y consume lo
+--  asignado al presupuesto de su categoría. Aquí no se registra nada.
+create table if not exists public.budget_allocations (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  category_id text not null,
+  -- La cuenta de la que sale. Si se borra la cuenta, la asignación pierde su
+  -- origen pero no su importe: borrarla en cascada falsearía el presupuesto.
+  account_id  uuid references public.accounts (id) on delete set null,
+  -- Negativo permitido a propósito: así se retira dinero de un bolsillo
+  -- añadiendo una fila, y el historial de asignaciones queda entero.
+  amount      numeric(16,2) not null,
+  note        text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists budget_allocations_user_cat_idx
+  on public.budget_allocations (user_id, category_id);
+create index if not exists budget_allocations_user_acc_idx
+  on public.budget_allocations (user_id, account_id);
+
+alter table public.budget_allocations enable row level security;
+drop policy if exists "own rows" on public.budget_allocations;
+create policy "own rows" on public.budget_allocations for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop trigger if exists set_user_id_trg on public.budget_allocations;
+create trigger set_user_id_trg before insert on public.budget_allocations
+  for each row execute function public.set_user_id();
+
+-- ---------------------------------------------------------------------------
+-- Topes diarios
+-- ---------------------------------------------------------------------------
+-- Por categoría, junto a su presupuesto del mes: son la misma decisión vista a
+-- dos plazos («500.000 al mes» y «no más de 40.000 en un día»).
+alter table public.budgets add column if not exists daily_cap numeric(16,2)
+  check (daily_cap is null or daily_cap >= 0);
+
+-- Y uno global, que no cuelga de ninguna categoría. Una fila por usuario.
+create table if not exists public.settings (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  daily_cap  numeric(16,2) check (daily_cap is null or daily_cap >= 0),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.settings enable row level security;
+drop policy if exists "own rows" on public.settings;
+create policy "own rows" on public.settings for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop trigger if exists set_user_id_trg on public.settings;
+create trigger set_user_id_trg before insert on public.settings
+  for each row execute function public.set_user_id();
