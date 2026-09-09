@@ -96,28 +96,45 @@ export function BudgetRings() {
                   <CategoryIcon icon={cat.icon} color={color} size="sm" />
                 </div>
               </div>
-              <div className="mt-2.5">
+              <div className="mt-2.5 w-full">
                 <div className="text-[13px] font-semibold text-label">{cat.name}</div>
-                <div className="tnum mt-0.5 text-[11px] text-label-tertiary">
-                  {formatCompact(row.gastado)} / {formatCompact(row.amount)}
-                </div>
-                {/* Lo que queda del dinero apartado. Es otra pregunta que el
-                    porcentaje del mes no responde: se puede ir por el 40 % del
-                    mes y no quedar nada en el bolsillo. */}
-                {row.asignado > 0 && (
-                  <div
-                    className="tnum mt-0.5 text-[11px] font-medium"
-                    style={{ color: row.disponible < 0 ? '#FF453A' : '#30D158' }}
-                  >
-                    {formatCompact(row.disponible)} en bolsillo
-                  </div>
+
+                {/*
+                  Con dinero apartado, la cifra de arriba es cuánto llevas del
+                  tope. «$ 0 / $ 287 K» con los 287 K ya guardados se leía como
+                  «no tienes nada», que es lo contrario de lo que pasa: eran
+                  cero de gasto, no cero de ahorro. Cada línea lleva su palabra
+                  para que ninguna se pueda leer como la otra.
+                */}
+                {row.asignado > 0 ? (
+                  <>
+                    <div className="tnum mt-1 text-[11px] leading-tight">
+                      <span className="font-semibold text-label">{formatCompact(row.asignado)}</span>
+                      <span className="text-label-tertiary"> / {formatCompact(row.amount)}</span>
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-label-tertiary">apartado</div>
+                    <div
+                      className="tnum mt-1 text-[11px] font-medium"
+                      style={{ color: row.disponible < 0 ? '#FF453A' : '#30D158' }}
+                    >
+                      {formatCompact(row.gastado)} gastado
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="tnum mt-1 text-[11px] leading-tight">
+                      <span className="font-semibold text-label">{formatCompact(row.gastado)}</span>
+                      <span className="text-label-tertiary"> / {formatCompact(row.amount)}</span>
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-label-tertiary">gastado</div>
+                    <div
+                      className="tnum mt-1 text-[12px] font-semibold"
+                      style={{ color: over ? '#FF453A' : '#98989F' }}
+                    >
+                      {Math.round(row.progress * 100)} %
+                    </div>
+                  </>
                 )}
-                <div
-                  className="tnum mt-1 text-[12px] font-semibold"
-                  style={{ color: over ? '#FF453A' : '#98989F' }}
-                >
-                  {Math.round(row.progress * 100)} %
-                </div>
               </div>
             </button>
           )

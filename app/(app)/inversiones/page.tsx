@@ -71,7 +71,27 @@ export default function InvestmentsPage() {
     return d
   }, [holdings, quotes, fxRate])
 
-  /** Agrupa por plataforma: ver "cuánto tengo en ARQ" es la pregunta natural. */
+  /**
+   * Valor de mercado de una posición, para poder compararlas entre sí.
+   *
+   * En pesos cuando se conoce la tasa, que es lo único que permite ordenar
+   * juntas una posición en dólares y una en pesos. Sin tasa se comparan en su
+   * propia moneda: no es exacto si conviven las dos, pero mantiene el orden
+   * correcto dentro de cada una, que es mejor que amontonarlas todas en cero.
+   */
+  const valorDe = useMemo(() => (h: Holding) => {
+    const { precio } = precioDe(h, quotes)
+    const fx = h.currency === 'USD' && fxRate > 0 ? fxRate : 1
+    return precio * h.quantity * fx
+  }, [quotes, fxRate])
+
+  /**
+   * Agrupa por plataforma: ver "cuánto tengo en ARQ" es la pregunta natural.
+   *
+   * Dentro de cada una, y entre ellas, de mayor a menor valor de mercado. El
+   * orden de llegada no dice nada: la posición que mueve el portafolio tiene
+   * que estar arriba, no la que se registró primero.
+   */
   const byAccount = useMemo(() => {
     const map = new Map<string, Holding[]>()
     holdings.forEach((h) => {
@@ -79,7 +99,12 @@ export default function InvestmentsPage() {
       map.set(key, [...(map.get(key) ?? []), h])
     })
     return [...map.entries()]
-  }, [holdings])
+      .map(([id, items]) => [id, [...items].sort((a, b) => valorDe(b) - valorDe(a))] as const)
+      .sort(([, a], [, b]) => {
+        const suma = (xs: readonly Holding[]) => xs.reduce((t, h) => t + valorDe(h), 0)
+        return suma(b) - suma(a)
+      })
+  }, [holdings, valorDe])
 
   const up = (fxRate > 0 ? portfolio.pnl : portfolio.pnlUsd) >= 0
 
