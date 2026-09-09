@@ -175,7 +175,7 @@ export const CO_INSTITUTIONS: Institution[] = [
   // Pagos
   { name: 'Bold', group: 'Pagos', color: '#4B21C9', short: 'B', logo: 'bold' },
   { name: 'RappiCard', group: 'Pagos', color: '#141414', short: 'RC', logo: 'rappicard' },
-  { name: 'RappiPay', group: 'Pagos', color: '#FF441F', short: 'RP', logo: 'rappi' },
+  { name: 'RappiCuenta', group: 'Pagos', color: '#FF441F', short: 'RC', logo: 'rappi' },
 
   // Inversión y cripto
   { name: 'ARQ', group: 'Inversión y cripto', color: '#EFEDE3', fg: '#141414', short: 'ARQ', logo: 'arq' },
@@ -202,9 +202,27 @@ export function institutionsByGroup() {
     .filter(([, items]) => items.length > 0)
 }
 
+/**
+ * Nombres que una entidad tuvo antes y que siguen guardados en cuentas.
+ *
+ * La lista de arriba es la verdad de hoy, pero el nombre viejo está escrito
+ * dentro de cuentas y movimientos ya creados. Sin esta tabla, renombrar
+ * «RappiPay» a «RappiCuenta» —que es la misma cuenta, solo que Rappi la llama
+ * así— dejaba esas cuentas sin logotipo y sin color de un día para otro.
+ *
+ * Traducir al leer y no migrar los datos es a propósito: no hay que tocar
+ * filas de nadie, y una cuenta creada hace meses se arregla sola al pintarse.
+ */
+const ALIAS: Record<string, string> = {
+  RappiPay: 'RappiCuenta',
+}
+
+/** El nombre actual de una entidad, aunque se guardara con uno antiguo. */
+export const institutionCanonicalName = (name: string) => ALIAS[name] ?? name
+
 /** Busca una entidad por nombre; útil para reconstruir el badge desde una cuenta. */
 export const institutionByName = (name: string) =>
-  CO_INSTITUTIONS.find((i) => i.name === name)
+  CO_INSTITUTIONS.find((i) => i.name === institutionCanonicalName(name))
 
 /**
  * Plataformas donde se registran inversiones, en el orden en que se ofrecen.

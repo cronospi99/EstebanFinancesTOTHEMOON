@@ -2,13 +2,18 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient, isSupabaseConfigured } from './supabase/client'
-import { DEMO_ACCOUNTS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_TRANSACTIONS } from './demo-data'
+import {
+  DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_SETTINGS,
+  DEMO_TRANSACTIONS,
+} from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
 import { monthKey, monthlyFromApy } from './format'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
-import type { Account, Budget, Goal, Holding, Pocket, Quote, Trade, Transaction } from './types'
+import type {
+  Account, Budget, BudgetAllocation, Goal, Holding, Pocket, Quote, Settings, Trade, Transaction,
+} from './types'
 import { uid } from './utils'
 
 const STORAGE_KEY = 'eftm.state.v2'
@@ -17,10 +22,13 @@ interface State {
   accounts: Account[]
   transactions: Transaction[]
   budgets: Budget[]
+  /** Dinero de cada cuenta apartado en un presupuesto. Ver types.ts. */
+  allocations: BudgetAllocation[]
   holdings: Holding[]
   goals: Goal[]
   /** Libro de operaciones de inversión; la posición se deriva de él. */
   trades: Trade[]
+  settings: Settings
 }
 
 /** Datos de ejemplo del Modo Demo. */
@@ -28,12 +36,17 @@ const INITIAL: State = {
   accounts: DEMO_ACCOUNTS,
   transactions: DEMO_TRANSACTIONS,
   budgets: DEMO_BUDGETS,
+  allocations: DEMO_ALLOCATIONS,
   holdings: DEMO_HOLDINGS,
   goals: DEMO_GOALS,
   trades: [],
+  settings: DEMO_SETTINGS,
 }
 
-const VACIO: State = { accounts: [], transactions: [], budgets: [], holdings: [], goals: [], trades: [] }
+const VACIO: State = {
+  accounts: [], transactions: [], budgets: [], allocations: [],
+  holdings: [], goals: [], trades: [], settings: {},
+}
 
 /**
  * Clave de almacenamiento local.
@@ -221,8 +234,17 @@ interface FinanceContextValue extends State {
   registrarOperacion: (op: Omit<Trade, 'id'>) => Promise<void>
   updateTrade: (id: string, patch: Partial<Omit<Trade, 'id'>>) => Promise<void>
   deleteTrade: (id: string) => Promise<void>
-  setBudget: (categoryId: string, amount: number) => void
+  setBudget: (categoryId: string, amount: number, dailyCap?: number | null) => void
   removeBudget: (categoryId: string) => void
+  /**
+   * Aparta dinero de una cuenta en un presupuesto, o lo devuelve con un
+   * importe negativo. No mueve el saldo de la cuenta: solo deja de estar libre.
+   */
+  asignarABolsillo: (a: { categoryId: string; accountId?: string; amount: number; note?: string }) => Promise<void>
+  /** Deshace una asignación concreta. */
+  quitarAsignacion: (id: string) => Promise<void>
+  /** Tope de gasto diario global. `null` lo quita. */
+  setDailyCap: (amount: number | null) => void
   addGoal: (g: Omit<Goal, 'id'>) => Promise<void>
   updateGoal: (id: string, patch: Partial<Goal>) => Promise<void>
   deleteGoal: (id: string) => Promise<void>
@@ -291,14 +313,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             if (cache) setState(cache)
           }
 
-          const [accounts, transactions, holdings, budgets, goals, trades] = await Promise.all([
-            supabase.from('accounts').select('*').order('created_at'),
-            supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
-            supabase.from('holdings').select('*'),
-            supabase.from('budgets').select('*'),
-            supabase.from('goals').select('*'),
-            supabase.from('trades').select('*').order('occurred_at', { ascending: false }),
-          ])
+          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings] =
+            await Promise.all([
+              supabase.from('accounts').select('*').order('created_at'),
+              supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
+              supabase.from('holdings').select('*'),
+              supabase.from('budgets').select('*'),
+              supabase.from('goals').select('*'),
+              supabase.from('trades').select('*').order('occurred_at', { ascending: false }),
+              supabase.from('budget_allocations').select('*').order('created_at'),
+              supabase.from('settings').select('*').maybeSingle(),
+            ])
           if (!vivo.current) return
 
           if (accounts.error) {
@@ -324,11 +349,22 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             accounts: (accounts.data ?? []).map(rowToAccount),
             transactions: (transactions.data ?? []).map(rowToTx),
             holdings: (holdings.data ?? []).map(rowToHolding),
-            budgets: (budgets.data ?? []).map((b) => ({ categoryId: b.category_id, amount: Number(b.amount) })),
+            budgets: (budgets.data ?? []).map((b) => ({
+              categoryId: b.category_id,
+              amount: Number(b.amount),
+              dailyCap: b.daily_cap == null ? undefined : Number(b.daily_cap),
+            })),
             goals: (goals.data ?? []).map(rowToGoal),
             // Si la tabla `trades` aún no existe en el proyecto, la consulta
             // falla sola y el resto de la app sigue funcionando sin historial.
             trades: trades.error ? [] : (trades.data ?? []).map(rowToTrade),
+            // Igual con las dos últimas: quien no haya corrido todavía la
+            // migración de bolsillos ve la app entera menos los bolsillos, en
+            // vez de una pantalla en blanco.
+            allocations: allocations.error ? [] : (allocations.data ?? []).map(rowToAllocation),
+            settings: settings.error || !settings.data
+              ? {}
+              : { dailyCap: settings.data.daily_cap == null ? undefined : Number(settings.data.daily_cap) },
           }
           setState(remoto)
           guardarEstado(claveEstado(uid), remoto)
@@ -791,16 +827,29 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote, persistirPosicion],
   )
 
+  /**
+   * Crea o cambia el presupuesto de una categoría.
+   *
+   * `dailyCap` sin pasar deja el tope diario como estaba; `null` lo quita. Con
+   * `undefined` a secas no se podría distinguir «no lo toques» de «bórralo», y
+   * editar solo el importe del mes se llevaría por delante el tope del día.
+   */
   const setBudget = useCallback(
-    (categoryId: string, amount: number) => {
-      setState((s) => ({
-        ...s,
-        budgets: s.budgets.some((b) => b.categoryId === categoryId)
-          ? s.budgets.map((b) => (b.categoryId === categoryId ? { ...b, amount } : b))
-          : [...s.budgets, { categoryId, amount }],
-      }))
+    (categoryId: string, amount: number, dailyCap?: number | null) => {
+      let capFinal: number | undefined
+      setState((s) => {
+        const previo = s.budgets.find((b) => b.categoryId === categoryId)
+        capFinal = dailyCap === undefined ? previo?.dailyCap : (dailyCap ?? undefined)
+        const actualizado: Budget = { categoryId, amount, dailyCap: capFinal }
+        return {
+          ...s,
+          budgets: previo
+            ? s.budgets.map((b) => (b.categoryId === categoryId ? actualizado : b))
+            : [...s.budgets, actualizado],
+        }
+      })
       remote()?.from('budgets').upsert(
-        { category_id: categoryId, amount },
+        { category_id: categoryId, amount, daily_cap: capFinal ?? null },
         { onConflict: 'user_id,category_id' },
       ).then(() => {}, () => {})
     },
@@ -809,8 +858,46 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const removeBudget = useCallback(
     (categoryId: string) => {
-      setState((s) => ({ ...s, budgets: s.budgets.filter((b) => b.categoryId !== categoryId) }))
+      // Se van también sus asignaciones: dejarlas huérfanas seguiría restando
+      // del disponible de las cuentas por un bolsillo que ya no existe.
+      setState((s) => ({
+        ...s,
+        budgets: s.budgets.filter((b) => b.categoryId !== categoryId),
+        allocations: s.allocations.filter((a) => a.categoryId !== categoryId),
+      }))
       remote()?.from('budgets').delete().eq('category_id', categoryId).then(() => {}, () => {})
+      remote()?.from('budget_allocations').delete().eq('category_id', categoryId).then(() => {}, () => {})
+    },
+    [remote],
+  )
+
+  // ---- Bolsillos virtuales -------------------------------------------------
+
+  const asignarABolsillo = useCallback(
+    async (a: { categoryId: string; accountId?: string; amount: number; note?: string }) => {
+      if (!a.amount) return
+      const fila: BudgetAllocation = { ...a, id: uid(), createdAt: new Date().toISOString() }
+      setState((s) => ({ ...s, allocations: [...s.allocations, fila] }))
+      await remote()?.from('budget_allocations').insert(allocationToRow(fila))
+    },
+    [remote],
+  )
+
+  const quitarAsignacion = useCallback(
+    async (id: string) => {
+      setState((s) => ({ ...s, allocations: s.allocations.filter((a) => a.id !== id) }))
+      await remote()?.from('budget_allocations').delete().eq('id', id)
+    },
+    [remote],
+  )
+
+  const setDailyCap = useCallback(
+    (amount: number | null) => {
+      setState((s) => ({ ...s, settings: { ...s.settings, dailyCap: amount ?? undefined } }))
+      remote()?.from('settings').upsert(
+        { daily_cap: amount, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' },
+      ).then(() => {}, () => {})
     },
     [remote],
   )
@@ -856,14 +943,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       registrarOperacion, updateTrade, deleteTrade,
-      setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo,
+      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
+      addGoal, updateGoal, deleteGoal, resetDemo,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
      addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
-     setBudget, removeBudget, addGoal, updateGoal, deleteGoal, resetDemo],
+     setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
+     addGoal, updateGoal, deleteGoal, resetDemo],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -1167,6 +1256,138 @@ export function useSpendByCategory(month = monthKey()) {
   }, [transactions, month])
 }
 
+/** Día local en formato YYYY-MM-DD, que es como se comparan dos fechas aquí. */
+const diaKey = (iso: string | Date = new Date()) => {
+  const d = typeof iso === 'string' ? new Date(iso) : iso
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Gasto de hoy, en total y por categoría.
+ *
+ * Es lo que miden los topes diarios. Va aparte de `useSpendByCategory` porque
+ * el mes y el día responden a preguntas distintas: uno dice si el presupuesto
+ * aguanta, el otro si hoy ya conviene parar.
+ */
+export function useSpendToday() {
+  const { transactions } = useFinance()
+  return useMemo(() => {
+    const hoy = diaKey()
+    const porCategoria = new Map<string, number>()
+    let total = 0
+    for (const t of transactions) {
+      if (t.type !== 'expense' || diaKey(t.occurredAt) !== hoy) continue
+      total += t.amount
+      porCategoria.set(t.categoryId, (porCategoria.get(t.categoryId) ?? 0) + t.amount)
+    }
+    return { total, porCategoria }
+  }, [transactions])
+}
+
+/**
+ * Cuánto tiene apartado cada cuenta en bolsillos.
+ *
+ * Es lo que separa el saldo total del disponible. Las asignaciones que
+ * perdieron su cuenta —porque se borró— no cuentan para ninguna: siguen siendo
+ * dinero del presupuesto, pero ya no restan de ningún saldo.
+ */
+export function useAllocatedByAccount() {
+  const { allocations } = useFinance()
+  return useMemo(() => {
+    const mapa = new Map<string, number>()
+    for (const a of allocations) {
+      if (!a.accountId) continue
+      mapa.set(a.accountId, (mapa.get(a.accountId) ?? 0) + a.amount)
+    }
+    return mapa
+  }, [allocations])
+}
+
+/**
+ * Saldo disponible de una cuenta: el total menos lo que tiene apartado.
+ *
+ * El total no se toca nunca al asignar —tiene que seguir cuadrando con el
+ * banco al céntimo—, así que la parte apartada se descuenta aquí, al mirar.
+ */
+export function useAccountsAvailable() {
+  const { accounts } = useFinance()
+  const apartado = useAllocatedByAccount()
+  return useMemo(() => {
+    const mapa = new Map<string, { total: number; apartado: number; libre: number }>()
+    for (const a of accounts) {
+      const total = accountTotal(a)
+      const ap = apartado.get(a.id) ?? 0
+      mapa.set(a.id, { total, apartado: ap, libre: total - ap })
+    }
+    return mapa
+  }, [accounts, apartado])
+}
+
+export interface Bolsillo {
+  categoryId: string
+  /** Tope del mes. */
+  amount: number
+  dailyCap?: number
+  /** Dinero apartado desde cuentas. */
+  asignado: number
+  /** Gasto del mes en la categoría. */
+  gastado: number
+  /** Gasto de hoy, para el tope diario. */
+  hoy: number
+  /** Lo que queda del dinero apartado. Negativo = se gastó más de lo apartado. */
+  disponible: number
+  /** De qué cuentas salió, con cuánto de cada una. */
+  origenes: { accountId?: string; amount: number }[]
+}
+
+/**
+ * Los presupuestos con su bolsillo: cuánto se apartó, de dónde y qué queda.
+ *
+ * Un gasto consume el bolsillo de su categoría sin que nadie lo registre
+ * aquí: `disponible` se deriva restando el gasto del mes a lo asignado. Así no
+ * hay dos verdades que puedan discrepar, y una transacción borrada devuelve
+ * su dinero al bolsillo sola.
+ */
+export function useBolsillos(): Bolsillo[] {
+  const { budgets, allocations } = useFinance()
+  const mes = useSpendByCategory()
+  const { porCategoria: hoy } = useSpendToday()
+
+  return useMemo(() => {
+    const porCategoria = new Map<string, BudgetAllocation[]>()
+    for (const a of allocations) {
+      porCategoria.set(a.categoryId, [...(porCategoria.get(a.categoryId) ?? []), a])
+    }
+
+    return budgets.map((b) => {
+      const filas = porCategoria.get(b.categoryId) ?? []
+      const asignado = filas.reduce((t, a) => t + a.amount, 0)
+      const gastado = mes.find((m) => m.categoryId === b.categoryId)?.amount ?? 0
+
+      // Agrupado por cuenta: cinco abonos desde Nequi son una línea, no cinco.
+      const porCuenta = new Map<string, number>()
+      for (const a of filas) {
+        const clave = a.accountId ?? '__sin'
+        porCuenta.set(clave, (porCuenta.get(clave) ?? 0) + a.amount)
+      }
+
+      return {
+        categoryId: b.categoryId,
+        amount: b.amount,
+        dailyCap: b.dailyCap,
+        asignado,
+        gastado,
+        hoy: hoy.get(b.categoryId) ?? 0,
+        disponible: asignado - gastado,
+        origenes: [...porCuenta.entries()]
+          .filter(([, amount]) => amount !== 0)
+          .map(([k, amount]) => ({ accountId: k === '__sin' ? undefined : k, amount }))
+          .sort((a, b2) => b2.amount - a.amount),
+      }
+    })
+  }, [budgets, allocations, mes, hoy])
+}
+
 export type RangeKey = '1D' | '5D' | '1S' | '1M' | '3M' | '6M' | '1A' | '5A'
 
 export const RANGE_DAYS: Record<RangeKey, number> = {
@@ -1350,3 +1571,20 @@ const goalPatchToRow = (p: Partial<Goal>) => {
   if (p.pocketId !== undefined) r.pocket_id = p.pocketId ?? null
   return r
 }
+
+const rowToAllocation = (r: Row): BudgetAllocation => ({
+  id: r.id,
+  categoryId: r.category_id,
+  accountId: r.account_id ?? undefined,
+  amount: Number(r.amount),
+  note: r.note ?? undefined,
+  createdAt: r.created_at,
+})
+const allocationToRow = (a: BudgetAllocation) => ({
+  id: a.id,
+  category_id: a.categoryId,
+  account_id: a.accountId ?? null,
+  amount: a.amount,
+  note: a.note ?? null,
+  created_at: a.createdAt,
+})

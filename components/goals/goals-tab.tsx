@@ -2,40 +2,49 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Target, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Target, Wallet } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
-import { Sheet } from '@/components/ui/sheet'
+import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { MoneyInput } from '@/components/ui/money-input'
+import { AllocateSheet } from '@/components/budgets/allocate-sheet'
+import { BudgetSheet } from '@/components/budgets/budget-sheet'
+import { DailyCapCard } from '@/components/budgets/daily-cap-card'
+import { GoalSheet } from '@/components/goals/goal-sheet'
 import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
-import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
-import { useFinance, useSpendByCategory } from '@/lib/store'
+import { formatMoney, parseKeypad } from '@/lib/format'
+import { useBolsillos, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
-
-const COLORES = ['#0A84FF', '#30D158', '#BF5AF2', '#FF9F0A', '#FF375F', '#40C8E0']
+import type { Bolsillo } from '@/lib/store'
+import type { Goal } from '@/lib/types'
 
 export function GoalsTab() {
-  const { budgets, goals, setBudget, removeBudget, addGoal, updateGoal, deleteGoal } = useFinance()
-  const gasto = useSpendByCategory()
+  const { accounts, budgets, goals, setBudget, updateGoal } = useFinance()
+  const bolsillos = useBolsillos()
 
-  const [nuevaMeta, setNuevaMeta] = useState(false)
-  const [editandoPresu, setEditandoPresu] = useState(false)
-  const [gName, setGName] = useState('')
-  const [gTarget, setGTarget] = useState('')
-  const [gSaved, setGSaved] = useState('')
-  const [gDeadline, setGDeadline] = useState('')
+  const [hojaMeta, setHojaMeta] = useState(false)
+  const [metaEditando, setMetaEditando] = useState<Goal | null>(null)
+  const [presuEditando, setPresuEditando] = useState<Bolsillo | null>(null)
+  const [asignandoA, setAsignandoA] = useState<string | null>(null)
   const [abonoId, setAbonoId] = useState<string | null>(null)
   const [abono, setAbono] = useState('')
 
-  const gastadoDe = (catId: string) => gasto.find((g) => g.categoryId === catId)?.amount ?? 0
+  const cuentaDe = (id?: string) => accounts.find((a) => a.id === id)
 
   return (
     <div className="space-y-6">
-      {/* ---- Metas de ahorro ------------------------------------------- */}
+      {/* ---- Tope del día ------------------------------------------------ */}
+      <DailyCapCard />
+
+      {/* ---- Metas de ahorro --------------------------------------------- */}
       <section>
         <CardHeader
           title="Metas de ahorro"
           action={
-            <button onClick={() => { haptic(6); setNuevaMeta(true) }} className="flex items-center gap-1 text-[13px] font-medium text-accent-blue">
+            <button
+              onClick={() => { haptic(6); setMetaEditando(null); setHojaMeta(true) }}
+              className="flex items-center gap-1 text-[13px] font-medium text-accent-blue"
+            >
               <Plus size={14} /> Nueva
             </button>
           }
@@ -72,12 +81,14 @@ export function GoalsTab() {
                         {formatMoney(g.saved, g.currency)} de {formatMoney(g.target, g.currency)}
                       </p>
                     </div>
+                    {/* Editar en vez de borrar: borrar era lo único que se
+                        podía hacer, y con ello se perdía lo abonado. */}
                     <button
-                      onClick={() => { haptic([16, 30]); deleteGoal(g.id) }}
-                      aria-label={`Eliminar meta ${g.name}`}
+                      onClick={() => { haptic(6); setMetaEditando(g); setHojaMeta(true) }}
+                      aria-label={`Editar meta ${g.name}`}
                       className="press shrink-0 p-1 text-label-tertiary"
                     >
-                      <Trash2 size={15} />
+                      <Pencil size={15} />
                     </button>
                   </div>
 
@@ -114,15 +125,10 @@ export function GoalsTab() {
 
                   {abonoId === g.id ? (
                     <div className="mt-3 flex gap-2">
-                      <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.05] px-3 py-2">
-                        <span className="text-[14px] text-label-secondary">{g.currency === 'USD' ? 'US$' : '$'}</span>
-                        <input
-                          autoFocus value={abono ? formatKeypad(abono) : ''}
-                          onChange={(e) => setAbono(e.target.value.replace(/[^\d,]/g, ''))}
-                          placeholder="0" inputMode="decimal"
-                          className="tnum w-full bg-transparent text-[15px] font-semibold text-label focus:outline-none"
-                        />
-                      </div>
+                      <MoneyInput
+                        value={abono} onChange={setAbono} currency={g.currency}
+                        autoFocus size="sm" className="flex-1"
+                      />
                       <button
                         onClick={() => {
                           haptic([14, 30])
@@ -133,8 +139,10 @@ export function GoalsTab() {
                       >
                         Abonar
                       </button>
-                      <button onClick={() => { setAbonoId(null); setAbono('') }}
-                        className="press rounded-xl border border-hairline px-3 text-[14px] text-label-secondary">
+                      <button
+                        onClick={() => { setAbonoId(null); setAbono('') }}
+                        className="press rounded-xl border border-hairline px-3 text-[14px] text-label-secondary"
+                      >
                         ✕
                       </button>
                     </div>
@@ -153,46 +161,49 @@ export function GoalsTab() {
         )}
       </section>
 
-      {/* ---- Presupuestos ----------------------------------------------- */}
+      {/* ---- Presupuestos, con su bolsillo -------------------------------- */}
       <section>
-        <CardHeader
-          title="Presupuestos del mes"
-          action={
-            <button onClick={() => { haptic(6); setEditandoPresu((v) => !v) }} className="text-[13px] font-medium text-accent-blue">
-              {editandoPresu ? 'Listo' : 'Editar'}
-            </button>
-          }
-        />
+        <CardHeader title="Presupuestos del mes" />
 
-        <Card className="divide-y divide-hairline overflow-hidden">
-          {budgets.map((b) => {
-            const cat = categoryById(b.categoryId)
-            const usado = gastadoDe(b.categoryId)
-            const pct = b.amount > 0 ? usado / b.amount : 0
-            const pasado = pct > 1
-            return (
-              <div key={b.categoryId} className="flex items-center gap-3 px-4 py-3">
-                <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-baseline justify-between gap-2">
-                    <span className="truncate text-[14px] font-medium text-label">{cat.name}</span>
-                    {editandoPresu ? (
-                      <div className="flex items-center gap-1 rounded-lg border border-hairline bg-white/[0.06] px-2 py-1">
-                        <span className="text-[12px] text-label-secondary">$</span>
-                        <input
-                          value={formatKeypad(String(b.amount))}
-                          onChange={(e) => setBudget(b.categoryId, parseKeypad(e.target.value.replace(/[^\d,]/g, '')))}
-                          inputMode="numeric"
-                          className="tnum w-[86px] bg-transparent text-right text-[13px] font-semibold text-label focus:outline-none"
-                        />
-                      </div>
-                    ) : (
-                      <span className="tnum shrink-0 text-[13px] text-label-tertiary">
-                        {formatMoney(usado)} / {formatMoney(b.amount)}
-                      </span>
-                    )}
+        {!bolsillos.length ? (
+          <Card className="p-6 text-center">
+            <Wallet size={22} className="mx-auto mb-2 text-label-tertiary" />
+            <p className="text-[15px] font-medium text-label">Sin presupuestos</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
+              Añade una categoría abajo para vigilarla y apartarle dinero.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {bolsillos.map((b) => {
+              const cat = categoryById(b.categoryId)
+              const pct = b.amount > 0 ? b.gastado / b.amount : 0
+              const pasado = pct > 1
+              // Gastar más de lo apartado no se bloquea: el dinero salió de la
+              // cuenta igual. Se marca, que es lo que hace falta saber.
+              const sobregiro = b.asignado > 0 && b.disponible < 0
+              const diaPasado = Boolean(b.dailyCap && b.hoy > b.dailyCap)
+
+              return (
+                <Card key={b.categoryId} className="p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-medium text-label">{cat.name}</p>
+                      <p className="tnum text-[12px] text-label-tertiary">
+                        {formatMoney(b.gastado)} de {formatMoney(b.amount)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { haptic(6); setPresuEditando(b) }}
+                      aria-label={`Editar presupuesto de ${cat.name}`}
+                      className="press shrink-0 p-1 text-label-tertiary"
+                    >
+                      <Pencil size={15} />
+                    </button>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+
+                  <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                     <motion.div
                       initial={{ width: 0 }} animate={{ width: `${Math.min(pct, 1) * 100}%` }}
                       transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
@@ -200,30 +211,74 @@ export function GoalsTab() {
                       style={{ backgroundColor: pasado ? '#FF453A' : cat.color }}
                     />
                   </div>
-                </div>
-                {editandoPresu && (
-                  <button
-                    onClick={() => { haptic([16, 30]); removeBudget(b.categoryId) }}
-                    aria-label={`Quitar presupuesto de ${cat.name}`}
-                    className="press shrink-0 p-1 text-label-tertiary"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-          {!budgets.length && (
-            <p className="p-6 text-center text-[13px] text-label-secondary">
-              Sin presupuestos. Añade uno para vigilar una categoría.
-            </p>
-          )}
-        </Card>
 
-        {editandoPresu && (
+                  {/* El bolsillo: cuánto hay apartado y qué queda de ello. */}
+                  <div className="mb-3 grid grid-cols-2 gap-3 rounded-xl bg-white/[0.04] p-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-label-tertiary">Apartado</p>
+                      <p className="tnum text-[15px] font-semibold text-label">{formatMoney(b.asignado)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-label-tertiary">Queda</p>
+                      <p className={cn('tnum text-[15px] font-semibold', sobregiro ? 'text-accent-red' : 'text-accent-green')}>
+                        {formatMoney(b.disponible)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* De dónde salió: la pregunta que el bolsillo tiene que
+                      responder para que apartar signifique algo. */}
+                  {b.origenes.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {b.origenes.map((o) => {
+                        const acc = cuentaDe(o.accountId)
+                        return (
+                          <span
+                            key={o.accountId ?? '__sin'}
+                            className="flex items-center gap-1.5 rounded-pill border border-hairline py-1 pl-1 pr-2.5 text-[11px] text-label-secondary"
+                          >
+                            {acc
+                              ? <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
+                              : <span className="h-5 w-5 rounded-md bg-white/[0.07]" />}
+                            <span className="max-w-[92px] truncate">{acc?.name ?? 'Cuenta borrada'}</span>
+                            <span className="tnum font-semibold text-label">{formatMoney(o.amount)}</span>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {sobregiro && (
+                    <p className="mb-3 rounded-lg bg-accent-red/10 px-3 py-2 text-[12px] leading-relaxed text-accent-red">
+                      Has gastado {formatMoney(-b.disponible)} más de lo apartado. El dinero salió de
+                      la cuenta igual; aparta más o sube el tope.
+                    </p>
+                  )}
+
+                  {b.dailyCap ? (
+                    <p className={cn('mb-3 text-[12px]', diaPasado ? 'text-accent-orange' : 'text-label-tertiary')}>
+                      Hoy: {formatMoney(b.hoy)} de {formatMoney(b.dailyCap)}
+                      {diaPasado && ' · tope diario superado'}
+                    </p>
+                  ) : null}
+
+                  <button
+                    onClick={() => { haptic(6); setAsignandoA(b.categoryId) }}
+                    className="press w-full rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+                  >
+                    Apartar dinero
+                  </button>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Alta rápida de categorías sin presupuesto. */}
+        {DEFAULT_CATEGORIES.some((c) => c.kind === 'expense' && !budgets.some((b) => b.categoryId === c.id)) && (
           <div className="mt-3">
             <p className="mb-2 px-1 text-[12px] text-label-tertiary">Añadir categoría</p>
-            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:px-0">
               {DEFAULT_CATEGORIES
                 .filter((c) => c.kind === 'expense' && !budgets.some((b) => b.categoryId === c.id))
                 .map((c) => (
@@ -241,70 +296,14 @@ export function GoalsTab() {
         )}
       </section>
 
-      {/* ---- Alta de meta ------------------------------------------------ */}
-      <Sheet open={nuevaMeta} onClose={() => setNuevaMeta(false)}>
-        <div className="px-5 pb-8 pt-1">
-          <h2 className="mb-5 text-center text-[17px] font-semibold">Nueva meta</h2>
-
-          <input
-            value={gName} onChange={(e) => setGName(e.target.value)} placeholder="Viaje a Japón" autoFocus
-            className="mb-3 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
-                       text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
-          />
-
-          <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">Objetivo</label>
-          <div className="mb-3 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
-            <span className="text-[18px] text-label-secondary">$</span>
-            <input
-              value={gTarget ? formatKeypad(gTarget) : ''}
-              onChange={(e) => setGTarget(e.target.value.replace(/[^\d,]/g, ''))}
-              placeholder="12.000.000" inputMode="decimal"
-              className="tnum w-full bg-transparent text-[20px] font-semibold text-label placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
-            />
-          </div>
-
-          <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">Ya ahorrado</label>
-          <div className="mb-3 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
-            <span className="text-[18px] text-label-secondary">$</span>
-            <input
-              value={gSaved ? formatKeypad(gSaved) : ''}
-              onChange={(e) => setGSaved(e.target.value.replace(/[^\d,]/g, ''))}
-              placeholder="0" inputMode="decimal"
-              className="tnum w-full bg-transparent text-[20px] font-semibold text-label placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
-            />
-          </div>
-
-          <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
-            Fecha límite (opcional)
-          </label>
-          <input
-            type="date" value={gDeadline} onChange={(e) => setGDeadline(e.target.value)}
-            className="mb-5 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
-                       text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
-          />
-
-          <button
-            onClick={() => {
-              if (!gName.trim() || parseKeypad(gTarget) <= 0) return
-              haptic([14, 40, 22])
-              addGoal({
-                name: gName.trim(),
-                target: parseKeypad(gTarget),
-                saved: parseKeypad(gSaved),
-                currency: 'COP',
-                deadline: gDeadline || undefined,
-                color: COLORES[goals.length % COLORES.length],
-              })
-              setGName(''); setGTarget(''); setGSaved(''); setGDeadline(''); setNuevaMeta(false)
-            }}
-            disabled={!gName.trim() || parseKeypad(gTarget) <= 0}
-            className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                       shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
-          >
-            Crear meta
-          </button>
-        </div>
-      </Sheet>
+      <GoalSheet
+        open={hojaMeta}
+        meta={metaEditando}
+        indice={goals.length}
+        onClose={() => { setHojaMeta(false); setMetaEditando(null) }}
+      />
+      <BudgetSheet bolsillo={presuEditando} onClose={() => setPresuEditando(null)} />
+      <AllocateSheet categoryId={asignandoA} onClose={() => setAsignandoA(null)} />
     </div>
   )
 }

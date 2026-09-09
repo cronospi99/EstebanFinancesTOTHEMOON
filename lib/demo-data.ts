@@ -1,4 +1,4 @@
-import type { Account, Budget, Goal, Holding, Transaction } from './types'
+import type { Account, Budget, BudgetAllocation, Goal, Holding, Settings, Transaction } from './types'
 
 const daysAgo = (n: number, hour = 12) => {
   const d = new Date()
@@ -67,13 +67,29 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
 ]
 
 export const DEMO_BUDGETS: Budget[] = [
-  { categoryId: 'food', amount: 900_000 },
+  { categoryId: 'food', amount: 900_000, dailyCap: 45_000 },
   { categoryId: 'market', amount: 1_200_000 },
-  { categoryId: 'transport', amount: 400_000 },
-  { categoryId: 'delivery', amount: 300_000 },
+  { categoryId: 'transport', amount: 400_000, dailyCap: 20_000 },
+  { categoryId: 'delivery', amount: 300_000, dailyCap: 25_000 },
   { categoryId: 'subs', amount: 150_000 },
   { categoryId: 'clothes', amount: 600_000 },
 ]
+
+/**
+ * Bolsillos virtuales de ejemplo: dinero de una cuenta apartado para una
+ * categoría. Ninguno mueve el saldo de su cuenta — solo lo deja de dejar
+ * libre— así que los saldos de arriba siguen siendo los del banco.
+ */
+export const DEMO_ALLOCATIONS: BudgetAllocation[] = [
+  { id: 'al1', categoryId: 'food', accountId: 'acc_banco', amount: 700_000, createdAt: daysAgo(6, 9) },
+  { id: 'al2', categoryId: 'food', accountId: 'acc_nequi', amount: 200_000, createdAt: daysAgo(2, 18) },
+  { id: 'al3', categoryId: 'market', accountId: 'acc_banco', amount: 1_200_000, createdAt: daysAgo(6, 9) },
+  { id: 'al4', categoryId: 'transport', accountId: 'acc_nequi', amount: 250_000, createdAt: daysAgo(5, 11) },
+  { id: 'al5', categoryId: 'delivery', accountId: 'acc_rappicard', amount: 300_000, createdAt: daysAgo(4, 20) },
+]
+
+/** Tope diario global de ejemplo. */
+export const DEMO_SETTINGS: Settings = { dailyCap: 120_000 }
 
 export const DEMO_HOLDINGS: Holding[] = [
   { id: 'h1', symbol: 'VOO', name: 'Vanguard S&P 500 ETF', quantity: 12.4, avgCost: 465.2, assetType: 'etf', currency: 'USD', accountId: 'acc_arq' },
