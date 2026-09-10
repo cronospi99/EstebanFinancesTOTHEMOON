@@ -1,4 +1,6 @@
-import type { Account, Budget, BudgetAllocation, Goal, Holding, Settings, Transaction } from './types'
+import type {
+  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, Settings, Transaction,
+} from './types'
 
 const daysAgo = (n: number, hour = 12) => {
   const d = new Date()
@@ -103,4 +105,31 @@ export const DEMO_GOALS: Goal[] = [
   { id: 'g1', name: 'Viaje a Japón', target: 12_000_000, saved: 2_400_000, currency: 'COP', deadline: '2027-03-01', color: '#40C8E0', accountId: 'acc_nequi', pocketId: 'p_viaje' },
   { id: 'g2', name: 'Fondo de emergencia', target: 18_000_000, saved: 3_000_000, currency: 'COP', color: '#30D158', accountId: 'acc_nequi', pocketId: 'p_emergencia' },
   { id: 'g3', name: 'Portátil nuevo', target: 6_500_000, saved: 1_200_000, currency: 'COP', deadline: '2026-12-15', color: '#BF5AF2' },
+]
+
+/** Solo día, que es como se guardan las fechas de una deuda. */
+const diaAtras = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * Dos deudas de ejemplo, elegidas para enseñar los dos casos que existen: una
+ * con interés pactado y otra sin él, que es lo normal entre conocidos.
+ */
+export const DEMO_DEBTS: Debt[] = [
+  {
+    id: 'd1', person: 'Mamá', principal: 3_000_000, currency: 'COP',
+    startedAt: diaAtras(120), color: '#FF9F0A',
+    note: 'Para la cuota inicial de la moto',
+  },
+  {
+    id: 'd2', person: 'Andrés', principal: 1_500_000, currency: 'COP',
+    // 2 % mensual, la forma en que se pacta esto por aquí, en su equivalente anual.
+    rate: 26.824, startedAt: diaAtras(75), dueDate: diaAtras(-45), color: '#FF453A',
+  },
+]
+
+export const DEMO_DEBT_PAYMENTS: DebtPayment[] = [
+  { id: 'dp1', debtId: 'd1', amount: 500_000, occurredAt: diaAtras(90) },
+  { id: 'dp2', debtId: 'd1', amount: 500_000, occurredAt: diaAtras(60) },
+  { id: 'dp3', debtId: 'd1', amount: 400_000, occurredAt: diaAtras(20) },
+  { id: 'dp4', debtId: 'd2', amount: 300_000, occurredAt: diaAtras(40) },
 ]
