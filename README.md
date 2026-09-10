@@ -312,10 +312,27 @@ La tasa se teclea mensual, que es como se pacta por aquí, y se guarda efectiva
 anual como las de las cuentas. El formulario enseña la equivalencia, porque un
 2 % mensual no es un 24 % anual sino un 26,8 %.
 
-**El saldo pendiente se descuenta del patrimonio.** Una cifra de patrimonio que
-ignora lo que debes no es el patrimonio de nadie. Una deuda en dólares sin tasa
-de cambio conocida queda fuera del total y se avisa, igual que una cuenta en
-dólares.
+**El saldo pendiente NO se descuenta del patrimonio**, y es a propósito. Son dos
+preguntas distintas —cuánto tienes y cuánto debes— y restarlas mezcla el dinero
+que está en las cuentas con una obligación que se irá pagando desde esas mismas
+cuentas: cada abono ya baja el saldo de la cuenta de la que sale, así que
+descontarlo además del total lo contaría dos veces por el camino. La deuda se
+enseña en su propio bloque, en el resumen bajo el patrimonio y en Cuentas.
+
+---
+
+## Transferir a efectivo
+
+Sacar plata del cajero es de lo más corriente que hay, y sin una cuenta de
+efectivo creada a mano no había a dónde mandarla: el retiro terminaba anotado
+como un gasto, que no lo es —el dinero sigue siendo tuyo, solo cambió de sitio—.
+
+La hoja de **Transferir** ofrece siempre «Efectivo» como destino, el primero de
+la tira. Si no existe la cuenta, se crea al confirmar y no al tocar la opción:
+tocarla es mirar, no decidir, y una cuenta creada por mirar se queda para
+siempre si se cierra la hoja. Hay una por moneda —los dólares en efectivo no
+son los mismos pesos en efectivo— y no se ofrece cuando ya existe: entonces
+aparece como una cuenta más.
 
 ---
 

@@ -11,7 +11,7 @@ import { BalanceChart } from './balance-chart'
 import { RangePicker } from './range-picker'
 import { Card } from '@/components/ui/card'
 import { formatMoney, formatPercent } from '@/lib/format'
-import { RANGE_LABEL, useBalanceSeries, useExpectedYield, useFinance, useMonthSummary, useNetWorthDetail, useYieldBreakdown, type RangeKey } from '@/lib/store'
+import { RANGE_LABEL, useBalanceSeries, useDeudaTotal, useExpectedYield, useFinance, useMonthSummary, useNetWorthDetail, useYieldBreakdown, type RangeKey } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 
 export function NetWorthCard() {
@@ -24,6 +24,7 @@ export function NetWorthCard() {
   const [hidden, setHidden] = useState(false)
   const [verDesglose, setVerDesglose] = useState(false)
   const desglose = useYieldBreakdown()
+  const deuda = useDeudaTotal()
 
   const first = series[0]?.value ?? netWorth
   const delta = netWorth - first
@@ -174,6 +175,33 @@ export function NetWorthCard() {
         <Flow label="Ingresos" value={income} hidden={hidden} tone="green" />
         <Flow label="Gastos" value={expense} hidden={hidden} tone="red" />
       </div>
+
+      {/*
+        Lo que debes, aparte y sin restar.
+
+        Son dos preguntas distintas —cuánto tienes y cuánto debes— y meterlas en
+        la misma cifra deja al patrimonio diciendo media verdad: el dinero de
+        las cuentas está ahí de verdad, y la deuda se irá pagando desde esas
+        mismas cuentas, que es donde se notará. Por eso va debajo de la línea,
+        con su rótulo, y lleva a la pantalla donde se maneja.
+      */}
+      {deuda.total > 0 && (
+        <Link
+          href="/cuentas"
+          className="mt-3 flex items-center gap-2.5 rounded-2xl border border-hairline bg-white/[0.03] px-4 py-3"
+        >
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-orange" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] text-label-secondary">
+              Deudas{deuda.cuantas > 1 ? ` · ${deuda.cuantas}` : ''}
+            </p>
+            <p className="text-[11px] text-label-tertiary">Aparte del patrimonio</p>
+          </div>
+          <span className="tnum shrink-0 text-[17px] font-semibold text-accent-orange">
+            {hidden ? '••••' : formatMoney(deuda.total)}
+          </span>
+        </Link>
+      )}
     </Card>
   )
 }
