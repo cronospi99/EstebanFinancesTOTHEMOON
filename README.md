@@ -144,10 +144,12 @@ components/
 ├─ dashboard/             Patrimonio, cuentas, anillos de presupuesto
 ├─ expenses/              Dona, lista de movimientos
 ├─ investments/           Fila de posición
+├─ debts/                 Deudas personales: lista y alta
 └─ ui/                    Card, Sheet, Segmented, CategoryIcon
 
 lib/
 ├─ store.tsx              Estado + selectores derivados
+├─ deudas.ts              Saldo e intereses de un préstamo personal
 ├─ format.ts              Moneda COP, fechas, números tabulares
 ├─ use-quotes.ts          Sondeo de precios
 └─ supabase/              Clientes navegador y servidor
@@ -281,6 +283,39 @@ AVGO, que es Broadcom — y por el mismo motivo GDXY no cuelga de VanEck, que es
 quien emite el GDX que ese fondo usa por debajo, sino de YieldMax, que es quien
 lo emite. Lo que no está en el mapa —acciones sueltas, cripto— sigue mostrando
 su ticker en la insignia, que ahí es justo la información útil.
+
+---
+
+## Deudas personales
+
+En **Cuentas**, debajo de las cuentas: lo que le debes a una persona, que es la
+otra mitad de dónde está tu dinero —el que ya no es tuyo aunque lo tengas en la
+mano—. De cada deuda se guarda a quién le debes, cuánto te prestó, en qué
+moneda, desde cuándo corre y, si lo pactaron, qué interés.
+
+Va aparte de las cuentas de crédito porque el dato de partida es otro: una
+tarjeta tiene cupo, corte y cuotas; un préstamo entre personas tiene un nombre
+propio y un historial de abonos.
+
+**Los abonos son filas, no un campo.** Con interés, *cuándo* pagaste cambia
+cuánto debes hoy, así que un total suelto no permitiría calcularlo. Y sin
+interés sigue siendo lo que uno quiere ver: qué le has ido dando y en qué
+fechas.
+
+**El interés corre sobre el saldo pendiente**, no sobre el monto original. Si
+te prestaron un millón al 2 % mensual y ya devolviste la mitad, el mes
+siguiente el interés se calcula sobre lo que queda: cobrarlo sobre el millón
+entero haría que pagar no sirviera de nada. El cálculo recorre el tiempo por
+tramos —acumula hasta cada abono, lo resta, y sigue— en `lib/deudas.ts`.
+
+La tasa se teclea mensual, que es como se pacta por aquí, y se guarda efectiva
+anual como las de las cuentas. El formulario enseña la equivalencia, porque un
+2 % mensual no es un 24 % anual sino un 26,8 %.
+
+**El saldo pendiente se descuenta del patrimonio.** Una cifra de patrimonio que
+ignora lo que debes no es el patrimonio de nadie. Una deuda en dólares sin tasa
+de cambio conocida queda fuera del total y se avisa, igual que una cuenta en
+dólares.
 
 ---
 

@@ -3,17 +3,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import {
-  DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_GOALS, DEMO_HOLDINGS, DEMO_SETTINGS,
-  DEMO_TRANSACTIONS,
+  DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_DEBTS, DEMO_DEBT_PAYMENTS, DEMO_GOALS,
+  DEMO_HOLDINGS, DEMO_SETTINGS, DEMO_TRANSACTIONS,
 } from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
+import { saldoDeuda, type SaldoDeuda } from './deudas'
 import { monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
 import type {
-  Account, Budget, BudgetAllocation, Goal, Holding, Pocket, Quote, Settings, Trade, Transaction,
+  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, Pocket, Quote, Settings,
+  Trade, Transaction,
 } from './types'
 import { uid } from './utils'
 
@@ -29,6 +31,10 @@ interface State {
   goals: Goal[]
   /** Libro de operaciones de inversión; la posición se deriva de él. */
   trades: Trade[]
+  /** Préstamos entre personas: lo que le debes a alguien. */
+  debts: Debt[]
+  /** Abonos a esas deudas; el saldo se deriva de ellos. */
+  debtPayments: DebtPayment[]
   settings: Settings
 }
 
@@ -41,12 +47,14 @@ const INITIAL: State = {
   holdings: DEMO_HOLDINGS,
   goals: DEMO_GOALS,
   trades: [],
+  debts: DEMO_DEBTS,
+  debtPayments: DEMO_DEBT_PAYMENTS,
   settings: DEMO_SETTINGS,
 }
 
 const VACIO: State = {
   accounts: [], transactions: [], budgets: [], allocations: [],
-  holdings: [], goals: [], trades: [], settings: {},
+  holdings: [], goals: [], trades: [], debts: [], debtPayments: [], settings: {},
 }
 
 /**
@@ -266,6 +274,12 @@ interface FinanceContextValue extends State {
   addGoal: (g: Omit<Goal, 'id'>) => Promise<void>
   updateGoal: (id: string, patch: Partial<Goal>) => Promise<void>
   deleteGoal: (id: string) => Promise<void>
+  addDebt: (d: Omit<Debt, 'id'>) => Promise<void>
+  updateDebt: (id: string, patch: Partial<Debt>) => Promise<void>
+  /** Borra la deuda y, con ella, sus abonos. */
+  deleteDebt: (id: string) => Promise<void>
+  abonarDeuda: (a: Omit<DebtPayment, 'id'>) => Promise<void>
+  deleteDebtPayment: (id: string) => Promise<void>
   resetDemo: () => void
   /** Cierra la sesión y borra de este dispositivo lo que era del usuario. */
   signOut: () => Promise<void>
@@ -336,7 +350,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             if (cache) setState(cache)
           }
 
-          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings] =
+          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
+                 debts, debtPayments] =
             await Promise.all([
               supabase.from('accounts').select('*').order('created_at'),
               supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
@@ -346,6 +361,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               supabase.from('trades').select('*').order('occurred_at', { ascending: false }),
               supabase.from('budget_allocations').select('*').order('created_at'),
               supabase.from('settings').select('*').maybeSingle(),
+              supabase.from('debts').select('*').order('started_at'),
+              supabase.from('debt_payments').select('*').order('occurred_at'),
             ])
           if (!vivo.current) return
 
@@ -385,6 +402,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             // migración de bolsillos ve la app entera menos los bolsillos, en
             // vez de una pantalla en blanco.
             allocations: allocations.error ? [] : (allocations.data ?? []).map(rowToAllocation),
+            // Y con las deudas: quien no haya corrido todavía su migración ve
+            // la app entera menos las deudas.
+            debts: debts.error ? [] : (debts.data ?? []).map(rowToDebt),
+            debtPayments: debtPayments.error ? [] : (debtPayments.data ?? []).map(rowToDebtPayment),
             settings: settings.error || !settings.data
               ? {}
               : { dailyCap: settings.data.daily_cap == null ? undefined : Number(settings.data.daily_cap) },
@@ -952,6 +973,56 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  // ---- Deudas personales ---------------------------------------------------
+  const addDebt = useCallback(
+    async (d: Omit<Debt, 'id'>) => {
+      const full: Debt = { ...d, id: uid() }
+      setState((s) => ({ ...s, debts: [...s.debts, full] }))
+      await remote()?.from('debts').insert(debtToRow(full))
+    },
+    [remote],
+  )
+
+  const updateDebt = useCallback(
+    async (id: string, patch: Partial<Debt>) => {
+      setState((s) => ({ ...s, debts: s.debts.map((d) => (d.id === id ? { ...d, ...patch } : d)) }))
+      await remote()?.from('debts').update(debtPatchToRow(patch)).eq('id', id)
+    },
+    [remote],
+  )
+
+  const deleteDebt = useCallback(
+    async (id: string) => {
+      // Los abonos se van con ella también en local: en el servidor lo hace la
+      // clave foránea en cascada, y si aquí se quedaran, volverían a aparecer
+      // al crear otra deuda que reutilizara el id.
+      setState((s) => ({
+        ...s,
+        debts: s.debts.filter((d) => d.id !== id),
+        debtPayments: s.debtPayments.filter((p) => p.debtId !== id),
+      }))
+      await remote()?.from('debts').delete().eq('id', id)
+    },
+    [remote],
+  )
+
+  const abonarDeuda = useCallback(
+    async (a: Omit<DebtPayment, 'id'>) => {
+      const full: DebtPayment = { ...a, id: uid() }
+      setState((s) => ({ ...s, debtPayments: [...s.debtPayments, full] }))
+      await remote()?.from('debt_payments').insert(debtPaymentToRow(full))
+    },
+    [remote],
+  )
+
+  const deleteDebtPayment = useCallback(
+    async (id: string) => {
+      setState((s) => ({ ...s, debtPayments: s.debtPayments.filter((p) => p.id !== id) }))
+      await remote()?.from('debt_payments').delete().eq('id', id)
+    },
+    [remote],
+  )
+
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
   // explícita para que nunca pueda llevarse por delante los datos de un usuario.
   const resetDemo = useCallback(() => {
@@ -1006,6 +1077,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       registrarOperacion, updateTrade, deleteTrade,
       setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
       addGoal, updateGoal, deleteGoal, resetDemo, signOut,
+      addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
@@ -1013,7 +1085,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
-     addGoal, updateGoal, deleteGoal, resetDemo, signOut],
+     addGoal, updateGoal, deleteGoal, resetDemo, signOut,
+     addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -1167,6 +1240,65 @@ export function useHoldingsValueByAccount() {
   }, [holdings, quotes, fxRate])
 }
 
+/** Null se propaga: una deuda en dólares sin tasa no se puede convertir. */
+const redondeaPesos = (v: number | null) => (v === null ? null : Math.round(v))
+
+export interface DeudaConSaldo extends SaldoDeuda {
+  deuda: Debt
+  /** Sus abonos, del más reciente al más antiguo. */
+  abonos: DebtPayment[]
+  /** El saldo pendiente en pesos, o null si está en dólares y falta la tasa. */
+  saldoCOP: number | null
+}
+
+/**
+ * Las deudas con su saldo ya calculado, las saldadas al final.
+ *
+ * El cálculo vive aquí y no en cada pantalla porque el saldo de una deuda con
+ * interés no es una resta: depende de las fechas de los abonos. Ver `deudas.ts`.
+ */
+export function useDeudas(): DeudaConSaldo[] {
+  const { debts, debtPayments, fxRate } = useFinance()
+  return useMemo(() => {
+    const porDeuda = new Map<string, DebtPayment[]>()
+    for (const p of debtPayments) {
+      const lista = porDeuda.get(p.debtId)
+      if (lista) lista.push(p)
+      else porDeuda.set(p.debtId, [p])
+    }
+
+    return debts
+      .map((deuda) => {
+        const abonos = porDeuda.get(deuda.id) ?? []
+        const saldo = saldoDeuda(deuda, abonos)
+        return {
+          deuda,
+          ...saldo,
+          abonos: [...abonos].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
+          // A pesos enteros: el interés sale con decimales y de aquí pasa al
+          // patrimonio, que es una cifra que nadie quiere ver con centavos.
+          saldoCOP: redondeaPesos(toCOP(saldo.saldo, deuda.currency, fxRate)),
+        }
+      })
+      // Lo que aún se debe primero y por tamaño; lo saldado baja al fondo, que
+      // es donde se consulta y no donde estorba.
+      .sort((a, b) => Number(a.saldada) - Number(b.saldada) || b.saldo - a.saldo)
+  }, [debts, debtPayments, fxRate])
+}
+
+/** Lo que se debe en total, en pesos. */
+export function useDeudaTotal() {
+  const deudas = useDeudas()
+  return useMemo(() => {
+    let total = 0, sinConvertir = 0
+    for (const d of deudas) {
+      if (d.saldoCOP === null) sinConvertir++
+      else total += d.saldoCOP
+    }
+    return { total, sinConvertir, cuantas: deudas.filter((d) => !d.saldada).length }
+  }, [deudas])
+}
+
 /**
  * Patrimonio neto en pesos. `incompleto` avisa de que hay cuentas en dólares
  * que no se pudieron convertir y quedaron fuera del total.
@@ -1174,6 +1306,7 @@ export function useHoldingsValueByAccount() {
 export function useNetWorthDetail() {
   const rows = useAccountsInCOP()
   const inv = useInvestmentsValue()
+  const deuda = useDeudaTotal()
   return useMemo(() => {
     let cuentas = 0, sinConvertir = 0
     for (const r of rows) {
@@ -1181,16 +1314,19 @@ export function useNetWorthDetail() {
       else cuentas += r.cop
     }
     if (inv.incompleto) sinConvertir++
+    sinConvertir += deuda.sinConvertir
     // El patrimonio incluye el portafolio: dejarlo fuera daba una cifra que no
-    // era el patrimonio de nadie.
+    // era el patrimonio de nadie. Y descuenta lo que se debe a personas, por lo
+    // mismo: un patrimonio que ignora las deudas no es el de nadie tampoco.
     return {
-      total: cuentas + inv.value,
+      total: cuentas + inv.value - deuda.total,
       cuentas,
       inversiones: inv.value,
+      deudas: deuda.total,
       incompleto: sinConvertir > 0,
       sinConvertir,
     }
-  }, [rows, inv])
+  }, [rows, inv, deuda])
 }
 
 export function useNetWorth() {
@@ -1636,6 +1772,44 @@ const goalPatchToRow = (p: Partial<Goal>) => {
   if (p.pocketId !== undefined) r.pocket_id = p.pocketId ?? null
   return r
 }
+
+const rowToDebt = (r: Row): Debt => ({
+  id: r.id, person: r.person, principal: Number(r.principal),
+  currency: r.currency ?? 'COP',
+  rate: r.rate == null ? undefined : Number(r.rate),
+  startedAt: String(r.started_at).slice(0, 10),
+  dueDate: r.due_date ?? undefined,
+  note: r.note ?? undefined,
+  color: r.color,
+})
+const debtToRow = (d: Debt) => ({
+  id: d.id, person: d.person, principal: d.principal, currency: d.currency,
+  rate: d.rate ?? null, started_at: d.startedAt, due_date: d.dueDate ?? null,
+  note: d.note ?? null, color: d.color,
+})
+const debtPatchToRow = (p: Partial<Debt>) => {
+  const r: Row = {}
+  if (p.person !== undefined) r.person = p.person
+  if (p.principal !== undefined) r.principal = p.principal
+  if (p.currency !== undefined) r.currency = p.currency
+  // `rate` con 'in' y no con !== undefined: quitarle el interés a una deuda es
+  // ponerlo a undefined, y eso tiene que llegar al servidor como null.
+  if ('rate' in p) r.rate = p.rate ?? null
+  if (p.startedAt !== undefined) r.started_at = p.startedAt
+  if ('dueDate' in p) r.due_date = p.dueDate ?? null
+  if ('note' in p) r.note = p.note ?? null
+  if (p.color !== undefined) r.color = p.color
+  return r
+}
+
+const rowToDebtPayment = (r: Row): DebtPayment => ({
+  id: r.id, debtId: r.debt_id, amount: Number(r.amount),
+  occurredAt: String(r.occurred_at).slice(0, 10), note: r.note ?? undefined,
+})
+const debtPaymentToRow = (p: DebtPayment) => ({
+  id: p.id, debt_id: p.debtId, amount: p.amount,
+  occurred_at: p.occurredAt, note: p.note ?? null,
+})
 
 const rowToAllocation = (r: Row): BudgetAllocation => ({
   id: r.id,

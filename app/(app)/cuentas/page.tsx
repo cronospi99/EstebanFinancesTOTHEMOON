@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { AddAccountSheet } from '@/components/accounts/add-account-sheet'
+import { DebtsSection } from '@/components/debts/debts-section'
 import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
 import { TransferSheet } from '@/components/accounts/transfer-sheet'
 import { CO_INSTITUTIONS } from '@/lib/categories'
@@ -118,6 +119,11 @@ export default function AccountsPage() {
           Añadir
         </button>
       </div>
+
+      {/* Las deudas van tras las cuentas y antes del catálogo: son la otra
+          mitad de "dónde está tu dinero" —el que ya no es tuyo— y quien entra
+          aquí a mirar saldos quiere verlas en la misma pantalla. */}
+      <DebtsSection />
 
       <section>
         <CardHeader title="Instituciones soportadas" />

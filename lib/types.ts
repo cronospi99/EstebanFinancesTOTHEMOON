@@ -127,6 +127,55 @@ export interface Goal {
   pocketId?: string
 }
 
+/**
+ * Deuda con una persona: lo que le debes a alguien, no a un banco.
+ *
+ * Va aparte de las cuentas de crédito porque el dato de partida es otro. Una
+ * tarjeta tiene cupo, corte y cuotas; un préstamo entre personas tiene a quién
+ * le debes, cuánto te prestó, desde cuándo y —si lo pactaron— qué interés
+ * corre. Meterlo como cuenta en negativo obligaba a inventar una institución y
+ * dejaba sin sitio lo único que de verdad se consulta: cuánto llevas pagado.
+ */
+export interface Debt {
+  id: string
+  /** A quién le debes. */
+  person: string
+  /** El monto prestado, en la moneda de la deuda. */
+  principal: number
+  currency: Currency
+  /**
+   * Interés efectivo anual en %. Sin él la deuda no genera intereses, que es
+   * el caso normal entre conocidos.
+   *
+   * Se guarda anual aunque casi siempre se pacte mensual («el 2 % al mes»)
+   * porque es como lo guardan las cuentas y así una tasa significa lo mismo en
+   * toda la app. La conversión la hace el formulario.
+   */
+  rate?: number
+  /** Desde cuándo corre la deuda. ISO (solo día). */
+  startedAt: string
+  /** Cuándo quedó de pagarla, si hay plazo. ISO (solo día). */
+  dueDate?: string
+  note?: string
+  color: string
+}
+
+/**
+ * Un abono a una deuda.
+ *
+ * Filas y no un campo `pagado` en la deuda: con interés, *cuándo* pagaste
+ * cambia cuánto debes hoy —cada abono baja el saldo sobre el que corre la
+ * tasa—, así que un total suelto no permitiría calcularlo. Y sin interés
+ * sigue siendo lo que uno quiere ver: qué le has ido dando y en qué fechas.
+ */
+export interface DebtPayment {
+  id: string
+  debtId: string
+  amount: number
+  occurredAt: string
+  note?: string
+}
+
 export interface Holding {
   id: string
   symbol: string
