@@ -1,6 +1,17 @@
 -- ===========================================================================
---  Finanzas — esquema de base de datos
---  Ejecutar en: Supabase Dashboard → SQL Editor → New query
+--  Finanzas — esquema base
+-- ===========================================================================
+--  El esquema completo tal y como estaba el día que el proyecto pasó a
+--  aplicar los cambios desde GitHub. De aquí en adelante cada cambio va en un
+--  archivo nuevo de esta carpeta y este no se vuelve a tocar: es lo que hace
+--  que la base de un proyecto recién creado y la del proyecto en producción
+--  acaben en el mismo sitio.
+--
+--  Es idempotente de principio a fin —`create ... if not exists`, y un
+--  `drop ... if exists` antes de cada política y cada trigger—, así que
+--  aplicarla sobre la base que ya existe no cambia nada. Ese es justo el caso
+--  del primer despliegue: la base ya tiene todo esto desde que se ejecutaba a
+--  mano, y la migración solo queda registrada como aplicada.
 -- ===========================================================================
 --  Modelo de seguridad: cada fila pertenece a un usuario (user_id) y Row Level
 --  Security garantiza que nadie —ni siquiera con la llave anónima— pueda leer

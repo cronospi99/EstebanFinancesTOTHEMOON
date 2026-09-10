@@ -247,7 +247,11 @@ export default function SettingsPage() {
             <p className="mb-2 text-[13px] font-semibold text-label">Cómo conectar Supabase</p>
             <ol className="space-y-1.5 text-[13px] leading-relaxed text-label-secondary">
               <li>1. Crea un proyecto en supabase.com</li>
-              <li>2. Ejecuta <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">supabase/schema.sql</code> en el SQL Editor</li>
+              <li>
+                2. Aplica las migraciones de{' '}
+                <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">supabase/migrations</code>
+                {' '}con <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">supabase db push</code>
+              </li>
               <li>3. Copia <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">.env.example</code> a <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">.env.local</code> con tus llaves</li>
               <li>4. Reinicia el servidor de desarrollo</li>
             </ol>

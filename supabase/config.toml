@@ -1,0 +1,9 @@
+# Configuración de la CLI de Supabase.
+#
+# La integración con GitHub busca este archivo para reconocer la carpeta como
+# un proyecto suyo; lo que aplica en cada push es lo que haya en migrations/.
+#
+# `project_id` solo nombra el proyecto local (los contenedores de `supabase
+# start` se llaman así). Al hacer `supabase link` la CLI lo sustituye por la
+# referencia real del proyecto en la nube.
+project_id = "esteban-finances"
