@@ -90,6 +90,17 @@ export function HoldingRow({
 
       <motion.div
         drag={onDelete ? 'x' : false}
+        /*
+         * El eje se fija al empezar el gesto. Sin esto, cualquier desvío
+         * horizontal de un scroll —y el pulgar nunca sube recto— arrastraba la
+         * fila: al bajar por la lista se iban abriendo botones rojos solos.
+         * Con el bloqueo, un gesto que empieza vertical es scroll y se queda
+         * en scroll.
+         */
+        dragDirectionLock
+        // Y sin inercia: un golpe rápido de scroll dejaba la fila abierta por
+        // el impulso aunque el dedo apenas se hubiera movido de lado.
+        dragMomentum={false}
         dragConstraints={{ left: -72, right: 0 }}
         dragElastic={{ left: 0.12, right: 0 }}
         onDragStart={() => { arrastrando.current = true }}
