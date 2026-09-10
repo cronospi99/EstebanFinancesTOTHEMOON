@@ -14,8 +14,8 @@ import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
 import type {
-  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, Pocket, Quote, Settings,
-  Trade, Transaction,
+  Account, Budget, BudgetAllocation, Currency, Debt, DebtPayment, Goal, Holding, Pocket, Quote,
+  Settings, Trade, Transaction,
 } from './types'
 import { uid } from './utils'
 
@@ -250,6 +250,8 @@ interface FinanceContextValue extends State {
   aplicarMovimientosAlSaldo: (accountId: string) => Promise<void>
   /** Id de la cuenta de una plataforma de inversión; la crea si hace falta. */
   asegurarPlataforma: (institution: string) => Promise<string>
+  /** Id de la cuenta de efectivo de una moneda; la crea si hace falta. */
+  asegurarEfectivo: (currency: Currency) => Promise<string>
   addPocket: (accountId: string, pocket: Omit<Pocket, 'id'>) => Promise<void>
   updatePocket: (accountId: string, pocketId: string, patch: Partial<Pocket>) => Promise<void>
   deletePocket: (accountId: string, pocketId: string) => Promise<void>
@@ -683,6 +685,40 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /**
+   * Id de la cuenta de efectivo, creándola si no existe.
+   *
+   * Sacar plata del banco es de lo más corriente que hay, y hasta ahora no se
+   * podía registrar sin antes ir a Cuentas, crear a mano una cuenta llamada
+   * «Efectivo» y volver. La cuenta de efectivo no tiene banco detrás ni datos
+   * que pedir —es el bolsillo del pantalón—, así que no hay nada que preguntar:
+   * aparece sola al primer retiro.
+   *
+   * Una por moneda: los dólares en efectivo no son los mismos pesos en
+   * efectivo, y mezclarlos en una sola cuenta daría un saldo que no es de nadie.
+   */
+  const asegurarEfectivo = useCallback(
+    async (currency: Currency) => {
+      const ya = stateRef.current.accounts.find((a) => a.type === 'cash' && a.currency === currency)
+      if (ya) return ya.id
+
+      const full: Account = {
+        id: uid(),
+        name: currency === 'USD' ? 'Efectivo USD' : 'Efectivo',
+        institution: 'Efectivo',
+        type: 'cash',
+        balance: 0,
+        currency,
+        color: institutionByName('Efectivo')?.color ?? '#30D158',
+        pockets: [],
+      }
+      setState((s) => ({ ...s, accounts: [...s.accounts, full] }))
+      await remote()?.from('accounts').insert(accountToRow(full))
+      return full.id
+    },
+    [remote],
+  )
+
   // ---- Bolsillos -----------------------------------------------------------
   // Viven dentro de la cuenta (columna jsonb): son subdivisiones suyas, no
   // entidades propias, y así se mueven y se borran con ella.
@@ -1072,6 +1108,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
       addTransaction, updateTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
+      asegurarEfectivo,
       addPocket, updatePocket, deletePocket,
       addHolding, updateHolding, deleteHolding,
       registrarOperacion, updateTrade, deleteTrade,
@@ -1081,7 +1118,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
-     updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
+     updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma, asegurarEfectivo,
      addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
@@ -1306,7 +1343,6 @@ export function useDeudaTotal() {
 export function useNetWorthDetail() {
   const rows = useAccountsInCOP()
   const inv = useInvestmentsValue()
-  const deuda = useDeudaTotal()
   return useMemo(() => {
     let cuentas = 0, sinConvertir = 0
     for (const r of rows) {
@@ -1314,19 +1350,26 @@ export function useNetWorthDetail() {
       else cuentas += r.cop
     }
     if (inv.incompleto) sinConvertir++
-    sinConvertir += deuda.sinConvertir
-    // El patrimonio incluye el portafolio: dejarlo fuera daba una cifra que no
-    // era el patrimonio de nadie. Y descuenta lo que se debe a personas, por lo
-    // mismo: un patrimonio que ignora las deudas no es el de nadie tampoco.
+    /*
+     * El patrimonio incluye el portafolio: dejarlo fuera daba una cifra que no
+     * era el patrimonio de nadie.
+     *
+     * Lo que se debe a personas NO se descuenta aquí, y es a propósito. Son dos
+     * preguntas distintas: cuánto tienes y cuánto debes. Restarlas mezcla el
+     * dinero que está en las cuentas con una obligación que se irá pagando
+     * desde esas mismas cuentas —cada abono ya baja el saldo de la cuenta de la
+     * que sale, así que descontarlo además del total lo contaría dos veces por
+     * el camino—. La deuda se enseña como su propio bloque, en el resumen y en
+     * Cuentas, para que se vea sin quedar enterrada en una resta.
+     */
     return {
-      total: cuentas + inv.value - deuda.total,
+      total: cuentas + inv.value,
       cuentas,
       inversiones: inv.value,
-      deudas: deuda.total,
       incompleto: sinConvertir > 0,
       sinConvertir,
     }
-  }, [rows, inv, deuda])
+  }, [rows, inv])
 }
 
 export function useNetWorth() {
