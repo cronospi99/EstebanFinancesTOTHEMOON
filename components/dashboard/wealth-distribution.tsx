@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { Card, CardHeader } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
+import { coloresDeMarca } from '@/lib/brand-color'
+import { institutionByName } from '@/lib/categories'
 import { CHART_REST, chartColor } from '@/lib/chart-palette'
 import { formatCompact, formatMoney, formatPercent } from '@/lib/format'
 import {
@@ -68,6 +70,26 @@ export function WealthDistribution() {
     }]
   }, [accounts, fxRate, porCuenta, inversiones.value])
 
+  /*
+   * El color de cada porción sale de su entidad: el mismo naranja del icono de
+   * Rappi en su trozo del donut y en su cuadro de la leyenda. Antes venía de
+   * una paleta por posición, así que Rappi salía verde y el ojo tenía que
+   * saltar del donut al texto para saber de quién era cada trozo.
+   *
+   * Se pasa el color de la lista de entidades y no el guardado en la cuenta:
+   * el de la cuenta lo puede haber cambiado el usuario y por defecto es azul,
+   * con lo que media leyenda saldría del mismo azul.
+   */
+  const colores = useMemo(
+    () => coloresDeMarca(
+      slices.map((s) => (s.id.startsWith('__')
+        ? undefined
+        : institutionByName(s.institution)?.color ?? s.color)),
+      (i) => (slices[i].id === '__resto' ? CHART_REST : chartColor(i)),
+    ),
+    [slices],
+  )
+
   const total = slices.reduce((s, r) => s + r.value, 0)
   const deudas = netWorth - total
 
@@ -99,7 +121,7 @@ export function WealthDistribution() {
                 {slices.map((s, i) => (
                   <Cell
                     key={s.id}
-                    fill={s.id === '__resto' ? CHART_REST : chartColor(i)}
+                    fill={colores[i]}
                     opacity={active === null || active === i ? 1 : 0.35}
                   />
                 ))}
@@ -126,8 +148,9 @@ export function WealthDistribution() {
           </div>
         </div>
 
-        {/* Leyenda: la identidad la dan el logo y el nombre, no el color.
-            Hace además de tabla de datos con las cifras exactas. */}
+        {/* Leyenda: el cuadro de color es el de la marca y ata cada fila a su
+            trozo del donut; el logo y el nombre la identifican. Hace además de
+            tabla de datos con las cifras exactas. */}
         <ul className="mt-4 space-y-2 border-t border-hairline pt-4">
           {slices.map((s, i) => (
             <li
@@ -138,7 +161,7 @@ export function WealthDistribution() {
             >
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-                style={{ backgroundColor: s.id === '__resto' ? CHART_REST : chartColor(i) }}
+                style={{ backgroundColor: colores[i] }}
               />
               {s.institution
                 ? <InstitutionBadge institution={s.institution} color={s.color} size="xs" />
