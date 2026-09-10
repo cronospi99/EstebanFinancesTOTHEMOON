@@ -15,6 +15,9 @@ const KEY = 'eftm.profile.name'
  */
 export function useProfileName() {
   const [name, setName] = useState('')
+  // El correo de la sesión, para que Ajustes pueda decir con qué cuenta se
+  // entró antes de ofrecer salir de ella. Vacío en Modo Demo.
+  const [email, setEmail] = useState('')
 
   useEffect(() => {
     let cancelado = false
@@ -29,6 +32,7 @@ export function useProfileName() {
       const { data } = (await supabase?.auth.getUser()) ?? { data: null }
       const user = data?.user
       if (!user || cancelado) return
+      setEmail(user.email ?? '')
       const remoto = (user.user_metadata?.full_name as string | undefined)?.trim()
       if (remoto) {
         setName(remoto)
@@ -55,7 +59,18 @@ export function useProfileName() {
     }
   }, [])
 
-  return { name, setName: guardar }
+  return { name, setName: guardar, email }
+}
+
+/**
+ * Borra el nombre guardado en este dispositivo.
+ *
+ * Se llama al cerrar sesión: el nombre vive en una clave sin usuario, así que
+ * sin esto el siguiente en entrar desde el mismo teléfono vería el saludo de
+ * quien salió. En la cuenta sigue guardado, y vuelve solo al iniciar sesión.
+ */
+export function olvidarNombreGuardado() {
+  try { localStorage.removeItem(KEY) } catch { /* storage bloqueado */ }
 }
 
 /** Saludo según la hora local. */

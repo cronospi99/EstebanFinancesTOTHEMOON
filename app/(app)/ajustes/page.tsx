@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Database, DollarSign, KeyRound, LineChart, RefreshCw, ShieldCheck, User, X } from 'lucide-react'
+import {
+  Check, Database, DollarSign, KeyRound, LineChart, LogOut, Mail, RefreshCw, ShieldCheck, User, X,
+} from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { useFinance } from '@/lib/store'
@@ -16,9 +18,9 @@ import { cn, haptic } from '@/lib/utils'
 export default function SettingsPage() {
   const {
     synced, syncError, transactions, accounts, holdings, resetDemo, fx, fxRate,
-    quotes, quotesLoading, quotesFallos,
+    quotes, quotesLoading, quotesFallos, signOut,
   } = useFinance()
-  const { name, setName } = useProfileName()
+  const { name, setName, email } = useProfileName()
   const [editTasa, setEditTasa] = useState(false)
   const [tasaDraft, setTasaDraft] = useState('')
 
@@ -262,6 +264,13 @@ export default function SettingsPage() {
         </Card>
       </section>
 
+      {isSupabaseConfigured && synced && (
+        <section>
+          <CardHeader title="Sesión" />
+          <SesionCard email={email} onSignOut={signOut} />
+        </section>
+      )}
+
       {!synced && (
         <button
           onClick={() => {
@@ -283,6 +292,82 @@ export default function SettingsPage() {
 
       <VersionDesplegada />
     </div>
+  )
+}
+
+/**
+ * Con qué cuenta entraste, y la puerta de salida.
+ *
+ * Salir pide confirmación porque volver cuesta: el acceso es por correo, así
+ * que un toque sin querer manda a esperar un enlace. Y la navegación es una
+ * carga completa —no router.push— para que nada del usuario anterior
+ * sobreviva en memoria: el estado de la app, las cotizaciones y los oyentes
+ * de sesión se van con la página.
+ */
+function SesionCard({ email, onSignOut }: { email: string; onSignOut: () => Promise<void> }) {
+  const [confirmar, setConfirmar] = useState(false)
+  const [saliendo, setSaliendo] = useState(false)
+
+  async function salir() {
+    if (saliendo) return
+    haptic([20, 40])
+    setSaliendo(true)
+    try {
+      await onSignOut()
+    } finally {
+      // Se navega pase lo que pase. Si el cierre falló y la cookie sigue
+      // siendo válida, el middleware devolverá al resumen: nunca se queda uno
+      // mirando un botón que dice "Saliendo…" para siempre.
+      window.location.assign('/login')
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-label-secondary">
+          <Mail size={17} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] text-label-secondary">Sesión iniciada</p>
+          <p className="truncate text-[15px] font-medium text-label">
+            {email || 'Tu cuenta'}
+          </p>
+        </div>
+      </div>
+
+      {confirmar ? (
+        <div className="mt-3 rounded-2xl border border-accent-red/30 bg-accent-red/[0.08] p-4">
+          <p className="mb-3 text-center text-[13px] leading-relaxed text-label">
+            Tus datos siguen en la cuenta; se borra solo la copia de este
+            dispositivo. Para volver a entrar necesitarás el correo.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmar(false)} disabled={saliendo}
+              className="press flex-1 rounded-xl border border-hairline py-2.5 text-[14px] text-label-secondary"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={salir} disabled={saliendo}
+              className="press flex-1 rounded-xl bg-accent-red py-2.5 text-[14px] font-semibold text-white"
+            >
+              {saliendo ? 'Saliendo…' : 'Cerrar sesión'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => { haptic(8); setConfirmar(true) }}
+          className="press mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline
+                     py-3 text-[15px] font-medium text-accent-red"
+        >
+          <LogOut size={16} />
+          Cerrar sesión
+        </button>
+      )}
+    </Card>
   )
 }
 
