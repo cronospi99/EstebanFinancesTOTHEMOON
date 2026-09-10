@@ -105,7 +105,16 @@ export function PerformanceCard({ moneda, enMoneda }: { moneda: Currency; enMone
         </p>
       ) : datos.sinPrecio.length > 0 ? (
         <p className="mt-3 text-[11px] leading-relaxed text-label-tertiary">
-          Sin precios de {datos.sinPrecio.join(', ')}: esas posiciones entran al costo.
+          {loading
+            ? `Falta el histórico de ${datos.sinPrecio.join(', ')}: se está pidiendo.`
+            : `Sin precios de ${datos.sinPrecio.join(', ')}: esas posiciones entran al costo.`}
+          {/* El motivo, también cuando solo falla parte. Antes solo se decía si
+              fallaban todas, así que un «entran al costo» sobre tres símbolos
+              no daba nada con lo que actuar: el cupo del proveedor y un ticker
+              que no existe se leían igual. */}
+          {!loading && fallos.length > 0 && (
+            <span className="mt-0.5 block text-label-tertiary/70">{fallos[0]}</span>
+          )}
         </p>
       ) : (
         <p className="mt-3 text-[11px] leading-relaxed text-label-tertiary">
