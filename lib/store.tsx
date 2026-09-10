@@ -9,6 +9,7 @@ import {
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
 import { monthKey, monthlyFromApy } from './format'
+import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
 import type {
@@ -266,6 +267,8 @@ interface FinanceContextValue extends State {
   updateGoal: (id: string, patch: Partial<Goal>) => Promise<void>
   deleteGoal: (id: string) => Promise<void>
   resetDemo: () => void
+  /** Cierra la sesión y borra de este dispositivo lo que era del usuario. */
+  signOut: () => Promise<void>
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
@@ -295,6 +298,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const vivo = useRef(true)
   const cargando = useRef(false)
+  // Se levanta al cerrar sesión: a partir de ahí nada vuelve a escribir la
+  // copia local, que es justo lo que se acaba de borrar.
+  const cerrandoSesion = useRef(false)
   const ultimaCarga = useRef(0)
   // Espejo de userId legible desde `cargar`, que no se recrea nunca.
   const userIdRef = useRef<string | null>(null)
@@ -432,7 +438,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    * mientras llega la consulta al abrir la app.
    */
   useEffect(() => {
-    if (!ready) return
+    if (!ready || cerrandoSesion.current) return
     guardarEstado(claveEstado(userId), state)
   }, [state, ready, userId])
 
@@ -953,6 +959,43 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.removeItem(claveEstado(null)) } catch { /* noop */ }
   }, [])
 
+  /**
+   * Cerrar sesión.
+   *
+   * Además de invalidar el token, se lleva del teléfono la copia local de este
+   * usuario y su nombre: en un dispositivo compartido, dejar ahí las cuentas y
+   * los movimientos convertiría "salir" en un gesto sin efecto. En la cuenta
+   * no se toca nada, así que al volver a entrar está todo.
+   *
+   * No cambia el estado de React a propósito: quien llama navega a /login con
+   * una carga completa, y vaciar la pantalla antes solo enseñaría un resumen
+   * en ceros durante el trayecto.
+   */
+  const signOut = useCallback(async () => {
+    cerrandoSesion.current = true
+    // Nada de lo que siga en vuelo puede volver a pintar ni a guardar.
+    vivo.current = false
+
+    // No se llama `uid`: ese nombre ya es el generador de identificadores.
+    const usuario = userIdRef.current
+    userIdRef.current = null
+
+    try {
+      // 'local' cierra solo este dispositivo: los demás donde haya sesión
+      // iniciada siguen como estaban.
+      await createClient()?.auth.signOut({ scope: 'local' })
+    } catch {
+      /* Sin red el token sigue vivo en el servidor, pero las cookies y el
+         almacenamiento del cliente se limpian igual, que es lo que decide si
+         esta app te reconoce. El middleware mandará a /login. */
+    }
+
+    try {
+      if (usuario) localStorage.removeItem(claveEstado(usuario))
+    } catch { /* noop */ }
+    olvidarNombreGuardado()
+  }, [])
+
   const value = useMemo<FinanceContextValue>(
     () => ({
       ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
@@ -962,7 +1005,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addHolding, updateHolding, deleteHolding,
       registrarOperacion, updateTrade, deleteTrade,
       setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
-      addGoal, updateGoal, deleteGoal, resetDemo,
+      addGoal, updateGoal, deleteGoal, resetDemo, signOut,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
@@ -970,7 +1013,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      addPocket, updatePocket, deletePocket, addHolding,
      updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
-     addGoal, updateGoal, deleteGoal, resetDemo],
+     addGoal, updateGoal, deleteGoal, resetDemo, signOut],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>

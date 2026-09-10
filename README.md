@@ -35,9 +35,10 @@ arranca en **Modo Demo** con datos de ejemplo guardados en el navegador.
 ## Conectar Supabase (persistencia real)
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. En **SQL Editor**, ejecuta el contenido de [`supabase/schema.sql`](supabase/schema.sql).
-   Crea las tablas, activa **Row Level Security** y añade un *trigger* que rellena
-   `user_id` desde la sesión.
+2. Aplica las migraciones de [`supabase/migrations/`](supabase/migrations) —con
+   `supabase link` y `supabase db push`, o pegando los archivos en orden en el
+   **SQL Editor**. Crean las tablas, activan **Row Level Security** y añaden un
+   *trigger* que rellena `user_id` desde la sesión.
 3. Copia las llaves:
 
    ```bash
@@ -57,6 +58,32 @@ privacidad la garantiza la base de datos, no el cliente.
 `middleware.ts` completa el cuadro: refresca el token en cada petición —sin eso
 la sesión caduca y el móvil te expulsa— y redirige a `/login` a quien no tenga
 sesión. En Modo Demo no hace nada, para que la app siga usable sin configurar.
+
+### Cambios de esquema
+
+El esquema vive en [`supabase/migrations/`](supabase/migrations), un archivo por
+cambio y ordenados por su marca de tiempo. Con el proyecto conectado a GitHub,
+Supabase aplica en cada push a la rama de producción los que aún no estén
+aplicados: no hay que abrir el SQL Editor.
+
+Para añadir uno:
+
+```bash
+supabase migration new nombre_del_cambio   # crea el archivo con su timestamp
+# … escribe el SQL dentro …
+supabase db push                           # opcional: aplicarlo ya, sin esperar al push
+```
+
+Sin la CLI a mano vale con crear el archivo a mano siguiendo el mismo patrón,
+`<AAAAMMDDHHMMSS>_nombre.sql`. Dos reglas que este proyecto sí necesita:
+
+- **Nunca se edita una migración ya aplicada.** El corrector es una migración
+  nueva; cambiar la vieja deja la base de producción y la del siguiente que
+  clone el repo en estados distintos.
+- **Cada tabla nueva nace con RLS.** Sin `enable row level security` y su
+  política `own rows`, la llave anónima —que va en el navegador— puede leer las
+  filas de cualquiera. Copia el bloque de `settings` en la migración inicial:
+  es el más corto y ya trae también el trigger que rellena `user_id`.
 
 ---
 
@@ -294,9 +321,8 @@ la posición completa y no arranque a mitad.
 > libro y cualquier cambio directo se perdería en el siguiente recálculo. La
 > app lo dice y remite al historial.
 
-**Requiere volver a ejecutar [`supabase/schema.sql`](supabase/schema.sql)** para
-crear la tabla `trades`. Es idempotente: se puede correr entero sobre una base
-ya creada. Sin ella la app sigue funcionando, pero sin historial.
+**Requiere que las migraciones estén aplicadas** para crear la tabla `trades`.
+Sin ella la app sigue funcionando, pero sin historial.
 
 ---
 
@@ -355,7 +381,7 @@ Lo que falta, en orden de lo que más duele.
 
 ### Verificado
 
-- [x] `supabase/schema.sql` cubre todo lo que el cliente escribe: bolsillos
+- [x] El esquema cubre todo lo que el cliente escribe: bolsillos
       (`pockets` jsonb), cupo y cuotas de las tarjetas, `goals`, y la
       restricción única `budgets_user_id_category_id_key` que necesita el
       upsert de presupuestos. RLS activo en las cinco tablas.

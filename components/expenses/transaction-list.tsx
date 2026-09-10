@@ -83,6 +83,14 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
 
                     <motion.div
                       drag="x"
+                      /*
+                       * El eje se fija al empezar el gesto: sin esto, el desvío
+                       * horizontal de un scroll normal arrastraba la fila y los
+                       * botones rojos se iban abriendo solos al bajar por la
+                       * lista. Y sin inercia, que abría filas de un golpe seco.
+                       */
+                      dragDirectionLock
+                      dragMomentum={false}
                       dragConstraints={{ left: -72, right: 0 }}
                       dragElastic={{ left: 0.12, right: 0 }}
                       onDragStart={() => { arrastrando.current = true }}

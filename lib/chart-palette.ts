@@ -1,11 +1,11 @@
 /**
  * Paleta categórica para las gráficas, sobre superficie oscura (#0E0E10).
  *
- * No se usan los colores de marca de cada entidad, aunque sería lo coherente
- * con el resto de la app: RappiCard es #141414 y Littio #1B2A4A, que sobre
- * negro desaparecen, y Davivienda y Daviplata comparten el mismo rojo. La
- * identidad de cada porción la da la leyenda (logo + nombre), nunca el color
- * a solas.
+ * Es la reserva, no la primera opción: donde cada porción tiene una entidad
+ * detrás manda su color de marca (ver `brand-color.ts`). Esta paleta cubre lo
+ * que no lo tiene —categorías de gasto, «Otros»— y las marcas acromáticas o
+ * repetidas, que son las que no se pueden usar tal cual: RappiCard es #141414,
+ * que sobre negro desaparece, y Davivienda y Daviplata comparten el rojo.
  *
  * Generada en OKLCH dentro de la banda L 0,48–0,67 y validada: banda de
  * luminosidad, suelo de croma, separación para daltonismo (peor par adyacente

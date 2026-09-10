@@ -16,9 +16,21 @@ import { motivoTwelveData, simboloTwelveData, twelveDataKey } from '@/lib/twelve
  *
  * Queda Coinbase para cripto y Twelve Data para lo demás. El histórico se
  * queda en Twelve Data —y no pasa a Finnhub con los precios en vivo— porque
- * las velas de Finnhub son de pago. Aquí su cupo de ocho llamadas por minuto
- * no estorba: al guardarse seis horas, una cartera de diez posiciones gasta
- * unos cuarenta créditos al día sobre los ochocientos del plan.
+ * las velas de Finnhub son de pago.
+ *
+ * Una serie por símbolo, no una por rango
+ * ---------------------------------------
+ * De Twelve Data se pide siempre la ventana larga y se recorta al rango al
+ * salir. Antes la caché iba por símbolo *y* días, así que tocar 1D, 5D, 1S y
+ * 1M pedía cuatro veces la misma serie diaria: cuatro créditos por posición en
+ * cuestión de segundos. Su plan gratuito da ocho créditos por minuto, de modo
+ * que a partir de la novena llamada del minuto todo volvía con 429 y esas
+ * posiciones se quedaban «al costo» en el gráfico — con una cartera de once
+ * ETF, tres se quedaban fuera en cada carga.
+ *
+ * Con una sola ventana por símbolo, cambiar de rango no cuesta nada y la
+ * cartera entera cabe de sobra en el cupo: un crédito por posición cada seis
+ * horas.
  *
  * GET /api/history?symbols=VOO,SCHD&days=365
  * → { series: { VOO: [{ d: '2026-01-02', c: 512.3 }, …] }, fallos: [...] }
@@ -28,6 +40,26 @@ export const runtime = 'nodejs'
 export const revalidate = 0
 
 const TTL_MS = 6 * 60 * 60_000
+
+/**
+ * La ventana que se pide siempre, cubra lo que cubra el rango elegido.
+ *
+ * Son los mismos cierres diarios para todos los rangos, así que pedir la larga
+ * una vez y recortar sale por un crédito en vez de por uno cada vez que el
+ * dedo toca el selector de rango.
+ */
+const DIAS_CANONICOS = 1_900
+/** Coinbase no devuelve más de 300 velas por llamada. */
+const DIAS_CANONICOS_CRIPTO = 300
+
+/**
+ * Margen por delante del rango pedido.
+ *
+ * La curva necesita un cierre *anterior* al primer día que dibuja: sin él, el
+ * primer punto de un lunes festivo se queda sin precio y el tramo arranca en
+ * el coste. Veinte días cubren cualquier puente.
+ */
+const MARGEN_DIAS = 20
 
 /**
  * Plazo por fuente. Más holgado que en /api/quotes porque aquí viaja una serie
@@ -48,12 +80,11 @@ type Resultado = Punto[] | { error: string }
 const esError = (r: Resultado): r is { error: string } => !Array.isArray(r)
 
 /** Velas diarias públicas de Coinbase para los pares cripto. */
-async function coinbase(symbol: string, days: number): Promise<Resultado> {
+async function coinbase(symbol: string): Promise<Resultado> {
   if (!esCripto(symbol)) return { error: 'solo cripto' }
 
   const par = symbol.toUpperCase().replace(/-USDT$/, '-USD')
-  // La API devuelve como mucho 300 velas por llamada.
-  const desde = new Date(Date.now() - Math.min(days, 300) * 86_400_000).toISOString()
+  const desde = new Date(Date.now() - DIAS_CANONICOS_CRIPTO * 86_400_000).toISOString()
   const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(par)}/candles`
     + `?granularity=86400&start=${desde}&end=${new Date().toISOString()}`
 
@@ -72,14 +103,14 @@ async function coinbase(symbol: string, days: number): Promise<Resultado> {
 }
 
 /** Twelve Data: series diarias de acciones y ETF. Variable TWELVE_DATA_API_KEY. */
-async function twelveData(symbol: string, days: number): Promise<Resultado> {
+async function twelveData(symbol: string): Promise<Resultado> {
   const key = twelveDataKey()
   if (!key) return { error: 'sin TWELVE_DATA_API_KEY' }
 
   const s = simboloTwelveData(symbol, esCripto(symbol))
-  // Su tope por llamada es 5.000 velas; de sobra para cinco años diarios.
+  // Su tope por llamada es 5.000 velas; de sobra para la ventana canónica.
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(s)}`
-    + `&interval=1day&outputsize=${Math.min(days + 20, 5000)}&order=ASC&apikey=${key}`
+    + `&interval=1day&outputsize=${DIAS_CANONICOS}&order=ASC&apikey=${key}`
 
   const res = await fetchConPlazo(url, { cache: 'no-store' }, PLAZO_MS)
 
@@ -94,23 +125,30 @@ async function twelveData(symbol: string, days: number): Promise<Resultado> {
   return serie.length ? serie : { error: 'serie vacía' }
 }
 
-const FUENTES: [string, (s: string, d: number) => Promise<Resultado>][] = [
+const FUENTES: [string, (s: string) => Promise<Resultado>][] = [
   ['coinbase', coinbase],
   ['twelve-data', twelveData],
 ]
 
+/** Recorta la ventana canónica al rango que se pidió, con su margen. */
+const recortar = (serie: Punto[], days: number) => {
+  const desde = dia(Date.now() - (days + MARGEN_DIAS) * 86_400_000)
+  return serie.filter((p) => p.d >= desde)
+}
+
 async function getSerie(symbol: string, days: number, fallos: string[]): Promise<Punto[]> {
-  const clave = `${symbol}|${days}`
-  const hit = cache.get(clave)
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.serie
+  // La clave es el símbolo a secas: la serie guardada sirve para todos los
+  // rangos, que es lo que hace que cambiar de rango no cueste créditos.
+  const hit = cache.get(symbol)
+  if (hit && Date.now() - hit.at < TTL_MS) return recortar(hit.serie, days)
 
   const motivos: string[] = []
   for (const [nombre, fn] of FUENTES) {
     try {
-      const r = await fn(symbol, days)
+      const r = await fn(symbol)
       if (!esError(r)) {
-        cache.set(clave, { serie: r, at: Date.now() })
-        return r
+        cache.set(symbol, { serie: r, at: Date.now() })
+        return recortar(r, days)
       }
       motivos.push(`${nombre} ${r.error}`)
     } catch (e) {
@@ -119,7 +157,9 @@ async function getSerie(symbol: string, days: number, fallos: string[]): Promise
   }
 
   fallos.push(`${symbol}: ${motivos.join(' · ')}`)
-  return hit?.serie ?? []
+  // Una serie vencida sigue siendo mejor que ninguna: los cierres de días
+  // pasados no cambian, y lo único viejo es el último tramo.
+  return hit ? recortar(hit.serie, days) : []
 }
 
 export async function GET(request: Request) {

@@ -35,8 +35,9 @@ export function InstitutionBadge({
         aria-hidden
         loading="lazy"
         decoding="async"
-        // El recorte trae las esquinas del icono en blanco; el redondeo del
-        // contenedor las tapa y deja la silueta que se espera en iOS.
+        // Los archivos vienen recortados a sangre y con el fondo en
+        // transparente, así que `object-cover` llena el cuadro entero y el
+        // redondeo del contenedor da la silueta que se espera en iOS.
         className={cn('shrink-0 object-cover', cls, className)}
       />
     )

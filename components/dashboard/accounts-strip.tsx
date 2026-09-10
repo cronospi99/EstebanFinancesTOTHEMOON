@@ -6,8 +6,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { CardHeader } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
-import { formatMoney } from '@/lib/format'
-import { useAccountsAvailable, useFinance } from '@/lib/store'
+import { formatCompact, formatMoney } from '@/lib/format'
+import { useAccountsAvailable, useFinance, useHoldingsValueByAccount } from '@/lib/store'
 import { useDragScroll } from '@/lib/use-drag-scroll'
 import { cn, haptic } from '@/lib/utils'
 import type { Account, AccountType } from '@/lib/types'
@@ -29,8 +29,9 @@ const TYPE_LABEL: Record<AccountType, string> = {
  * que había más cuentas a la derecha.
  */
 export function AccountsStrip() {
-  const { accounts } = useFinance()
+  const { accounts, fxRate } = useFinance()
   const saldos = useAccountsAvailable()
+  const invertidoPorCuenta = useHoldingsValueByAccount()
   // El sheet vive aquí para que tocar una tarjeta funcione igual en el
   // resumen que en la pestaña de cuentas.
   const [detalle, setDetalle] = useState<Account | null>(null)
@@ -76,6 +77,24 @@ export function AccountsStrip() {
         {accounts.map((acc, i) => {
           const saldo = saldos.get(acc.id)
           const apartado = saldo?.apartado ?? 0
+
+          /*
+           * En una plataforma de inversión el efectivo sin invertir suele ser
+           * cero, y esa era la única cifra que salía aquí: ARQ aparecía en "$ 0"
+           * teniendo el portafolio entero dentro. Se suma el valor de mercado de
+           * lo que hay en la cuenta, igual que hacen el patrimonio y el donut.
+           *
+           * El mapa viene en pesos, así que para una cuenta en dólares se
+           * deshace la conversión en vez de sumar pesos a dólares.
+           */
+          const invertidoCOP = invertidoPorCuenta.get(acc.id) ?? 0
+          const invertido = acc.currency === 'USD'
+            ? (fxRate > 0 ? invertidoCOP / fxRate : 0)
+            : invertidoCOP
+          // `saldo.total` incluye los bolsillos; `acc.balance` a secas se
+          // dejaba fuera lo apartado dentro de la propia cuenta.
+          const total = (saldo?.total ?? acc.balance) + invertido
+
           return (
             <motion.button
               key={acc.id}
@@ -100,17 +119,21 @@ export function AccountsStrip() {
                 <div
                   className={cn(
                     'tnum text-[16px] font-bold',
-                    acc.balance < 0 ? 'text-accent-red' : 'text-label',
+                    total < 0 ? 'text-accent-red' : 'text-label',
                   )}
                 >
-                  {formatMoney(acc.balance)}
+                  {formatMoney(total, acc.currency)}
                 </div>
-                {/* El saldo del banco manda y no se toca. Debajo, cuánto de él
-                    está libre — solo si hay algo apartado, para no añadir una
-                    línea que diga lo mismo dos veces. */}
-                {apartado > 0 && (
+                {/* Una sola línea de apoyo: la tarjeta mide 164px y dos se
+                    atropellan. Manda lo invertido, que es lo que explica por
+                    qué el número de arriba no es dinero que se pueda gastar. */}
+                {invertido > 0 ? (
                   <div className="tnum mt-0.5 text-[11px] text-label-tertiary">
-                    {formatMoney(saldo!.libre)} libre
+                    {formatCompact(invertido, acc.currency)} invertido
+                  </div>
+                ) : apartado > 0 && (
+                  <div className="tnum mt-0.5 text-[11px] text-label-tertiary">
+                    {formatMoney(saldo!.libre, acc.currency)} libre
                   </div>
                 )}
               </div>

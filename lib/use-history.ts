@@ -12,21 +12,30 @@ export interface PuntoHistorico { d: string; c: number }
  * aquí basta con pedirlos al montar y al cambiar de rango. No hay sondeo: no
  * tendría a quién avisar de nada.
  *
- * La única excepción es un reintento, y viene del cupo del proveedor. El plan
- * gratuito de Twelve Data da ocho llamadas por minuto: con más de ocho
+ * La única excepción son los reintentos, y vienen del cupo del proveedor. El
+ * plan gratuito de Twelve Data da ocho llamadas por minuto: con más de ocho
  * posiciones y la caché del servidor fría, las últimas vuelven con 429 y el
  * gráfico sale incompleto. Como el servidor guarda por separado cada serie que
  * sí llegó, pedirlo otra vez pasado el minuto completa lo que faltaba en vez
- * de repetir lo que ya está. Se reintenta una vez, no en bucle.
+ * de repetir lo que ya está.
+ *
+ * Se reintenta mientras siga faltando algo, hasta tres veces: con un solo
+ * reintento una cartera de más de dieciséis posiciones no llegaba a completarse
+ * nunca —ocho por minuto, dos minutos— y esas posiciones se quedaban «al costo»
+ * para siempre. El tope existe para que un símbolo que sencillamente no está en
+ * el proveedor no deje a la app pidiéndolo cada minuto hasta el fin de los
+ * tiempos.
  */
 const REINTENTO_MS = 65_000
+const MAX_REINTENTOS = 3
+
 export function useHistory(symbols: string[], days: number) {
   const [series, setSeries] = useState<Record<string, PuntoHistorico[]>>({})
   const [loading, setLoading] = useState(false)
   const [fallos, setFallos] = useState<string[]>([])
   const abortRef = useRef<AbortController | null>(null)
-  /** Marca de que el reintento por cupo ya se gastó para esta consulta. */
-  const reintentadoRef = useRef(false)
+  /** Reintentos por cupo ya gastados en esta consulta. */
+  const reintentosRef = useRef(0)
 
   const key = [...symbols].sort().join(',')
 
@@ -56,20 +65,25 @@ export function useHistory(symbols: string[], days: number) {
   }, [key, days])
 
   useEffect(() => {
-    reintentadoRef.current = false
+    reintentosRef.current = 0
     let temporizador: ReturnType<typeof setTimeout> | undefined
+    let vivo = true
 
-    refresh().then((fallidos) => {
-      // Solo si faltó algo, y solo una vez: pasado el minuto el cupo del
-      // proveedor se renueva y las series que sí llegaron ya están en caché.
-      if (!fallidos.length || reintentadoRef.current) return
-      reintentadoRef.current = true
+    // Pasado el minuto el cupo del proveedor se renueva, y las series que sí
+    // llegaron ya están en la caché del servidor: la siguiente vuelta pide solo
+    // lo que faltaba. Por eso se encadena en vez de reintentar una vez suelta.
+    const programar = (fallidos: string[]) => {
+      if (!vivo || !fallidos.length || reintentosRef.current >= MAX_REINTENTOS) return
+      reintentosRef.current += 1
       temporizador = setTimeout(() => {
-        if (document.visibilityState === 'visible') refresh()
+        if (!vivo || document.visibilityState !== 'visible') return
+        refresh().then(programar)
       }, REINTENTO_MS)
-    })
+    }
 
-    return () => clearTimeout(temporizador)
+    refresh().then(programar)
+
+    return () => { vivo = false; clearTimeout(temporizador) }
   }, [refresh])
 
   return { series, loading, fallos, refresh }

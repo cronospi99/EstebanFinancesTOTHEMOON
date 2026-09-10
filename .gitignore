@@ -10,5 +10,9 @@ yarn-error.log*
 .env
 .env*.local
 .vercel
+
+# CLI de Supabase: estado local de `supabase start` y de las ramas.
+supabase/.temp/
+supabase/.branches/
 *.tsbuildinfo
 next-env.d.ts
