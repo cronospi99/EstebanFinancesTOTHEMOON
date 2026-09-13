@@ -1,3 +1,5 @@
+import { anioMes, diaEn, diaSemana, hoyEnZona, primeroDeMes, sumarDias } from './zona'
+
 /**
  * Los períodos por los que se miran los gastos.
  *
@@ -6,9 +8,12 @@
  * se me fue el año» en diciembre. Cada período es un rango con nombre, y todo
  * lo demás de la pantalla —el donut, las categorías, la lista— se filtra igual.
  *
- * Los límites van en hora local, no UTC. Con UTC, un gasto del primero de mes a
- * las 8 de la mañana en Colombia cae en el mes anterior, y el resumen de enero
- * empieza con una compra de diciembre.
+ * Los rangos se llevan en días sueltos («2026-09-14») y no en instantes, y la
+ * comparación es de texto. Parece un rodeo y es justo lo contrario: un día en
+ * la zona del usuario no empieza a la misma hora que en la del servidor, así
+ * que preguntar «¿qué día es este gasto para él?» y comparar días es la única
+ * forma de que un gasto de las once de la noche caiga en el día que lo hizo.
+ * Además las fechas ISO ordenan bien como texto, así que comparar es directo.
  */
 
 export type Periodo = 'semana' | 'mes' | 'trimestre' | 'semestre' | 'año'
@@ -22,10 +27,10 @@ export const PERIODOS: { value: Periodo; label: string }[] = [
 ]
 
 export interface Rango {
-  /** Inclusivo, a las 00:00 locales. */
-  desde: Date
-  /** Exclusivo: el instante en que empieza el período siguiente. */
-  hasta: Date
+  /** Primer día incluido, «2026-09-14». */
+  desde: string
+  /** Último día incluido. Inclusivo, que es como se lee un rango de fechas. */
+  hasta: string
   /** Cómo se llama este rango en pantalla. */
   etiqueta: string
 }
@@ -35,7 +40,10 @@ const MESES = [
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ]
 
-const dia = (d: Date) => `${d.getDate()} de ${MESES[d.getMonth()].slice(0, 3)}`
+const corto = (dia: string) => {
+  const [, m, d] = dia.split('-').map(Number)
+  return `${d} de ${MESES[m - 1].slice(0, 3)}`
+}
 
 /**
  * El rango de un período, `desplazamiento` posiciones atrás.
@@ -43,58 +51,51 @@ const dia = (d: Date) => `${d.getDate()} de ${MESES[d.getMonth()].slice(0, 3)}`
  * Con 0 es el período en curso, con -1 el anterior. Se cuenta hacia atrás y no
  * hacia delante porque no hay gastos en el futuro que mirar.
  */
-export function rangoPeriodo(periodo: Periodo, desplazamiento = 0, ahora = new Date()): Rango {
-  const y = ahora.getFullYear()
-  const m = ahora.getMonth()
+export function rangoPeriodo(periodo: Periodo, desplazamiento = 0, hoy = hoyEnZona()): Rango {
+  const [anio, mes] = anioMes(hoy)
 
   if (periodo === 'semana') {
-    // La semana empieza el lunes: getDay() da 0 para el domingo, que aquí es
-    // el último día, no el primero.
-    const diaSemana = (ahora.getDay() + 6) % 7
-    const desde = new Date(y, m, ahora.getDate() - diaSemana + desplazamiento * 7)
-    const hasta = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + 7)
-    const ultimo = new Date(hasta.getTime() - 1)
+    // La semana empieza el lunes. `diaSemana` da 0 para el lunes justamente
+    // para que esta resta no tenga que corregir nada.
+    const desde = sumarDias(hoy, -diaSemana(hoy) + desplazamiento * 7)
+    const hasta = sumarDias(desde, 6)
     return {
       desde,
       hasta,
-      etiqueta: desplazamiento === 0 ? 'Esta semana' : `${dia(desde)} – ${dia(ultimo)}`,
+      etiqueta: desplazamiento === 0 ? 'Esta semana' : `${corto(desde)} – ${corto(hasta)}`,
     }
   }
 
   if (periodo === 'mes') {
-    const desde = new Date(y, m + desplazamiento, 1)
-    const hasta = new Date(y, m + desplazamiento + 1, 1)
-    const mismoAño = desde.getFullYear() === y
-    return {
-      desde,
-      hasta,
-      etiqueta: mismoAño ? MESES[desde.getMonth()] : `${MESES[desde.getMonth()]} ${desde.getFullYear()}`,
-    }
+    const desde = primeroDeMes(anio, mes + desplazamiento)
+    const hasta = sumarDias(primeroDeMes(anio, mes + desplazamiento + 1), -1)
+    const [a, m] = anioMes(desde)
+    return { desde, hasta, etiqueta: a === anio ? MESES[m - 1] : `${MESES[m - 1]} ${a}` }
   }
 
   if (periodo === 'trimestre') {
-    const inicio = Math.floor(m / 3) * 3 + desplazamiento * 3
-    const desde = new Date(y, inicio, 1)
-    const hasta = new Date(y, inicio + 3, 1)
-    const n = Math.floor(desde.getMonth() / 3) + 1
-    return { desde, hasta, etiqueta: `${n}.º trimestre ${desde.getFullYear()}` }
+    const inicio = Math.floor((mes - 1) / 3) * 3 + 1 + desplazamiento * 3
+    const desde = primeroDeMes(anio, inicio)
+    const hasta = sumarDias(primeroDeMes(anio, inicio + 3), -1)
+    const [a, m] = anioMes(desde)
+    return { desde, hasta, etiqueta: `${Math.floor((m - 1) / 3) + 1}.º trimestre ${a}` }
   }
 
   if (periodo === 'semestre') {
-    const inicio = Math.floor(m / 6) * 6 + desplazamiento * 6
-    const desde = new Date(y, inicio, 1)
-    const hasta = new Date(y, inicio + 6, 1)
-    const n = Math.floor(desde.getMonth() / 6) + 1
-    return { desde, hasta, etiqueta: `${n}.º semestre ${desde.getFullYear()}` }
+    const inicio = Math.floor((mes - 1) / 6) * 6 + 1 + desplazamiento * 6
+    const desde = primeroDeMes(anio, inicio)
+    const hasta = sumarDias(primeroDeMes(anio, inicio + 6), -1)
+    const [a, m] = anioMes(desde)
+    return { desde, hasta, etiqueta: `${Math.floor((m - 1) / 6) + 1}.º semestre ${a}` }
   }
 
-  const desde = new Date(y + desplazamiento, 0, 1)
-  const hasta = new Date(y + desplazamiento + 1, 0, 1)
-  return { desde, hasta, etiqueta: String(desde.getFullYear()) }
+  const desde = primeroDeMes(anio + desplazamiento, 1)
+  const hasta = sumarDias(primeroDeMes(anio + desplazamiento + 1, 1), -1)
+  return { desde, hasta, etiqueta: String(anio + desplazamiento) }
 }
 
-/** Si una fecha cae dentro del rango. */
+/** Si un movimiento cae dentro del rango, mirado desde la zona del usuario. */
 export const enRango = (iso: string, r: Rango) => {
-  const t = new Date(iso).getTime()
-  return t >= r.desde.getTime() && t < r.hasta.getTime()
+  const dia = diaEn(iso)
+  return dia >= r.desde && dia <= r.hasta
 }

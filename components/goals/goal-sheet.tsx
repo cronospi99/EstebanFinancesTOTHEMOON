@@ -76,7 +76,7 @@ export function GoalSheet({
         <input
           type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)}
           className="mb-4 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
-                     text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
+                     text-label focus:border-accent-blue/50 focus:outline-none"
         />
 
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">Color</label>

@@ -6,6 +6,7 @@
  * En dólares siempre van los dos decimales, que ahí sí son significativos.
  */
 import type { Currency } from './types'
+import { diaEn, hoyEnZona, sumarDias, zonaEfectiva } from './zona'
 
 const copInt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const copDec = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -61,28 +62,33 @@ export function formatPercent(value: number, withSign = true, decimals = 2) {
   return `${sign}${value.toFixed(decimals).replace('.', ',')} %`
 }
 
+/*
+ * Las fechas se pintan en la zona del usuario, no en la del servidor ni en UTC.
+ * Ver `zona.ts`: sin esto, un gasto de las once de la noche en Bogotá salía
+ * fechado al día siguiente.
+ */
 export function formatDate(iso: string) {
-  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(new Date(iso))
+  return new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric', month: 'short', timeZone: zonaEfectiva(),
+  }).format(new Date(iso))
 }
 
 export function formatDayLabel(iso: string) {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(today.getDate() - 1)
-  const same = (a: Date, b: Date) => a.toDateString() === b.toDateString()
-  if (same(d, today)) return 'Hoy'
-  if (same(d, yesterday)) return 'Ayer'
-  return new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }).format(d)
+  // Se comparan días, no instantes: dos momentos del mismo día son «Hoy»
+  // aunque los separen veinte horas.
+  const dia = diaEn(iso)
+  const hoy = hoyEnZona()
+  if (dia === hoy) return 'Hoy'
+  if (dia === sumarDias(hoy, -1)) return 'Ayer'
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: zonaEfectiva(),
+  }).format(new Date(iso))
 }
 
-export const monthKey = (d: Date | string = new Date()) => {
-  const date = typeof d === 'string' ? new Date(d) : d
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
+export const monthKey = (d: Date | string = new Date()) => diaEn(d).slice(0, 7)
 
 export const monthName = (d: Date = new Date()) =>
-  new Intl.DateTimeFormat('es-CO', { month: 'long' }).format(d)
+  new Intl.DateTimeFormat('es-CO', { month: 'long', timeZone: zonaEfectiva() }).format(d)
 
 /**
  * Rendimiento mensual equivalente a una tasa efectiva anual.

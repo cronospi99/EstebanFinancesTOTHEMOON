@@ -15,26 +15,23 @@ import { useFinance } from '@/lib/store'
 import { useVoice } from '@/lib/use-voice'
 import { interpretarDictado } from '@/lib/voice'
 import { cn, haptic } from '@/lib/utils'
+import { hoyEnZona, instanteEnDia, sumarDias } from '@/lib/zona'
 
 type Mode = 'expense' | 'income'
 
-const hoyISO = () => new Date().toISOString().slice(0, 10)
-
-/**
- * Combina el día elegido con la hora actual. Registrar algo de ayer no
- * debería fijarlo a las 00:00: se ordenaría antes que todo lo de ese día.
+/*
+ * El día de hoy sale de la zona del usuario, no de UTC.
+ *
+ * Era el fallo que hacía aparecer los movimientos al día siguiente:
+ * `toISOString()` pasa a UTC antes de recortar el día, y a las once de la
+ * noche en Bogotá en UTC ya es mañana. Así que el formulario traía puesta la
+ * fecha de mañana, la etiqueta decía «Hoy» tan tranquila, y el movimiento se
+ * guardaba de verdad un día adelante.
  */
-function fechaISO(dia: string) {
-  const ahora = new Date()
-  const [a, m, d] = dia.split('-').map(Number)
-  const fecha = new Date(a, m - 1, d, ahora.getHours(), ahora.getMinutes(), ahora.getSeconds())
-  return fecha.toISOString()
-}
-
 function etiquetaFecha(dia: string) {
-  if (dia === hoyISO()) return 'Hoy'
-  const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
-  if (dia === ayer.toISOString().slice(0, 10)) return 'Ayer'
+  const hoy = hoyEnZona()
+  if (dia === hoy) return 'Hoy'
+  if (dia === sumarDias(hoy, -1)) return 'Ayer'
   const [a, m, d] = dia.split('-').map(Number)
   return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(new Date(a, m - 1, d))
 }
@@ -49,7 +46,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [pocketId, setPocketId] = useState<string | undefined>()
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState(false)
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(hoyEnZona)
 
   const account = accounts.find((a) => a.id === accountId)
   const currency = account?.currency ?? 'COP'
@@ -71,7 +68,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
     if (open) return
     const t = setTimeout(() => {
       setRaw(''); setNote(''); setSaved(false); setMode('expense'); setPocketId(undefined)
-      setFecha(new Date().toISOString().slice(0, 10))
+      setFecha(hoyEnZona())
     }, 350)
     return () => clearTimeout(t)
   }, [open])
@@ -120,7 +117,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
       type: mode,
       currency,
       description: note.trim() || categoryById(categoryId).name,
-      occurredAt: fechaISO(fecha),
+      occurredAt: instanteEnDia(fecha),
     }).catch(() => {
       /* El movimiento ya está en el estado en memoria. La escritura remota no
          se reintenta todavía — ver "cola de escrituras" en el README. */
@@ -248,10 +245,9 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
           <CalendarDays size={16} className="shrink-0 text-label-tertiary" />
           <span className="flex-1 text-[15px] text-label">{etiquetaFecha(fecha)}</span>
           <input
-            type="date" value={fecha} max={hoyISO()}
-            onChange={(e) => { haptic(6); setFecha(e.target.value || hoyISO()) }}
-            className="w-[26px] bg-transparent text-[15px] text-label-tertiary [color-scheme:dark]
-                       focus:outline-none"
+            type="date" value={fecha} max={hoyEnZona()}
+            onChange={(e) => { haptic(6); setFecha(e.target.value || hoyEnZona()) }}
+            className="w-[26px] bg-transparent text-[15px] text-label-tertiary focus:outline-none"
           />
         </label>
 
