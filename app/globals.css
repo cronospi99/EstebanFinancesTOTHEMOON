@@ -59,6 +59,11 @@
     --sombra-sheet: 0 -8px 48px -8px rgba(0, 0, 0, 0.85);
     --brillo-sheen: rgba(255, 255, 255, 0.06);
 
+    /* Lo que pinta los controles nativos: el selector de fecha, la barra de
+       scroll, el autocompletado. Sin esto, en modo claro salía un calendario
+       negro sobre una tarjeta blanca. */
+    color-scheme: dark;
+
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --nav-h: 64px;
@@ -79,6 +84,8 @@
    * lee lavado sobre blanco.
    */
   :root[data-theme='light'] {
+    color-scheme: light;
+
     --ink: #F2F2F7;
     --ink-raised: #FFFFFF;
     --ink-card: rgba(255, 255, 255, 0.85);

@@ -9,6 +9,7 @@ import {
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
 import { saldoDeuda, type SaldoDeuda } from './deudas'
+import { cargarZona, diaEn } from './zona'
 import { monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
@@ -306,6 +307,15 @@ interface FinanceContextValue extends State {
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
+
+/*
+ * La zona horaria elegida se recupera antes del primer render.
+ *
+ * En el módulo y no en un efecto: los formateadores la leen al pintar, y si se
+ * cargara después, la primera pasada agruparía los movimientos con la zona del
+ * dispositivo y la segunda los movería de sitio a la vista del usuario.
+ */
+if (typeof window !== 'undefined') cargarZona()
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // Con Supabase configurado nunca se parte de los datos de ejemplo: quien
@@ -1563,11 +1573,12 @@ export function useSpendByCategory(month = monthKey()) {
   }, [transactions, month])
 }
 
-/** Día local en formato YYYY-MM-DD, que es como se comparan dos fechas aquí. */
-const diaKey = (iso: string | Date = new Date()) => {
-  const d = typeof iso === 'string' ? new Date(iso) : iso
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+/**
+ * El día de una fecha, en la zona del usuario. Es como se comparan dos fechas
+ * aquí: el tope de gasto de hoy tiene que cortar a medianoche donde vive el
+ * que gasta, no donde esté el servidor. Ver `zona.ts`.
+ */
+const diaKey = (iso: string | Date = new Date()) => diaEn(iso)
 
 /**
  * Gasto de hoy, en total y por categoría.

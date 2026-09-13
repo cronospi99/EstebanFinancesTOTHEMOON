@@ -337,6 +337,29 @@ aparece como una cuenta más.
 
 ---
 
+## Zona horaria
+
+En **Ajustes → Zona horaria**. Se detecta sola la del teléfono y se puede fijar
+a mano: un viaje del que no se quiere que se muevan las cuentas, un teléfono con
+la zona mal puesta, o quien prefiere cuadrar con su banco.
+
+No es un adorno. Todo lo que aquí es «un día» —el día de un gasto, el resumen
+de hoy, los límites de una semana o de un mes— depende de dónde esté quien la
+usa. Sin fijarlo, **un gasto de las once de la noche en Bogotá se registraba
+con la fecha del día siguiente**: `toISOString()` pasa a UTC antes de recortar
+el día, y a esa hora en UTC ya es mañana. El formulario traía puesta la fecha
+de mañana, la etiqueta decía «Hoy» tan tranquila, y el movimiento se guardaba
+de verdad un día adelante.
+
+Los rangos de período se llevan en días sueltos («2026-09-14») y se comparan
+como texto, no como instantes: preguntar «¿qué día es este gasto para él?» es
+la única forma de que uno de las once de la noche caiga donde debe. Y el
+instante que se guarda es el real —se parte de ahora y se desplaza por días
+enteros—, no uno reconstruido con las piezas de la fecha, que guardaba la hora
+local como si fuera UTC y la dejaba corrida cinco horas para siempre.
+
+---
+
 ## Apariencia
 
 Oscuro, claro o lo que diga el teléfono, en **Ajustes → Apariencia**. Tres

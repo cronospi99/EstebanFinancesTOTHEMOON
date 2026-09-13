@@ -9,6 +9,7 @@ import { anualDesdeMensual, mensualDesdeAnual } from '@/lib/deudas'
 import { formatPercent, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
+import { hoyEnZona } from '@/lib/zona'
 import type { Currency, Debt } from '@/lib/types'
 
 export const COLORES_DEUDA = ['#FF453A', '#FF9F0A', '#BF5AF2', '#0A84FF', '#30D158', '#98989F']
@@ -16,7 +17,9 @@ export const COLORES_DEUDA = ['#FF453A', '#FF9F0A', '#BF5AF2', '#0A84FF', '#30D1
 /** Cómo se teclea la tasa. Lo que se guarda siempre es la anual. */
 type Periodo = 'mensual' | 'anual'
 
-const hoy = () => new Date().toISOString().slice(0, 10)
+// El día en la zona del usuario: en UTC, a partir de las 7 de la tarde en
+// Colombia ya sería mañana. Ver `zona.ts`.
+const hoy = hoyEnZona
 
 /**
  * Alta y edición de una deuda personal.
@@ -177,7 +180,7 @@ export function DebtSheet({
             <input
               type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)}
               className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-3 text-[15px]
-                         text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
+                         text-label focus:border-accent-blue/50 focus:outline-none"
             />
           </div>
           <div>
@@ -187,7 +190,7 @@ export function DebtSheet({
             <input
               type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
               className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-3 text-[15px]
-                         text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
+                         text-label focus:border-accent-blue/50 focus:outline-none"
             />
           </div>
         </div>

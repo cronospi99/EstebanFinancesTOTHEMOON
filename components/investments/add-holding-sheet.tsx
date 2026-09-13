@@ -13,6 +13,7 @@ import { formatKeypad, formatMoney, formatQuantity, parseKeypad } from '@/lib/fo
 import { useFinance } from '@/lib/store'
 import type { AssetType, Currency, Holding } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
+import { hoyEnZona } from '@/lib/zona'
 
 const ASSETS: { value: AssetType; label: string }[] = [
   { value: 'etf', label: 'ETF' },
@@ -26,7 +27,9 @@ const TIPO_YAHOO: Record<string, AssetType> = {
   etf: 'etf', equity: 'stock', cryptocurrency: 'crypto', currency: 'fx', mutualfund: 'etf',
 }
 
-const hoy = () => new Date().toISOString().slice(0, 10)
+// El día en la zona del usuario: en UTC, a partir de las 7 de la tarde en
+// Colombia ya sería mañana. Ver `zona.ts`.
+const hoy = hoyEnZona
 
 /**
  * Une el día elegido con la hora actual. Una operación registrada a las 3 de
@@ -340,7 +343,7 @@ export function AddHoldingSheet({
         <input
           type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={hoy()}
           className="mb-5 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
-                     text-[16px] text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
+                     text-[16px] text-label focus:border-accent-blue/50 focus:outline-none"
         />
 
         <Label>Precio por unidad</Label>

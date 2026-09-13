@@ -136,7 +136,7 @@ export function EditTradeSheet({ trade, onClose }: { trade: Trade | null; onClos
           <input
             type="date" value={dia}
             onChange={(e) => { if (e.target.value) { haptic(6); setDia(e.target.value) } }}
-            className="w-[26px] bg-transparent text-[15px] text-label-tertiary [color-scheme:dark] focus:outline-none"
+            className="w-[26px] bg-transparent text-[15px] text-label-tertiary focus:outline-none"
           />
         </label>
 

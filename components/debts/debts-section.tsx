@@ -10,10 +10,13 @@ import { mensualDesdeAnual, redondeaMoneda } from '@/lib/deudas'
 import { formatDate, formatMoney, formatPercent, parseKeypad } from '@/lib/format'
 import { useDeudaTotal, useDeudas, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
+import { hoyEnZona } from '@/lib/zona'
 import type { Debt } from '@/lib/types'
 import type { DeudaConSaldo } from '@/lib/store'
 
-const hoy = () => new Date().toISOString().slice(0, 10)
+// El día en la zona del usuario: en UTC, a partir de las 7 de la tarde en
+// Colombia ya sería mañana. Ver `zona.ts`.
+const hoy = hoyEnZona
 
 /**
  * Deudas personales: lo que le debes a gente, no a un banco.
@@ -233,7 +236,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
             type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
             aria-label="Fecha del abono"
             className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2 text-[14px]
-                       text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
+                       text-label focus:border-accent-blue/50 focus:outline-none"
           />
         </div>
       ) : (
