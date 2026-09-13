@@ -61,7 +61,7 @@ export function NewBudgetSheet({ open, onClose }: { open: boolean; onClose: () =
             juntas en una hoja larga hacen que no se conteste ninguna. */}
         {!elegida ? (
           <>
-            <div className="mb-3 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-3 py-2.5">
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5">
               <Search size={16} className="shrink-0 text-label-tertiary" />
               <input
                 value={q} onChange={(e) => setQ(e.target.value)} autoFocus
@@ -81,7 +81,7 @@ export function NewBudgetSheet({ open, onClose }: { open: boolean; onClose: () =
                       <button
                         key={c.id}
                         onClick={() => { haptic(6); setElegida(c) }}
-                        className="press flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.04] p-2 text-left"
+                        className="press flex items-center gap-2 rounded-xl border border-hairline bg-fill-1 p-2 text-left"
                       >
                         <CategoryIcon icon={c.icon} color={c.color} size="sm" />
                         <span className="min-w-0 truncate text-[14px] text-label">{c.name}</span>
@@ -103,7 +103,7 @@ export function NewBudgetSheet({ open, onClose }: { open: boolean; onClose: () =
           <>
             <button
               onClick={() => { haptic(6); setElegida(null) }}
-              className="press mb-4 flex w-full items-center gap-2.5 rounded-xl border border-hairline bg-white/[0.04] p-3 text-left"
+              className="press mb-4 flex w-full items-center gap-2.5 rounded-xl border border-hairline bg-fill-1 p-3 text-left"
             >
               <CategoryIcon icon={elegida.icon} color={elegida.color} size="sm" />
               <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-label">{elegida.name}</span>
@@ -135,7 +135,7 @@ export function NewBudgetSheet({ open, onClose }: { open: boolean; onClose: () =
               disabled={importe <= 0}
               className={cn(
                 'press h-[52px] w-full rounded-2xl text-[17px] font-semibold text-white shadow-glow',
-                'bg-accent-blue disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none',
+                'bg-accent-blue disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none',
               )}
             >
               Crear presupuesto

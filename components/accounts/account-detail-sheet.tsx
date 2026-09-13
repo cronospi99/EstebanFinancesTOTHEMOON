@@ -101,7 +101,7 @@ export function AccountDetailSheet({
         {/* Saldo, editable. El saldo real se desvía del calculado —una compra
             que no se registró, un cobro del banco— y sin poder corregirlo a
             mano la app deja de cuadrar con la realidad. */}
-        <div className="mb-5 rounded-2xl border border-hairline bg-white/[0.04] p-4">
+        <div className="mb-5 rounded-2xl border border-hairline bg-fill-1 p-4">
           {editSaldo ? (
             <>
               <p className="mb-2 text-[12px] text-label-secondary">
@@ -118,7 +118,7 @@ export function AccountDetailSheet({
                 >
                   −
                 </button>
-                <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2">
+                <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2">
                   <span className="text-[16px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
                   <input
                     autoFocus value={saldoDraft ? formatKeypad(saldoDraft) : ''} inputMode="decimal"
@@ -207,7 +207,7 @@ export function AccountDetailSheet({
         {cuadre && cuadre.movimientos > 0 && (
           <div className={cn(
             'mb-5 rounded-2xl border px-4 py-3',
-            cuadrando ? 'border-accent-orange/30 bg-accent-orange/[0.08]' : 'border-hairline bg-white/[0.04]',
+            cuadrando ? 'border-accent-orange/30 bg-accent-orange/[0.08]' : 'border-hairline bg-fill-1',
           )}>
             {cuadrando ? (
               <>
@@ -264,13 +264,13 @@ export function AccountDetailSheet({
         {account.type !== 'credit' && (
         <div className={cn(
           'mb-5 rounded-2xl border px-4 py-3',
-          account.apy ? 'border-accent-green/25 bg-accent-green/[0.08]' : 'border-hairline bg-white/[0.04]',
+          account.apy ? 'border-accent-green/25 bg-accent-green/[0.08]' : 'border-hairline bg-fill-1',
         )}>
           {editApy ? (
             <div>
               <p className="mb-2 text-[12px] text-label-secondary">Rendimiento E.A.</p>
               <div className="flex items-center gap-2">
-                <div className="flex flex-1 items-center gap-1 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2">
+                <div className="flex flex-1 items-center gap-1 rounded-xl border border-hairline bg-fill-2 px-3 py-2">
                   <input
                     autoFocus value={apyDraft} inputMode="decimal"
                     onChange={(e) => setApyDraft(e.target.value.replace(/[^\d,]/g, '').slice(0, 6))}
@@ -322,12 +322,12 @@ export function AccountDetailSheet({
 
         {/* Cupo de la tarjeta */}
         {account.type === 'credit' && (
-          <div className="mb-5 rounded-2xl border border-hairline bg-white/[0.04] p-4">
+          <div className="mb-5 rounded-2xl border border-hairline bg-fill-1 p-4">
             {editCupo ? (
               <>
                 <p className="mb-2 text-[12px] text-label-secondary">Cupo total</p>
                 <div className="flex items-center gap-2">
-                  <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2">
+                  <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2">
                     <span className="text-[16px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
                     <input
                       autoFocus value={cupoDraft ? formatKeypad(cupoDraft) : ''} inputMode="decimal"
@@ -372,7 +372,7 @@ export function AccountDetailSheet({
                         {formatMoney(usado, cur)} de {formatMoney(account.creditLimit, cur)}
                       </span>
                     </button>
-                    <div className="mb-2 h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                    <div className="mb-2 h-2 overflow-hidden rounded-full bg-fill-3">
                       <motion.div
                         initial={{ width: 0 }} animate={{ width: `${Math.min(uso, 1) * 100}%` }}
                         transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
@@ -422,14 +422,14 @@ export function AccountDetailSheet({
 
         {/* Cuotas de tarjeta */}
         {account.type === 'credit' && account.installments ? (
-          <div className="mb-5 rounded-2xl border border-hairline bg-white/[0.04] p-4">
+          <div className="mb-5 rounded-2xl border border-hairline bg-fill-1 p-4">
             <div className="mb-2 flex items-baseline justify-between">
               <p className="text-[13px] font-medium text-label">Cuotas</p>
               <p className="tnum text-[13px] text-label-secondary">
                 {account.installmentsPaid ?? 0} de {account.installments}
               </p>
             </div>
-            <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/[0.07]">
+            <div className="mb-3 h-2 overflow-hidden rounded-full bg-fill-3">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${((account.installmentsPaid ?? 0) / account.installments) * 100}%` }}
@@ -448,7 +448,7 @@ export function AccountDetailSheet({
                 })
               }}
               disabled={(account.installmentsPaid ?? 0) >= account.installments}
-              className="press w-full rounded-xl border border-hairline bg-white/[0.05] py-2.5 text-[14px]
+              className="press w-full rounded-xl border border-hairline bg-fill-2 py-2.5 text-[14px]
                          font-medium text-accent-blue disabled:opacity-40"
             >
               Marcar cuota pagada
@@ -467,7 +467,7 @@ export function AccountDetailSheet({
         </div>
 
         {pockets.length === 0 && !adding && (
-          <div className="mb-4 rounded-2xl border border-hairline bg-white/[0.03] p-5 text-center">
+          <div className="mb-4 rounded-2xl border border-hairline bg-fill-1 p-5 text-center">
             <Wallet size={20} className="mx-auto mb-2 text-label-tertiary" />
             <p className="text-[13px] text-label-secondary">
               Aún no hay bolsillos en esta cuenta.
@@ -476,16 +476,16 @@ export function AccountDetailSheet({
         )}
 
         {pockets.length > 0 && (
-          <div className="mb-4 divide-y divide-hairline overflow-hidden rounded-2xl border border-hairline bg-white/[0.04]">
+          <div className="mb-4 divide-y divide-hairline overflow-hidden rounded-2xl border border-hairline bg-fill-1">
             {pockets.map((p) => editPocket === p.id ? (
               <div key={p.id} className="space-y-2 px-4 py-3">
                 <input
                   value={pDraft.name} onChange={(e) => setPDraft((d) => ({ ...d, name: e.target.value }))}
                   placeholder="Nombre" autoFocus
-                  className="w-full rounded-lg border border-hairline bg-white/[0.06] px-3 py-2 text-[15px] text-label focus:outline-none"
+                  className="w-full rounded-lg border border-hairline bg-fill-2 px-3 py-2 text-[15px] text-label focus:outline-none"
                 />
                 <div className="flex gap-2">
-                  <div className="flex flex-1 items-center gap-1 rounded-lg border border-hairline bg-white/[0.06] px-3 py-2">
+                  <div className="flex flex-1 items-center gap-1 rounded-lg border border-hairline bg-fill-2 px-3 py-2">
                     <span className="text-[14px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
                     <input
                       value={pDraft.balance ? formatKeypad(pDraft.balance) : ''}
@@ -494,7 +494,7 @@ export function AccountDetailSheet({
                       className="tnum w-full bg-transparent text-[15px] font-semibold text-label focus:outline-none"
                     />
                   </div>
-                  <div className="flex w-[100px] items-center gap-1 rounded-lg border border-hairline bg-white/[0.06] px-3 py-2">
+                  <div className="flex w-[100px] items-center gap-1 rounded-lg border border-hairline bg-fill-2 px-3 py-2">
                     <input
                       value={pDraft.apy} onChange={(e) => setPDraft((d) => ({ ...d, apy: e.target.value.replace(/[^\d,]/g, '').slice(0, 5) }))}
                       inputMode="decimal" placeholder="E.A."
@@ -559,14 +559,14 @@ export function AccountDetailSheet({
         )}
 
         {adding && (
-          <div className="mb-4 space-y-2 rounded-2xl border border-hairline bg-white/[0.04] p-4">
+          <div className="mb-4 space-y-2 rounded-2xl border border-hairline bg-fill-1 p-4">
             <input
               value={pName} onChange={(e) => setPName(e.target.value)} placeholder="Nombre del bolsillo" autoFocus
-              className="w-full rounded-xl border border-hairline bg-white/[0.05] px-3 py-2.5 text-[15px]
+              className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2.5 text-[15px]
                          text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
             />
             <div className="flex gap-2">
-              <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.05] px-3 py-2.5">
+              <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5">
                 <span className="text-[15px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
                 <input
                   value={pAmount ? formatKeypad(pAmount) : ''}
@@ -575,7 +575,7 @@ export function AccountDetailSheet({
                   className="tnum w-full bg-transparent text-[15px] font-semibold text-label placeholder:text-label-tertiary focus:outline-none"
                 />
               </div>
-              <div className="flex w-[110px] items-center gap-1 rounded-xl border border-hairline bg-white/[0.05] px-3 py-2.5">
+              <div className="flex w-[110px] items-center gap-1 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5">
                 <input
                   value={pApy} onChange={(e) => setPApy(e.target.value.replace(/[^\d,]/g, '').slice(0, 5))}
                   placeholder="E.A." inputMode="decimal"

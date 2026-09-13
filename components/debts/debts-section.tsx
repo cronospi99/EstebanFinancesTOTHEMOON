@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, HandCoins, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, HandCoins, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/card'
 import { MoneyInput } from '@/components/ui/money-input'
 import { DebtSheet } from '@/components/debts/debt-sheet'
@@ -24,6 +24,7 @@ const hoy = () => new Date().toISOString().slice(0, 10)
  */
 export function DebtsSection() {
   const deudas = useDeudas()
+  const { deudasError, synced } = useFinance()
   const { total, cuantas } = useDeudaTotal()
 
   const [hoja, setHoja] = useState(false)
@@ -45,6 +46,26 @@ export function DebtsSection() {
         }
       />
 
+      {/* Si el servidor las rechaza, decirlo. Sin este aviso el fallo era
+          invisible: se registraba la deuda, se veía en pantalla, y a la carga
+          siguiente ya no estaba sin que nada explicara por qué. */}
+      {synced && deudasError && (
+        <div className="mb-3 flex gap-2.5 rounded-2xl border border-accent-orange/25 bg-accent-orange/[0.08] px-4 py-3">
+          <TriangleAlert size={17} className="mt-0.5 shrink-0 text-accent-orange" />
+          <div>
+            <p className="text-[13px] font-semibold text-accent-orange">
+              Las deudas no se están guardando en tu cuenta
+            </p>
+            <p className="mt-1 text-[12px] leading-relaxed text-label-secondary">
+              {deudasError}. Lo que registres se queda en este teléfono hasta que
+              se arregle. Si acabas de desplegar, falta aplicar la migración
+              <code className="mx-1 rounded bg-white/10 px-1 py-0.5 text-[11px]">deudas_personales</code>
+              en Supabase.
+            </p>
+          </div>
+        </div>
+      )}
+
       {!deudas.length ? (
         <Card className="p-8 text-center">
           <HandCoins size={22} className="mx-auto mb-2 text-label-tertiary" />
@@ -55,7 +76,7 @@ export function DebtsSection() {
           </p>
           <button
             onClick={abrirNueva}
-            className="press mt-3 rounded-xl border border-hairline bg-white/[0.04] px-4 py-2 text-[14px] font-medium text-accent-blue"
+            className="press mt-3 rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
           >
             Registrar una deuda
           </button>
@@ -125,7 +146,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
           <div className="flex items-center gap-1.5">
             <p className="truncate text-[16px] font-semibold text-label">{deuda.person}</p>
             {moneda === 'USD' && (
-              <span className="shrink-0 rounded bg-white/[0.09] px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
+              <span className="shrink-0 rounded bg-fill-3 px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
             )}
             {saldada && (
               <span className="flex shrink-0 items-center gap-0.5 rounded-pill bg-accent-green/15 px-1.5 py-px text-[10px] font-semibold text-accent-green">
@@ -143,13 +164,13 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
         <button
           onClick={onEditar}
           aria-label={`Editar deuda con ${deuda.person}`}
-          className="press shrink-0 p-1 text-label-tertiary"
+          className="press-icon shrink-0 p-1 text-label-tertiary"
         >
           <Pencil size={15} />
         </button>
       </div>
 
-      <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-white/[0.07]">
+      <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-fill-3">
         <motion.div
           initial={{ width: 0 }} animate={{ width: `${progreso * 100}%` }}
           transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] }}
@@ -211,7 +232,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
           <input
             type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
             aria-label="Fecha del abono"
-            className="w-full rounded-xl border border-hairline bg-white/[0.05] px-3 py-2 text-[14px]
+            className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2 text-[14px]
                        text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
           />
         </div>
@@ -219,7 +240,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
         !saldada && (
           <button
             onClick={() => { haptic(6); setAbonando(true) }}
-            className="press mt-3 w-full rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+            className="press mt-3 w-full rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
           >
             Registrar un abono
           </button>
@@ -246,7 +267,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
                   <button
                     onClick={() => { haptic([16, 30]); deleteDebtPayment(a.id) }}
                     aria-label={`Eliminar abono de ${formatDate(a.occurredAt)}`}
-                    className="press shrink-0 p-1 text-label-tertiary"
+                    className="press-icon shrink-0 p-1 text-label-tertiary"
                   >
                     <Trash2 size={14} />
                   </button>

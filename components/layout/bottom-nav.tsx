@@ -44,7 +44,7 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
       </motion.button>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-black/70 backdrop-blur-2xl pb-safe"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-chrome backdrop-blur-2xl pb-safe"
         style={{ height: 'calc(var(--nav-h) + var(--sab))' }}
       >
         <div className="mx-auto grid h-[var(--nav-h)] max-w-md grid-cols-7 items-center px-1">

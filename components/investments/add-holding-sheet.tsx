@@ -241,7 +241,7 @@ export function AddHoldingSheet({
   )
 
   const campoNum = "tnum w-full bg-transparent text-[20px] font-semibold text-label placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
-  const caja = "flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3"
+  const caja = "flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3"
   const soloNum = (v: string, dec = 2) => {
     const limpio = v.replace(/[^\d,]/g, '')
     const [ent, ...d] = limpio.split(',')
@@ -339,7 +339,7 @@ export function AddHoldingSheet({
         <Label>Fecha</Label>
         <input
           type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={hoy()}
-          className="mb-5 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3
+          className="mb-5 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
                      text-[16px] text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
         />
 
@@ -412,7 +412,7 @@ export function AddHoldingSheet({
                   onClick={() => { haptic(6); setAssetType(a.value) }}
                   className={cn(
                     'press rounded-xl border py-2.5 text-[12px] font-medium transition-colors',
-                    a.value === assetType ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                    a.value === assetType ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
                   )}
                 >
                   {a.label}
@@ -444,7 +444,7 @@ export function AddHoldingSheet({
               onClick={() => { haptic(6); setPlataforma(p.name) }}
               className={cn(
                 'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
-                p.name === plataforma ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                p.name === plataforma ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
               )}
             >
               <InstitutionBadge institution={p.name} color={p.color} size="xs" />
@@ -463,7 +463,7 @@ export function AddHoldingSheet({
               ? operacion === 'venta' && !editing
                 ? 'bg-accent-red text-white'
                 : 'bg-accent-blue text-white shadow-glow'
-              : 'bg-white/[0.06] text-label-tertiary',
+              : 'bg-fill-2 text-label-tertiary',
           )}
         >
           {saving ? 'Guardando…' : editing ? 'Guardar cambios' : operacion === 'venta' ? 'Registrar venta' : 'Registrar compra'}

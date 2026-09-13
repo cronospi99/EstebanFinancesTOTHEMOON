@@ -57,12 +57,16 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
             </div>
 
             <Card className="divide-y divide-hairline overflow-hidden">
-              {txs.map((tx) => {
+              {txs.map((tx, i) => {
                 const cat = categoryById(tx.categoryId)
                 const account = accounts.find((a) => a.id === tx.accountId)
                 const income = tx.type === 'income'
                 return (
-                  <div key={tx.id} className="relative overflow-hidden">
+                  <div
+                    key={tx.id}
+                    style={{ '--i': i } as React.CSSProperties}
+                    className="fila-entra relative overflow-hidden"
+                  >
                     {/*
                       El botón de borrar va FUERA del elemento que se arrastra.
                       Estaba dentro, así que al deslizar se movía con la fila y
@@ -76,7 +80,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                         deleteTransaction(tx.id)
                       }}
                       aria-label={`Eliminar ${tx.description}`}
-                      className="absolute inset-y-0 right-0 flex w-[72px] items-center justify-center bg-accent-red/85 text-white"
+                      className="press-icon absolute inset-y-0 right-0 flex w-[72px] items-center justify-center bg-accent-red/85 text-white"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -95,7 +99,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                       dragElastic={{ left: 0.12, right: 0 }}
                       onDragStart={() => { arrastrando.current = true }}
                       onDragEnd={() => { setTimeout(() => { arrastrando.current = false }, 0) }}
-                      className="relative bg-[#0E0E10]"
+                      className="relative bg-surface"
                     >
                     <button
                       onClick={() => {
@@ -104,7 +108,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                         setEditando(tx)
                       }}
                       aria-label={`Editar ${tx.description}`}
-                      className="press-soft relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3 text-left"
+                      className="press-soft relative flex w-full items-center gap-3 bg-surface px-4 py-3 text-left"
                     >
                       <CategoryIcon icon={cat.icon} color={cat.color} />
                       <div className="min-w-0 flex-1">

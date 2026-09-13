@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Check, Database, DollarSign, KeyRound, LineChart, LogOut, Mail, RefreshCw, ShieldCheck, User, X,
+  Check, Database, DollarSign, KeyRound, LineChart, LogOut, Mail, Moon, RefreshCw, ShieldCheck,
+  Smartphone, Sun, User, X,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
@@ -11,6 +12,7 @@ import { BUILD_REF, BUILD_SHA, esBuildLocal, fechaBuild } from '@/lib/build-info
 import { FxNote } from '@/components/ui/fx-note'
 import { useMarketStatus } from '@/lib/use-market-status'
 import { useProfileName } from '@/lib/use-profile'
+import { useTheme, type Tema } from '@/lib/use-theme'
 import { formatKeypad, parseKeypad } from '@/lib/format'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { cn, haptic } from '@/lib/utils'
@@ -53,7 +55,7 @@ export default function SettingsPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="¿Cómo te llamas?"
-            className="w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+            className="w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                        text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
           />
           <p className="mt-1.5 px-1 text-[12px] text-label-tertiary">
@@ -64,13 +66,18 @@ export default function SettingsPage() {
       </section>
 
       <section>
+        <CardHeader title="Apariencia" />
+        <TemaCard />
+      </section>
+
+      <section>
         <CardHeader title="Tasa de cambio" />
         <Card className="p-4">
           {editTasa ? (
             <>
               <p className="mb-2 text-[12px] text-label-secondary">Dólar en pesos</p>
               <div className="mb-3 flex items-center gap-2">
-                <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-white/[0.06] px-3 py-2.5">
+                <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5">
                   <span className="text-[16px] text-label-secondary">$</span>
                   <input
                     autoFocus value={tasaDraft ? formatKeypad(tasaDraft) : ''} inputMode="decimal"
@@ -100,7 +107,7 @@ export default function SettingsPage() {
           ) : (
             <>
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-label-secondary">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fill-3 text-label-secondary">
                   <DollarSign size={17} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -282,7 +289,7 @@ export default function SettingsPage() {
             resetDemo()
           }}
           className="press flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline
-                     bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-red"
+                     bg-fill-1 py-3.5 text-[15px] font-medium text-accent-red"
         >
           <RefreshCw size={16} />
           Restablecer datos de demostración
@@ -329,7 +336,7 @@ function SesionCard({ email, onSignOut }: { email: string; onSignOut: () => Prom
   return (
     <Card className="p-4">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-label-secondary">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fill-3 text-label-secondary">
           <Mail size={17} />
         </div>
         <div className="min-w-0 flex-1">
@@ -375,6 +382,47 @@ function SesionCard({ email, onSignOut }: { email: string; onSignOut: () => Prom
   )
 }
 
+const TEMAS: { value: Tema; label: string; icono: React.ReactNode }[] = [
+  { value: 'oscuro', label: 'Oscuro', icono: <Moon size={16} /> },
+  { value: 'claro', label: 'Claro', icono: <Sun size={16} /> },
+  { value: 'sistema', label: 'Automático', icono: <Smartphone size={16} /> },
+]
+
+/**
+ * Claro, oscuro o lo que diga el teléfono.
+ *
+ * Tres opciones y no un interruptor de dos: «automático» es lo que quiere
+ * quien tiene el teléfono programado para cambiar al anochecer, y con un
+ * interruptor esa gente tiene que venir aquí dos veces al día.
+ */
+function TemaCard() {
+  const { tema, elegir } = useTheme()
+
+  return (
+    <Card className="p-2">
+      <div className="grid grid-cols-3 gap-1">
+        {TEMAS.map((t) => {
+          const activo = tema === t.value
+          return (
+            <button
+              key={t.value}
+              onClick={() => { haptic(8); elegir(t.value) }}
+              aria-pressed={activo}
+              className={cn(
+                'press flex flex-col items-center gap-1.5 rounded-xl py-3 transition-colors',
+                activo ? 'bg-fill-4 text-label' : 'text-label-secondary',
+              )}
+            >
+              {t.icono}
+              <span className="text-[13px] font-medium">{t.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
 function Row({
   icon, title, subtitle, status,
 }: {
@@ -385,7 +433,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3.5">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-label-secondary">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fill-3 text-label-secondary">
         {icon}
       </div>
       <div className="min-w-0 flex-1">
@@ -395,7 +443,7 @@ function Row({
       <div
         className={cn(
           'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
-          status ? 'bg-accent-green/20 text-accent-green' : 'bg-white/[0.08] text-label-tertiary',
+          status ? 'bg-accent-green/20 text-accent-green' : 'bg-fill-3 text-label-tertiary',
         )}
       >
         {status ? <Check size={14} strokeWidth={3} /> : <X size={14} strokeWidth={3} />}

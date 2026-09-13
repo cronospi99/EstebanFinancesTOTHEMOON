@@ -29,7 +29,7 @@ function MoneyField({
   placeholder?: string
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+    <div className="flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
       <span className="text-[18px] text-label-secondary">{prefix}</span>
       <input
         value={value ? formatKeypad(value) : ''}
@@ -109,7 +109,7 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={institution.name}
-          className="mb-5 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3
+          className="mb-5 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
                      text-[16px] text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
         />
 
@@ -121,7 +121,7 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
               onClick={() => { haptic(6); setType(t.value) }}
               className={cn(
                 'rounded-xl border py-2.5 text-[12px] font-medium transition-all',
-                t.value === type ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                t.value === type ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
               )}
             >
               {t.label}
@@ -168,7 +168,7 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
               onChange={(e) => setInstallments(e.target.value.replace(/\D/g, '').slice(0, 2))}
               placeholder="12"
               inputMode="numeric"
-              className="w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3
+              className="w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
                          text-[16px] text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
             />
             <p className="mt-1.5 px-1 text-[12px] text-label-tertiary">
@@ -181,7 +181,7 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
         {!isCredit && (
           <div className="mb-5">
             <Label>Rendimiento E.A. (opcional)</Label>
-            <div className="flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+            <div className="flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
               <input
                 value={apy}
                 onChange={(e) => {

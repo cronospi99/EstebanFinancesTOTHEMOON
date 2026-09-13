@@ -84,7 +84,7 @@ export function TradeHistory() {
                     className={cn(
                       'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
                       t.opening
-                        ? 'bg-white/[0.07] text-label-tertiary'
+                        ? 'bg-fill-3 text-label-tertiary'
                         : compra ? 'bg-accent-green/[0.18] text-accent-green' : 'bg-accent-red/[0.18] text-accent-red',
                     )}
                   >

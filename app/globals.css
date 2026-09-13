@@ -3,7 +3,62 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * Los dos temas, en variables.
+   *
+   * El oscuro vive en `:root` y es el que manda si nadie dice lo contrario: la
+   * app nació para mirarse de noche sobre OLED. El claro se pide poniendo
+   * `data-theme="light"` en el html, y con `data-theme="dark"` se fuerza el
+   * oscuro aunque el sistema pida claro.
+   *
+   * En variables y no en dos juegos de clases porque los colores están
+   * repartidos por sesenta archivos: cambiando el valor aquí, todo lo demás
+   * sigue solo. Los rellenos son translúcidos —blancos sobre oscuro, negros
+   * sobre claro— para que se apoyen en la superficie que tengan debajo en vez
+   * de pelearse con ella.
+   */
   :root {
+    --ink: #000000;
+    --ink-raised: #09090B;
+    --ink-card: rgba(255, 255, 255, 0.055);
+    --ink-hover: rgba(255, 255, 255, 0.085);
+    /* Fondo opaco de las filas que se deslizan: tiene que tapar lo que hay
+       detrás, así que no puede ser translúcido. */
+    --surface: #0E0E10;
+    --sheet: rgba(20, 20, 22, 0.85);
+    /* Barras fijas (la inferior, la lateral) y el velo de las hojas: lo que se
+       apoya encima de todo lo demás y deja ver el contenido por debajo. */
+    --chrome: rgba(0, 0, 0, 0.7);
+    --chrome-soft: rgba(0, 0, 0, 0.4);
+    --velo: rgba(0, 0, 0, 0.6);
+    --hairline-color: rgba(255, 255, 255, 0.08);
+
+    --label: #F5F5F7;
+    --label-2: #98989F;
+    --label-3: #5C5C63;
+
+    /* Rellenos, de más tenue a más marcado. */
+    --fill-1: rgba(255, 255, 255, 0.035);
+    --fill-2: rgba(255, 255, 255, 0.055);
+    --fill-3: rgba(255, 255, 255, 0.08);
+    --fill-4: rgba(255, 255, 255, 0.14);
+    --ring-sel: rgba(255, 255, 255, 0.7);
+
+    /* Acentos: los System Colors de iOS, variante oscura. */
+    --accent-blue: #0A84FF;
+    --accent-green: #30D158;
+    --accent-red: #FF453A;
+    --accent-orange: #FF9F0A;
+    --accent-violet: #BF5AF2;
+    --accent-teal: #40C8E0;
+    --accent-pink: #FF375F;
+    --accent-indigo: #5E5CE6;
+    --accent-yellow: #FFD60A;
+
+    --sombra-card: 0 1px 0 0 rgba(255, 255, 255, 0.055) inset, 0 8px 32px -12px rgba(0, 0, 0, 0.9);
+    --sombra-sheet: 0 -8px 48px -8px rgba(0, 0, 0, 0.85);
+    --brillo-sheen: rgba(255, 255, 255, 0.06);
+
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --nav-h: 64px;
@@ -18,8 +73,50 @@
     :root { --hairline: 0.33px; }
   }
 
+  /*
+   * Tema claro. Los acentos bajan de luminosidad —los de iOS en claro son más
+   * oscuros que los de oscuro— porque el mismo azul que brilla sobre negro se
+   * lee lavado sobre blanco.
+   */
+  :root[data-theme='light'] {
+    --ink: #F2F2F7;
+    --ink-raised: #FFFFFF;
+    --ink-card: rgba(255, 255, 255, 0.85);
+    --ink-hover: rgba(0, 0, 0, 0.04);
+    --surface: #FFFFFF;
+    --sheet: rgba(250, 250, 252, 0.88);
+    --chrome: rgba(255, 255, 255, 0.78);
+    --chrome-soft: rgba(255, 255, 255, 0.55);
+    --velo: rgba(0, 0, 0, 0.28);
+    --hairline-color: rgba(0, 0, 0, 0.09);
+
+    --label: #1C1C1E;
+    --label-2: #6B6B70;
+    --label-3: #A1A1A8;
+
+    --fill-1: rgba(0, 0, 0, 0.03);
+    --fill-2: rgba(0, 0, 0, 0.045);
+    --fill-3: rgba(0, 0, 0, 0.07);
+    --fill-4: rgba(0, 0, 0, 0.11);
+    --ring-sel: rgba(0, 0, 0, 0.45);
+
+    --accent-blue: #007AFF;
+    --accent-green: #248A3D;
+    --accent-red: #D70015;
+    --accent-orange: #C93400;
+    --accent-violet: #8944AB;
+    --accent-teal: #0071A4;
+    --accent-pink: #D30F45;
+    --accent-indigo: #3634A3;
+    --accent-yellow: #A05A00;
+
+    --sombra-card: 0 1px 2px 0 rgba(0, 0, 0, 0.04), 0 8px 24px -16px rgba(0, 0, 0, 0.25);
+    --sombra-sheet: 0 -8px 48px -12px rgba(0, 0, 0, 0.25);
+    --brillo-sheen: rgba(255, 255, 255, 0.5);
+  }
+
   html {
-    background-color: #000;
+    background-color: var(--ink);
     -webkit-tap-highlight-color: transparent;
     /* Evita que iOS agrande el texto al girar el teléfono. */
     -webkit-text-size-adjust: 100%;
@@ -66,19 +163,17 @@
    */
   .glass {
     position: relative;
-    background-color: theme('colors.ink.card');
-    border: var(--hairline) solid theme('colors.hairline');
+    background-color: var(--ink-card);
+    border: var(--hairline) solid var(--hairline-color);
     backdrop-filter: blur(28px) saturate(180%);
     -webkit-backdrop-filter: blur(28px) saturate(180%);
-    box-shadow:
-      0 1px 0 0 rgba(255, 255, 255, 0.055) inset,
-      0 8px 32px -12px rgba(0, 0, 0, 0.9);
+    box-shadow: var(--sombra-card);
   }
 
   /* Separador con sangría, como las listas de iOS: arranca donde arranca el
      texto, no en el borde de la tarjeta. */
   .divide-inset > * + * {
-    border-top: var(--hairline) solid theme('colors.hairline');
+    border-top: var(--hairline) solid var(--hairline-color);
     margin-left: 60px;
     padding-left: 0;
   }
@@ -116,13 +211,75 @@
   .press-dim { transition: opacity 200ms ease; }
   .press-dim:active { opacity: 0.55; transition-duration: 60ms; }
 
+  /*
+   * Iconos que responden al dedo.
+   *
+   * Los botones ya se hunden con `.press`, pero un icono suelto —una papelera,
+   * un lápiz, una flecha— se quedaba muerto: se tocaba y no pasaba nada hasta
+   * que la pantalla cambiaba. En iOS todo lo tocable acusa el golpe, y esa
+   * respuesta inmediata es lo que hace que la interfaz se sienta física en vez
+   * de remota.
+   *
+   * Hunde más que un botón (0,88 contra 0,96) porque en un objeto de veinte
+   * píxeles un 4 % no se percibe, y añade un halo que crece bajo el dedo: el
+   * icono es pequeño y el área que reacciona tiene que verse.
+   */
+  .press-icon {
+    position: relative;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms ease;
+  }
+  .press-icon::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 999px;
+    background-color: currentColor;
+    opacity: 0;
+    transform: scale(0.7);
+    transition: opacity 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .press-icon:active { transform: scale(0.88); transition-duration: 90ms; }
+  .press-icon:active::after { opacity: 0.12; transform: scale(1); transition-duration: 90ms; }
+
+  /*
+   * Entrada escalonada de una lista.
+   *
+   * Las filas aparecen una tras otra en vez de todas de golpe. Es el gesto de
+   * los ajustes de iOS al abrir una sección: cuesta 40 ms por fila y hace que
+   * la pantalla se lea como algo que se despliega y no como algo que parpadea.
+   * El retraso lo pone quien la usa con `--i`, y se corta a las diez para que
+   * una lista larga no tarde dos segundos en terminar de entrar.
+   */
+  @keyframes fila-entra {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  .fila-entra {
+    animation: fila-entra 380ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+    animation-delay: calc(min(var(--i, 0), 10) * 40ms);
+  }
+
+  /*
+   * Cifra que cambia.
+   *
+   * Un importe que se actualiza sin más parece un error de pintado. Un pulso
+   * corto dice «esto acaba de cambiar» sin robar la atención.
+   */
+  @keyframes cifra-pulso {
+    0% { transform: scale(1); }
+    38% { transform: scale(1.045); }
+    100% { transform: scale(1); }
+  }
+  .cifra-pulso { animation: cifra-pulso 420ms cubic-bezier(0.32, 0.72, 0, 1); }
+
   /* Realce especular sobre las tarjetas destacadas. */
   .sheen::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 42%);
+    background: linear-gradient(180deg, var(--brillo-sheen) 0%, transparent 42%);
     pointer-events: none;
   }
 }

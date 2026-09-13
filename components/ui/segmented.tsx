@@ -18,7 +18,7 @@ export function Segmented<T extends string>({
   id?: string
 }) {
   return (
-    <div className={cn('flex rounded-pill bg-white/[0.07] p-[3px]', className)}>
+    <div className={cn('flex rounded-pill bg-fill-3 p-[3px]', className)}>
       {options.map((opt) => {
         const active = opt.value === value
         return (
@@ -34,7 +34,7 @@ export function Segmented<T extends string>({
               <motion.span
                 layoutId={`${id}-thumb`}
                 transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-                className="absolute inset-0 rounded-pill bg-white/[0.14] shadow-sm"
+                className="absolute inset-0 rounded-pill bg-fill-4 shadow-sm"
               />
             )}
             <span className={cn('relative z-10', active ? 'text-label' : 'text-label-secondary')}>

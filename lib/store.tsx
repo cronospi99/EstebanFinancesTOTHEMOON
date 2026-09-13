@@ -66,6 +66,22 @@ const VACIO: State = {
  * las de verdad; y dos personas en el mismo teléfono se veían los datos la una
  * a la otra.
  */
+/**
+ * Traduce el fallo de una consulta a algo que se pueda leer y accionar.
+ *
+ * El 42P01 de Postgres —«relation does not exist»— llega aquí cuando la tabla
+ * todavía no está en el proyecto, que es el caso que de verdad ocurre: la
+ * migración no se ha aplicado. Decir «PGRST205» no ayuda a nadie.
+ */
+function motivoTabla(error: unknown): string | null {
+  if (!error) return null
+  const e = error as { code?: string; message?: string }
+  if (e.code === '42P01' || e.code === 'PGRST205' || /does not exist|schema cache/i.test(e.message ?? '')) {
+    return 'la tabla todavía no existe en tu proyecto de Supabase'
+  }
+  return e.message?.slice(0, 90) || 'el servidor rechazó la consulta'
+}
+
 const claveEstado = (userId?: string | null) => (userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY)
 
 function leerEstado(clave: string, base: State): State | null {
@@ -285,6 +301,8 @@ interface FinanceContextValue extends State {
   resetDemo: () => void
   /** Cierra la sesión y borra de este dispositivo lo que era del usuario. */
   signOut: () => Promise<void>
+  /** Por qué las deudas no se están guardando en la cuenta, si es que no. */
+  deudasError: string | null
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
@@ -298,6 +316,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [synced, setSynced] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [syncError, setSyncError] = useState(false)
+  /*
+   * Por qué las deudas no llegan al servidor, si es que no llegan.
+   *
+   * Su tabla es la última que se añadió, así que es la que puede faltar en un
+   * proyecto al que todavía no se le aplicó la migración. Sin este aviso el
+   * fallo era invisible: la deuda se registraba, se veía, y a la carga
+   * siguiente ya no estaba, sin que nada dijera por qué.
+   */
+  const [deudasError, setDeudasError] = useState<string | null>(null)
   const fx = useExchangeRate()
   const fxRate = fx.rate
 
@@ -387,6 +414,24 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             return
           }
 
+          /*
+           * Una tabla que falla conserva lo que ya había, no lo borra.
+           *
+           * Antes se ponía la lista en vacío, y eso era una pérdida de datos
+           * con todas las letras: si la migración de deudas todavía no se ha
+           * aplicado en el proyecto, la consulta falla, la carga siguiente
+           * dejaba `debts: []`, el efecto de persistencia guardaba ese vacío
+           * encima de la copia local y la deuda recién registrada desaparecía
+           * de la pantalla y del teléfono. Justo lo que pasaba.
+           *
+           * Conservando lo anterior, lo que se registró sigue ahí mientras se
+           * arregla el servidor, y el aviso de abajo dice que no se está
+           * guardando en la cuenta.
+           */
+          const previo = stateRef.current
+          const conservar = <T,>(res: { error: unknown }, mapear: () => T[], antes: T[]) =>
+            (res.error ? antes : mapear())
+
           const remoto: State = {
             accounts: (accounts.data ?? []).map(rowToAccount),
             transactions: (transactions.data ?? []).map(rowToTx),
@@ -397,21 +442,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               dailyCap: b.daily_cap == null ? undefined : Number(b.daily_cap),
             })),
             goals: (goals.data ?? []).map(rowToGoal),
-            // Si la tabla `trades` aún no existe en el proyecto, la consulta
-            // falla sola y el resto de la app sigue funcionando sin historial.
-            trades: trades.error ? [] : (trades.data ?? []).map(rowToTrade),
-            // Igual con las dos últimas: quien no haya corrido todavía la
-            // migración de bolsillos ve la app entera menos los bolsillos, en
-            // vez de una pantalla en blanco.
-            allocations: allocations.error ? [] : (allocations.data ?? []).map(rowToAllocation),
-            // Y con las deudas: quien no haya corrido todavía su migración ve
-            // la app entera menos las deudas.
-            debts: debts.error ? [] : (debts.data ?? []).map(rowToDebt),
-            debtPayments: debtPayments.error ? [] : (debtPayments.data ?? []).map(rowToDebtPayment),
+            trades: conservar(trades, () => (trades.data ?? []).map(rowToTrade), previo.trades),
+            allocations: conservar(allocations, () => (allocations.data ?? []).map(rowToAllocation), previo.allocations),
+            debts: conservar(debts, () => (debts.data ?? []).map(rowToDebt), previo.debts),
+            debtPayments: conservar(debtPayments, () => (debtPayments.data ?? []).map(rowToDebtPayment), previo.debtPayments),
             settings: settings.error || !settings.data
               ? {}
               : { dailyCap: settings.data.daily_cap == null ? undefined : Number(settings.data.daily_cap) },
           }
+          setDeudasError(motivoTabla(debts.error) ?? motivoTabla(debtPayments.error))
           setState(remoto)
           guardarEstado(claveEstado(uid), remoto)
           ultimaCarga.current = Date.now()
@@ -1010,13 +1049,29 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   )
 
   // ---- Deudas personales ---------------------------------------------------
+  /*
+   * Las escrituras de deudas comprueban el resultado.
+   *
+   * El resto de la app dispara y olvida, que para una app personal está bien:
+   * si una escritura falla, la siguiente carga corrige la pantalla. Aquí no,
+   * porque el fallo que ocurre de verdad —la tabla que aún no existe— no se
+   * corrige solo y deja al usuario registrando deudas en el vacío. Se guarda
+   * el motivo para poder decírselo.
+   */
+  const anotarFallo = useCallback((error: unknown) => {
+    const motivo = motivoTabla(error)
+    if (motivo) setDeudasError(motivo)
+    else setDeudasError(null)
+  }, [])
+
   const addDebt = useCallback(
     async (d: Omit<Debt, 'id'>) => {
       const full: Debt = { ...d, id: uid() }
       setState((s) => ({ ...s, debts: [...s.debts, full] }))
-      await remote()?.from('debts').insert(debtToRow(full))
+      const r = await remote()?.from('debts').insert(debtToRow(full))
+      anotarFallo(r?.error)
     },
-    [remote],
+    [remote, anotarFallo],
   )
 
   const updateDebt = useCallback(
@@ -1046,9 +1101,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     async (a: Omit<DebtPayment, 'id'>) => {
       const full: DebtPayment = { ...a, id: uid() }
       setState((s) => ({ ...s, debtPayments: [...s.debtPayments, full] }))
-      await remote()?.from('debt_payments').insert(debtPaymentToRow(full))
+      const r = await remote()?.from('debt_payments').insert(debtPaymentToRow(full))
+      anotarFallo(r?.error)
     },
-    [remote],
+    [remote, anotarFallo],
   )
 
   const deleteDebtPayment = useCallback(
@@ -1114,7 +1170,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       registrarOperacion, updateTrade, deleteTrade,
       setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
       addGoal, updateGoal, deleteGoal, resetDemo, signOut,
-      addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment,
+      addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
@@ -1123,7 +1179,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
      addGoal, updateGoal, deleteGoal, resetDemo, signOut,
-     addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment],
+     addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -1344,10 +1400,19 @@ export function useNetWorthDetail() {
   const rows = useAccountsInCOP()
   const inv = useInvestmentsValue()
   return useMemo(() => {
-    let cuentas = 0, sinConvertir = 0
+    let cuentas = 0, sinConvertir = 0, tarjetas = 0
     for (const r of rows) {
-      if (r.cop === null) sinConvertir++
-      else cuentas += r.cop
+      if (r.cop === null) { sinConvertir++; continue }
+      /*
+       * Lo que se debe en la tarjeta tampoco entra, por la misma razón que no
+       * entran las deudas con personas: es una obligación, no dinero que
+       * tengas, y se irá pagando desde estas mismas cuentas. Mezclarla con los
+       * saldos dejaba el patrimonio bajando dos veces —al comprar con la
+       * tarjeta y al pagar el extracto— y sin decir en ningún sitio cuánto se
+       * debe. Ahora sale sumada aparte, junto a las deudas personales.
+       */
+      if (r.account.type === 'credit' && r.cop < 0) { tarjetas += -r.cop; continue }
+      cuentas += r.cop
     }
     if (inv.incompleto) sinConvertir++
     /*
@@ -1366,6 +1431,8 @@ export function useNetWorthDetail() {
       total: cuentas + inv.value,
       cuentas,
       inversiones: inv.value,
+      /** Lo que se debe en tarjetas de crédito. Fuera del total, informativo. */
+      tarjetas,
       incompleto: sinConvertir > 0,
       sinConvertir,
     }

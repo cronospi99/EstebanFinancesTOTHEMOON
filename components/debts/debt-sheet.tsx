@@ -89,7 +89,7 @@ export function DebtSheet({
         <input
           value={person} onChange={(e) => setPerson(e.target.value)}
           placeholder="Andrés" autoFocus={!deuda}
-          className="mb-4 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+          className="mb-4 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                      text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
         />
 
@@ -120,13 +120,13 @@ export function DebtSheet({
         <button
           onClick={() => { haptic(6); setConInteres((v) => !v) }}
           className="press mb-3 flex w-full items-center justify-between rounded-xl border border-hairline
-                     bg-white/[0.04] px-4 py-3 text-left"
+                     bg-fill-1 px-4 py-3 text-left"
         >
           <span className="text-[15px] text-label">Cobra intereses</span>
           <span
             className={cn(
               'flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors',
-              conInteres ? 'bg-accent-green' : 'bg-white/[0.14]',
+              conInteres ? 'bg-accent-green' : 'bg-fill-4',
             )}
           >
             <span className={cn('h-5 w-5 rounded-full bg-white transition-transform', conInteres && 'translate-x-4')} />
@@ -143,7 +143,7 @@ export function DebtSheet({
                 { value: 'anual' as Periodo, label: '% anual (E.A.)' },
               ]}
             />
-            <div className="flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+            <div className="flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
               <input
                 value={tasa}
                 onChange={(e) => setTasa(e.target.value.replace(/[^\d,]/g, ''))}
@@ -176,7 +176,7 @@ export function DebtSheet({
             </label>
             <input
               type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)}
-              className="w-full rounded-xl border border-hairline bg-white/[0.05] px-3 py-3 text-[15px]
+              className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-3 text-[15px]
                          text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
             />
           </div>
@@ -186,7 +186,7 @@ export function DebtSheet({
             </label>
             <input
               type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-xl border border-hairline bg-white/[0.05] px-3 py-3 text-[15px]
+              className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-3 text-[15px]
                          text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
             />
           </div>
@@ -198,7 +198,7 @@ export function DebtSheet({
         <input
           value={note} onChange={(e) => setNote(e.target.value)}
           placeholder="Para la cuota inicial de la moto"
-          className="mb-4 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+          className="mb-4 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                      text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
         />
 
@@ -213,7 +213,7 @@ export function DebtSheet({
               aria-label={`Color ${c}`}
               className={cn(
                 'h-9 w-9 rounded-full transition-transform',
-                color === c ? 'scale-110 ring-2 ring-white/70' : 'opacity-70',
+                color === c ? 'scale-110 ring-2 ring-ring-sel' : 'opacity-70',
               )}
               style={{ backgroundColor: c }}
             />
@@ -240,7 +240,7 @@ export function DebtSheet({
           }}
           disabled={!listo}
           className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                     shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
+                     shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
           {deuda ? 'Guardar' : 'Registrar deuda'}
         </button>

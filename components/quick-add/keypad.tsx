@@ -37,9 +37,9 @@ export function Keypad({
               isDelete ? onDelete() : onDigit(key)
             }}
             aria-label={isDelete ? 'Borrar' : isComma ? 'Coma decimal' : key}
-            className="flex h-[56px] items-center justify-center rounded-2xl bg-white/[0.06]
+            className="flex h-[56px] items-center justify-center rounded-2xl bg-fill-2
                        text-[26px] font-light tabular-nums text-label
-                       transition-colors active:bg-white/[0.14] disabled:opacity-30"
+                       transition-colors active:bg-fill-4 disabled:opacity-30"
           >
             {isDelete ? <Delete size={23} strokeWidth={2} className="text-label-secondary" /> : key}
           </motion.button>

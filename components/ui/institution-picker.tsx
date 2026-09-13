@@ -31,7 +31,7 @@ export function InstitutionPicker({
     <div>
       <button
         onClick={() => { haptic(6); setOpen((o) => !o) }}
-        className="press flex w-full items-center gap-3 rounded-xl border border-hairline bg-white/[0.05] px-3 py-2.5"
+        className="press flex w-full items-center gap-3 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5"
       >
         <InstitutionBadge institution={value.name} size="sm" />
         <span className="min-w-0 flex-1 truncate text-left text-[16px] font-medium text-label">{value.name}</span>
@@ -50,8 +50,8 @@ export function InstitutionPicker({
             transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-hairline bg-white/[0.03] p-2">
-              <div className="mb-2 flex items-center gap-2 rounded-lg bg-white/[0.05] px-2.5 py-2">
+            <div className="mt-2 rounded-xl border border-hairline bg-fill-1 p-2">
+              <div className="mb-2 flex items-center gap-2 rounded-lg bg-fill-2 px-2.5 py-2">
                 <Search size={14} className="shrink-0 text-label-tertiary" />
                 <input
                   value={q} onChange={(e) => setQ(e.target.value)}
@@ -74,7 +74,7 @@ export function InstitutionPicker({
                           onClick={() => { haptic(6); onChange(inst); setOpen(false); setQ('') }}
                           className={cn(
                             'flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
-                            activa ? 'bg-white/[0.10]' : 'active:bg-white/[0.06]',
+                            activa ? 'bg-fill-3' : 'active:bg-fill-2',
                           )}
                         >
                           <InstitutionBadge institution={inst.name} size="sm" />

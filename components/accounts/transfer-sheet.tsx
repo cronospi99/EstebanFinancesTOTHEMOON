@@ -62,7 +62,7 @@ export function TransferSheet({ open, onClose }: { open: boolean; onClose: () =>
       onClick={() => { haptic(6); onPick() }}
       className={cn(
         'press flex shrink-0 items-center gap-2 rounded-xl border py-2 pl-2 pr-3 text-left transition-colors',
-        activa ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
+        activa ? 'border-transparent bg-fill-4' : 'border-hairline',
       )}
     >
       <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
@@ -114,7 +114,7 @@ export function TransferSheet({ open, onClose }: { open: boolean; onClose: () =>
                 onClick={() => { haptic(6); setDestinoId(EFECTIVO) }}
                 className={cn(
                   'press flex shrink-0 items-center gap-2 rounded-xl border py-2 pl-2 pr-3 text-left transition-colors',
-                  aEfectivoNuevo ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
+                  aEfectivoNuevo ? 'border-transparent bg-fill-4' : 'border-hairline',
                 )}
               >
                 <InstitutionBadge institution="Efectivo" size="xs" />
@@ -147,7 +147,7 @@ export function TransferSheet({ open, onClose }: { open: boolean; onClose: () =>
         <input
           value={nota} onChange={(e) => setNota(e.target.value)}
           placeholder="Nota (opcional)"
-          className="mb-5 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+          className="mb-5 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                      text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
         />
 
@@ -176,7 +176,7 @@ export function TransferSheet({ open, onClose }: { open: boolean; onClose: () =>
           }}
           disabled={!listo}
           className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                     shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
+                     shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
           Transferir{importe > 0 && origen ? ` ${formatMoney(importe, origen.currency)}` : ''}
         </button>

@@ -127,7 +127,7 @@ export default function InvestmentsPage() {
                   aria-pressed={divisa === m}
                   className={cn(
                     'px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                    divisa === m ? 'bg-white/[0.14] text-label' : 'text-label-tertiary',
+                    divisa === m ? 'bg-fill-4 text-label' : 'text-label-tertiary',
                     fxRate <= 0 && 'opacity-40',
                   )}
                 >
@@ -178,7 +178,7 @@ export default function InvestmentsPage() {
               <span className="text-[12px] text-label-tertiary">total</span>
             </>
           ) : (
-            <span className="rounded-pill bg-white/[0.07] px-2.5 py-1 text-[12px] font-medium text-label-secondary">
+            <span className="rounded-pill bg-fill-3 px-2.5 py-1 text-[12px] font-medium text-label-secondary">
               Valorado al costo · sin datos de mercado
             </span>
           )}
@@ -285,7 +285,7 @@ export default function InvestmentsPage() {
               <Card className="divide-y divide-hairline overflow-hidden">
                 {acc && accountTotal(acc) !== 0 && (
                   <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-[10px] font-bold text-label-secondary">
+                    <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-xl bg-fill-3 text-[10px] font-bold text-label-secondary">
                       EFVO
                     </div>
                     <div className="min-w-0 flex-1">
@@ -330,7 +330,7 @@ export default function InvestmentsPage() {
       <button
         onClick={() => { haptic(8); setAdding(true) }}
         className="press flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline
-                   bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue"
+                   bg-fill-1 py-3.5 text-[15px] font-medium text-accent-blue"
       >
         <Plus size={17} />
         Añadir posición
