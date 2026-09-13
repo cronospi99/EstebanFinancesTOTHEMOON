@@ -81,7 +81,7 @@ export function DailyCapCard() {
               <span className="tnum text-[22px] font-bold text-label">{formatMoney(total)}</span>
               <span className="tnum text-[13px] text-label-tertiary">de {formatMoney(tope)}</span>
             </div>
-            <div className="mb-2 h-2 overflow-hidden rounded-full bg-white/[0.07]">
+            <div className="mb-2 h-2 overflow-hidden rounded-full bg-fill-3">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(pct, 1) * 100}%` }}

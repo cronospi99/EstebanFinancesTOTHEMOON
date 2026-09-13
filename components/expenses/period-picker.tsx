@@ -43,7 +43,7 @@ export function PeriodPicker({
                 <motion.span
                   layoutId="periodo-thumb"
                   transition={{ type: 'spring', damping: 30, stiffness: 420 }}
-                  className="absolute inset-0 rounded-lg bg-white/[0.12]"
+                  className="absolute inset-0 rounded-lg bg-fill-4"
                 />
               )}
               <span className="relative z-10">{p.label}</span>

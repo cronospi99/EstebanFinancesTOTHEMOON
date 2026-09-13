@@ -76,7 +76,7 @@ export function DebtsSection() {
           </p>
           <button
             onClick={abrirNueva}
-            className="press mt-3 rounded-xl border border-hairline bg-white/[0.04] px-4 py-2 text-[14px] font-medium text-accent-blue"
+            className="press mt-3 rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
           >
             Registrar una deuda
           </button>
@@ -146,7 +146,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
           <div className="flex items-center gap-1.5">
             <p className="truncate text-[16px] font-semibold text-label">{deuda.person}</p>
             {moneda === 'USD' && (
-              <span className="shrink-0 rounded bg-white/[0.09] px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
+              <span className="shrink-0 rounded bg-fill-3 px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
             )}
             {saldada && (
               <span className="flex shrink-0 items-center gap-0.5 rounded-pill bg-accent-green/15 px-1.5 py-px text-[10px] font-semibold text-accent-green">
@@ -164,13 +164,13 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
         <button
           onClick={onEditar}
           aria-label={`Editar deuda con ${deuda.person}`}
-          className="press shrink-0 p-1 text-label-tertiary"
+          className="press-icon shrink-0 p-1 text-label-tertiary"
         >
           <Pencil size={15} />
         </button>
       </div>
 
-      <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-white/[0.07]">
+      <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-fill-3">
         <motion.div
           initial={{ width: 0 }} animate={{ width: `${progreso * 100}%` }}
           transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] }}
@@ -232,7 +232,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
           <input
             type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
             aria-label="Fecha del abono"
-            className="w-full rounded-xl border border-hairline bg-white/[0.05] px-3 py-2 text-[14px]
+            className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2 text-[14px]
                        text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
           />
         </div>
@@ -240,7 +240,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
         !saldada && (
           <button
             onClick={() => { haptic(6); setAbonando(true) }}
-            className="press mt-3 w-full rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+            className="press mt-3 w-full rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
           >
             Registrar un abono
           </button>
@@ -267,7 +267,7 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
                   <button
                     onClick={() => { haptic([16, 30]); deleteDebtPayment(a.id) }}
                     aria-label={`Eliminar abono de ${formatDate(a.occurredAt)}`}
-                    className="press shrink-0 p-1 text-label-tertiary"
+                    className="press-icon shrink-0 p-1 text-label-tertiary"
                   >
                     <Trash2 size={14} />
                   </button>

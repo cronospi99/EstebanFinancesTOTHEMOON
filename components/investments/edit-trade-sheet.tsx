@@ -106,7 +106,7 @@ export function EditTradeSheet({ trade, onClose }: { trade: Trade | null; onClos
         />
 
         <Etiqueta>Cantidad</Etiqueta>
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
           <input
             value={qty} inputMode="decimal" placeholder="0"
             onChange={(e) => setQty(limpiarDecimal(e.target.value, 8))}
@@ -116,7 +116,7 @@ export function EditTradeSheet({ trade, onClose }: { trade: Trade | null; onClos
         </div>
 
         <Etiqueta>Precio por unidad</Etiqueta>
-        <div className="mb-1 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+        <div className="mb-1 flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
           <span className="text-[18px] text-label-secondary">{cur === 'USD' ? 'US$' : '$'}</span>
           <input
             value={precio ? formatKeypad(precio) : ''} inputMode="decimal" placeholder="0"
@@ -130,7 +130,7 @@ export function EditTradeSheet({ trade, onClose }: { trade: Trade | null; onClos
         </p>
 
         <Etiqueta>Fecha</Etiqueta>
-        <label className="press mb-5 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+        <label className="press mb-5 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
           <CalendarDays size={17} className="shrink-0 text-label-tertiary" />
           <span className="flex-1 text-[16px] text-label">{dia ? etiquetaFecha(dia) : '—'}</span>
           <input
@@ -148,7 +148,7 @@ export function EditTradeSheet({ trade, onClose }: { trade: Trade | null; onClos
               onClick={() => { haptic(6); setPlataforma(p.name) }}
               className={cn(
                 'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
-                p.name === plataforma ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                p.name === plataforma ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
               )}
             >
               <InstitutionBadge institution={p.name} color={p.color} size="xs" />
@@ -163,7 +163,7 @@ export function EditTradeSheet({ trade, onClose }: { trade: Trade | null; onClos
           disabled={!puedeGuardar}
           className={cn(
             'h-[52px] w-full rounded-2xl text-[17px] font-semibold transition-all duration-200',
-            puedeGuardar ? 'bg-accent-blue text-white shadow-glow' : 'bg-white/[0.06] text-label-tertiary',
+            puedeGuardar ? 'bg-accent-blue text-white shadow-glow' : 'bg-fill-2 text-label-tertiary',
           )}
         >
           Guardar cambios

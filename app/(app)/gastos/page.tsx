@@ -104,18 +104,18 @@ export default function ExpensesPage() {
       <section>
         <CardHeader title="Por categoría" />
         <Card className="divide-y divide-hairline overflow-hidden">
-          {porCategoria.map((row) => {
+          {porCategoria.map((row, i) => {
             const cat = categoryById(row.categoryId)
             const share = expense ? (row.amount / expense) * 100 : 0
             const abiertaEsta = abierta === row.categoryId
             const todo = historial.get(row.categoryId)
 
             return (
-              <div key={row.categoryId}>
+              <div key={row.categoryId} className="fila-entra" style={{ '--i': i } as React.CSSProperties}>
                 <button
                   onClick={() => { haptic(6); setAbierta(abiertaEsta ? null : row.categoryId) }}
                   aria-expanded={abiertaEsta}
-                  className="press-soft flex w-full items-center gap-3 px-4 py-3 text-left active:bg-white/[0.03]"
+                  className="press-soft flex w-full items-center gap-3 px-4 py-3 text-left active:bg-fill-1"
                 >
                   <CategoryIcon icon={cat.icon} color={cat.color} />
                   <div className="min-w-0 flex-1">
@@ -124,7 +124,7 @@ export default function ExpensesPage() {
                       <span className="tnum shrink-0 text-[14px] font-semibold">{formatMoney(row.amount)}</span>
                     </div>
                     {/* Barra proporcional: comunica el peso relativo sin leer cifras */}
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-fill-3">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${share}%` }}
@@ -152,7 +152,7 @@ export default function ExpensesPage() {
                       transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="border-t border-hairline bg-white/[0.02] px-4 py-2">
+                      <div className="border-t border-hairline bg-fill-1 px-4 py-2">
                         <p className="tnum mb-1 text-[11px] text-label-tertiary">
                           Todo el histórico · {todo.movimientos.length}{' '}
                           {todo.movimientos.length === 1 ? 'movimiento' : 'movimientos'} ·{' '}

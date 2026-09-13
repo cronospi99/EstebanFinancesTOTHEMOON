@@ -49,7 +49,7 @@ export function IssuerBadge({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center bg-white/[0.07] font-bold tracking-tight text-label',
+        'flex shrink-0 items-center justify-center bg-fill-3 font-bold tracking-tight text-label',
         caja,
         className,
       )}

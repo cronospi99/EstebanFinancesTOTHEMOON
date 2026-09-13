@@ -138,7 +138,7 @@ export function EditTransactionSheet({
 
         {/* Valor */}
         <Etiqueta>Valor</Etiqueta>
-        <div className="mb-1 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.05] px-4 py-3">
+        <div className="mb-1 flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
           <span className="text-[20px] text-label-secondary">{currency === 'USD' ? 'US$' : '$'}</span>
           <input
             value={raw ? formatKeypad(raw) : ''}
@@ -165,7 +165,7 @@ export function EditTransactionSheet({
         {/* Fecha */}
         <Etiqueta>Fecha</Etiqueta>
         <label className="press mb-5 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline
-                          bg-white/[0.05] px-4 py-3">
+                          bg-fill-2 px-4 py-3">
           <CalendarDays size={17} className="shrink-0 text-label-tertiary" />
           <span className="flex-1 text-[16px] text-label">{dia ? etiquetaFecha(dia) : '—'}</span>
           <input
@@ -197,7 +197,7 @@ export function EditTransactionSheet({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder={categoryById(categoryId).name}
-          className="mb-6 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3
+          className="mb-6 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
                      text-[16px] text-label placeholder:text-label-tertiary
                      focus:border-accent-blue/50 focus:outline-none"
         />
@@ -210,7 +210,7 @@ export function EditTransactionSheet({
             'h-[52px] w-full rounded-2xl text-[17px] font-semibold transition-all duration-200',
             puedeGuardar
               ? 'bg-accent-blue text-white shadow-glow'
-              : 'bg-white/[0.06] text-label-tertiary',
+              : 'bg-fill-2 text-label-tertiary',
           )}
         >
           Guardar cambios

@@ -61,7 +61,7 @@ export function AllocateSheet({
               onClick={() => { haptic(6); setModo(m) }}
               className={cn(
                 'flex-1 py-2 text-[14px] font-medium transition-colors',
-                modo === m ? 'bg-white/[0.12] text-label' : 'text-label-tertiary',
+                modo === m ? 'bg-fill-4 text-label' : 'text-label-tertiary',
               )}
             >
               {m === 'apartar' ? 'Apartar' : 'Devolver'}
@@ -82,7 +82,7 @@ export function AllocateSheet({
                 onClick={() => { haptic(6); setCuentaId(acc.id) }}
                 className={cn(
                   'press flex shrink-0 items-center gap-2 rounded-xl border py-2 pl-2 pr-3 text-left transition-colors',
-                  activa ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
+                  activa ? 'border-transparent bg-fill-4' : 'border-hairline',
                 )}
               >
                 <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
@@ -127,7 +127,7 @@ export function AllocateSheet({
           }}
           disabled={!listo}
           className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                     shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
+                     shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
           {modo === 'apartar' ? 'Apartar' : 'Devolver'}
         </button>

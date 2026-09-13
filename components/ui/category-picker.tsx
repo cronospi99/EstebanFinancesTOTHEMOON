@@ -34,7 +34,7 @@ export function CategoryPicker({
 
   if (todas) {
     return (
-      <div className="max-h-[210px] overflow-y-auto rounded-2xl border border-hairline bg-white/[0.03] p-3">
+      <div className="max-h-[210px] overflow-y-auto rounded-2xl border border-hairline bg-fill-1 p-3">
         {categoriesByGroup(mode).map(([group, cats]) => (
           <div key={group} className="mb-3 last:mb-0">
             <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-label-tertiary">
@@ -47,7 +47,7 @@ export function CategoryPicker({
                   onClick={() => { haptic(6); onChange(cat.id); setTodas(false) }}
                   className={cn(
                     'press flex flex-col items-center gap-1 rounded-xl px-1 py-2 transition-colors',
-                    cat.id === value ? 'bg-white/[0.14]' : 'active:bg-white/[0.07]',
+                    cat.id === value ? 'bg-fill-4' : 'active:bg-fill-3',
                   )}
                 >
                   <CategoryIcon icon={cat.icon} color={cat.color} size="xs" />
@@ -73,7 +73,7 @@ export function CategoryPicker({
             onClick={() => { haptic(6); onChange(cat.id) }}
             className={cn(
               'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3.5 transition-colors duration-200',
-              activa ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
+              activa ? 'border-transparent bg-fill-4' : 'border-hairline',
             )}
           >
             <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />

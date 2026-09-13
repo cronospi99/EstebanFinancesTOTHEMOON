@@ -74,7 +74,7 @@ export function AccountPicker({
               onClick={() => { haptic(6); onChange(acc.id, undefined) }}
               className={cn(
                 'press flex shrink-0 items-center gap-2 rounded-pill border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors',
-                activa ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                activa ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
               )}
             >
               <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
@@ -100,7 +100,7 @@ export function AccountPicker({
             onClick={() => { haptic(6); onChange(accountId, undefined) }}
             className={cn(
               'press shrink-0 rounded-pill border px-3 py-1 text-[12px] font-medium transition-colors',
-              !pocketId ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+              !pocketId ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
             )}
           >
             General
@@ -111,7 +111,7 @@ export function AccountPicker({
               onClick={() => { haptic(6); onChange(accountId, p.id) }}
               className={cn(
                 'press flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1 text-[12px] font-medium transition-colors',
-                pocketId === p.id ? 'border-transparent bg-white/[0.14] text-label' : 'border-hairline text-label-secondary',
+                pocketId === p.id ? 'border-transparent bg-fill-4 text-label' : 'border-hairline text-label-secondary',
               )}
             >
               <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.color ?? '#98989F' }} />

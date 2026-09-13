@@ -244,7 +244,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
 
         {/* Fecha: por defecto hoy, para no estorbar el caso rápido. */}
         <label className="press mb-3 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline
-                          bg-white/[0.04] px-4 py-2.5">
+                          bg-fill-1 px-4 py-2.5">
           <CalendarDays size={16} className="shrink-0 text-label-tertiary" />
           <span className="flex-1 text-[15px] text-label">{etiquetaFecha(fecha)}</span>
           <input
@@ -259,7 +259,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Nota (opcional)"
-          className="mb-3 w-full rounded-xl border border-hairline bg-white/[0.04] px-4 py-2.5
+          className="mb-3 w-full rounded-xl border border-hairline bg-fill-1 px-4 py-2.5
                      text-[16px] text-label placeholder:text-label-tertiary
                      focus:border-accent-blue/50 focus:outline-none"
         />
@@ -278,7 +278,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
             'mt-3 h-[52px] w-full rounded-2xl text-[17px] font-semibold transition-all duration-200',
             canSave
               ? mode === 'income' ? 'bg-accent-green text-black' : 'bg-accent-blue text-white shadow-glow'
-              : 'bg-white/[0.06] text-label-tertiary',
+              : 'bg-fill-2 text-label-tertiary',
           )}
         >
           {mode === 'income' ? 'Registrar ingreso' : 'Registrar gasto'}

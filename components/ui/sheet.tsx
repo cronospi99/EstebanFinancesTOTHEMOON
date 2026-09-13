@@ -84,7 +84,7 @@ export function Sheet({
         // Deja de recibir toques en cuanto empieza a cerrarse, sin esperar a
         // que termine la animación.
         className={cn(
-          'fixed inset-0 z-40 bg-black/60 backdrop-blur-sm',
+          'fixed inset-0 z-40 bg-velo backdrop-blur-sm',
           !open && 'pointer-events-none',
         )}
       />
@@ -112,7 +112,7 @@ export function Sheet({
            */
           'lg:inset-0 lg:m-auto lg:h-fit lg:max-h-[86vh] lg:w-[min(560px,92vw)]',
           'lg:rounded-3xl lg:border',
-          'bg-[#141416]/85 backdrop-blur-sheet shadow-sheet',
+          'bg-sheet backdrop-blur-sheet shadow-sheet',
           !open && 'pointer-events-none',
           className,
         )}

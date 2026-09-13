@@ -82,7 +82,7 @@ export function HoldingRow({
         <button
           onClick={() => { haptic([18, 30]); onDelete() }}
           aria-label={`Eliminar ${holding.symbol}`}
-          className="absolute inset-y-0 right-0 flex w-[72px] items-center justify-center bg-accent-red/85 text-white"
+          className="press-icon absolute inset-y-0 right-0 flex w-[72px] items-center justify-center bg-accent-red/85 text-white"
         >
           <Trash2 size={18} />
         </button>
@@ -105,18 +105,18 @@ export function HoldingRow({
         dragElastic={{ left: 0.12, right: 0 }}
         onDragStart={() => { arrastrando.current = true }}
         onDragEnd={() => { setTimeout(() => { arrastrando.current = false }, 0) }}
-        className="relative bg-[#0E0E10]"
+        className="relative bg-surface"
       >
       <button
         onClick={() => { if (!arrastrando.current) onEdit?.() }}
-        className="press-soft relative flex w-full items-center gap-3 bg-[#0E0E10] px-4 py-3.5 text-left active:bg-white/[0.03]"
+        className="press-soft relative flex w-full items-center gap-3 bg-surface px-4 py-3.5 text-left active:bg-fill-1"
       >
         <IssuerBadge symbol={holding.symbol} />
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             {enEtiqueta && (
-              <span className="shrink-0 rounded bg-white/[0.08] px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.02em] text-label-secondary">
+              <span className="shrink-0 rounded bg-fill-3 px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.02em] text-label-secondary">
                 {ticker}
               </span>
             )}
@@ -156,7 +156,7 @@ export function HoldingRow({
                 </span>
               </>
             ) : (
-              <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[11px] font-medium text-label-tertiary">
+              <span className="rounded-md bg-fill-3 px-1.5 py-0.5 text-[11px] font-medium text-label-tertiary">
                 sin precio
               </span>
             )}

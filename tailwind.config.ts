@@ -9,31 +9,53 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Superficies
+        // Todo sale de las variables de globals.css, que es donde viven los dos
+        // temas. Aquí solo se les pone nombre para poder escribirlos en clases.
         ink: {
-          DEFAULT: '#000000', // OLED puro — el negro que "apaga" el píxel
-          raised: '#09090B',
-          card: 'rgba(255,255,255,0.055)',
-          hover: 'rgba(255,255,255,0.085)',
+          DEFAULT: 'var(--ink)',
+          raised: 'var(--ink-raised)',
+          card: 'var(--ink-card)',
+          hover: 'var(--ink-hover)',
         },
-        hairline: 'rgba(255,255,255,0.08)',
+        /** Fondo opaco: el de las filas que se deslizan sobre un botón. */
+        surface: 'var(--surface)',
+        /** El panel de las bottom sheets, que va por encima de todo. */
+        sheet: 'var(--sheet)',
+        /** Barras fijas translúcidas, y el velo que oscurece detrás de una hoja. */
+        chrome: { DEFAULT: 'var(--chrome)', soft: 'var(--chrome-soft)' },
+        velo: 'var(--velo)',
+        hairline: 'var(--hairline-color)',
         // Texto (iOS label hierarchy)
         label: {
-          DEFAULT: '#F5F5F7',
-          secondary: '#98989F',
-          tertiary: '#5C5C63',
+          DEFAULT: 'var(--label)',
+          secondary: 'var(--label-2)',
+          tertiary: 'var(--label-3)',
         },
-        // Acentos — iOS system colors, variante dark
+        /*
+         * Rellenos, de más tenue a más marcado. Sustituyen a los `bg-white/[…]`
+         * que estaban repartidos por toda la app: sobre fondo claro un blanco
+         * al 5 % no se ve, y eran ciento cuarenta sitios donde el modo claro se
+         * habría roto uno a uno.
+         */
+        fill: {
+          1: 'var(--fill-1)',
+          2: 'var(--fill-2)',
+          3: 'var(--fill-3)',
+          4: 'var(--fill-4)',
+        },
+        /** Anillo de "seleccionado" en los selectores de color. */
+        'ring-sel': 'var(--ring-sel)',
+        // Acentos — iOS system colors, con su variante para cada tema
         accent: {
-          blue: '#0A84FF',
-          green: '#30D158',
-          red: '#FF453A',
-          orange: '#FF9F0A',
-          violet: '#BF5AF2',
-          teal: '#40C8E0',
-          pink: '#FF375F',
-          indigo: '#5E5CE6',
-          yellow: '#FFD60A',
+          blue: 'var(--accent-blue)',
+          green: 'var(--accent-green)',
+          red: 'var(--accent-red)',
+          orange: 'var(--accent-orange)',
+          violet: 'var(--accent-violet)',
+          teal: 'var(--accent-teal)',
+          pink: 'var(--accent-pink)',
+          indigo: 'var(--accent-indigo)',
+          yellow: 'var(--accent-yellow)',
         },
       },
       fontFamily: {
@@ -52,8 +74,8 @@ const config: Config = {
         pill: '999px',
       },
       boxShadow: {
-        card: '0 1px 0 0 rgba(255,255,255,0.055) inset, 0 8px 32px -12px rgba(0,0,0,0.9)',
-        sheet: '0 -8px 48px -8px rgba(0,0,0,0.85)',
+        card: 'var(--sombra-card)',
+        sheet: 'var(--sombra-sheet)',
         // El resplandor del botón lleva también un anillo tenue: sin él, sobre
         // negro puro, el degradado azul se recorta con un borde duro.
         glow: '0 8px 28px -6px rgba(10,132,255,0.5), 0 0 0 0.5px rgba(255,255,255,0.12) inset',

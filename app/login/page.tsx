@@ -168,7 +168,7 @@ export default function LoginPage() {
                 placeholder="000000"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                className="tnum mb-3 w-full rounded-2xl border border-hairline bg-white/[0.05] px-4 py-3.5
+                className="tnum mb-3 w-full rounded-2xl border border-hairline bg-fill-2 px-4 py-3.5
                            text-center text-[26px] font-semibold tracking-[0.3em] text-label
                            placeholder:tracking-[0.3em] placeholder:font-normal placeholder:text-label-tertiary
                            focus:border-accent-blue/60 focus:outline-none"
@@ -180,7 +180,7 @@ export default function LoginPage() {
                   'press h-[52px] w-full rounded-2xl text-[17px] font-semibold transition-colors',
                   code.length === 6 && !verificando
                     ? 'bg-accent-blue text-white shadow-glow'
-                    : 'bg-white/[0.06] text-label-tertiary',
+                    : 'bg-fill-2 text-label-tertiary',
                 )}
               >
                 {verificando ? 'Comprobando…' : 'Entrar con el código'}
@@ -204,7 +204,7 @@ export default function LoginPage() {
               type="email" required value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@correo.com" autoComplete="email" inputMode="email"
-              className="w-full rounded-2xl border border-hairline bg-white/[0.05] px-4 py-3.5
+              className="w-full rounded-2xl border border-hairline bg-fill-2 px-4 py-3.5
                          text-[16px] text-label placeholder:text-label-tertiary
                          focus:border-accent-blue/60 focus:outline-none"
             />
@@ -213,7 +213,7 @@ export default function LoginPage() {
               disabled={status === 'sending' || !email}
               className={cn(
                 'press h-[52px] w-full rounded-2xl text-[17px] font-semibold transition-colors',
-                email && status !== 'sending' ? 'bg-accent-blue text-white shadow-glow' : 'bg-white/[0.06] text-label-tertiary',
+                email && status !== 'sending' ? 'bg-accent-blue text-white shadow-glow' : 'bg-fill-2 text-label-tertiary',
               )}
             >
               {status === 'sending' ? 'Enviando…' : 'Enviar acceso'}

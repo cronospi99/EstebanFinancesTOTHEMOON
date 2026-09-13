@@ -41,7 +41,7 @@ export function NetWorthCard() {
         <button
           onClick={() => { haptic(8); setHidden((h) => !h) }}
           aria-label={hidden ? 'Mostrar saldos' : 'Ocultar saldos'}
-          className="press rounded-full p-1.5 text-label-tertiary hover:text-label-secondary"
+          className="press-icon rounded-full p-1.5 text-label-tertiary hover:text-label-secondary"
         >
           {hidden ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
@@ -191,7 +191,7 @@ export function NetWorthCard() {
       {debesTotal > 0 && (
         <Link
           href="/cuentas"
-          className="mt-3 flex items-center gap-2.5 rounded-2xl border border-hairline bg-white/[0.03] px-4 py-3"
+          className="mt-3 flex items-center gap-2.5 rounded-2xl border border-hairline bg-fill-1 px-4 py-3"
         >
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-orange" />
           <div className="min-w-0 flex-1">

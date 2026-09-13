@@ -32,7 +32,7 @@ export function SideNav({ onQuickAdd }: { onQuickAdd: () => void }) {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-hairline bg-black/40 px-4 py-6 backdrop-blur-2xl lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-hairline bg-chrome-soft px-4 py-6 backdrop-blur-2xl lg:flex">
       {/* La esquina de la marca. En el móvil no hay sitio para esto; aquí
           sobra ancho y es donde se espera encontrar de qué app se trata. */}
       <div className="mb-8 flex items-center gap-3 px-2">
@@ -65,8 +65,8 @@ export function SideNav({ onQuickAdd }: { onQuickAdd: () => void }) {
               className={cn(
                 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors',
                 active
-                  ? 'bg-white/[0.09] text-label'
-                  : 'text-label-secondary hover:bg-white/[0.05] hover:text-label',
+                  ? 'bg-fill-3 text-label'
+                  : 'text-label-secondary hover:bg-fill-2 hover:text-label',
               )}
             >
               <Icon size={19} strokeWidth={active ? 2.4 : 2} className={cn(active && 'text-accent-blue')} />

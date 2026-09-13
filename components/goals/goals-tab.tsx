@@ -88,13 +88,13 @@ export function GoalsTab() {
                     <button
                       onClick={() => { haptic(6); setMetaEditando(g); setHojaMeta(true) }}
                       aria-label={`Editar meta ${g.name}`}
-                      className="press shrink-0 p-1 text-label-tertiary"
+                      className="press-icon shrink-0 p-1 text-label-tertiary"
                     >
                       <Pencil size={15} />
                     </button>
                   </div>
 
-                  <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-white/[0.07]">
+                  <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-fill-3">
                     <motion.div
                       initial={{ width: 0 }} animate={{ width: `${pct * 100}%` }}
                       transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] }}
@@ -151,7 +151,7 @@ export function GoalsTab() {
                   ) : (
                     <button
                       onClick={() => { haptic(6); setAbonoId(g.id) }}
-                      className="press mt-3 w-full rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+                      className="press mt-3 w-full rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
                     >
                       Abonar a esta meta
                     </button>
@@ -186,7 +186,7 @@ export function GoalsTab() {
             </p>
             <button
               onClick={() => { haptic(6); setNuevoPresu(true) }}
-              className="press mt-3 rounded-xl border border-hairline bg-white/[0.04] px-4 py-2 text-[14px] font-medium text-accent-blue"
+              className="press mt-3 rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
             >
               Crear presupuesto
             </button>
@@ -217,13 +217,13 @@ export function GoalsTab() {
                     <button
                       onClick={() => { haptic(6); setPresuEditando(b) }}
                       aria-label={`Editar presupuesto de ${cat.name}`}
-                      className="press shrink-0 p-1 text-label-tertiary"
+                      className="press-icon shrink-0 p-1 text-label-tertiary"
                     >
                       <Pencil size={15} />
                     </button>
                   </div>
 
-                  <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                  <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-fill-3">
                     <motion.div
                       initial={{ width: 0 }} animate={{ width: `${Math.min(pct, 1) * 100}%` }}
                       transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
@@ -233,7 +233,7 @@ export function GoalsTab() {
                   </div>
 
                   {/* El bolsillo: cuánto hay apartado y qué queda de ello. */}
-                  <div className="mb-3 grid grid-cols-2 gap-3 rounded-xl bg-white/[0.04] p-3">
+                  <div className="mb-3 grid grid-cols-2 gap-3 rounded-xl bg-fill-1 p-3">
                     <div>
                       <p className="text-[11px] uppercase tracking-wider text-label-tertiary">Apartado</p>
                       <p className="tnum text-[15px] font-semibold text-label">{formatMoney(b.asignado)}</p>
@@ -259,7 +259,7 @@ export function GoalsTab() {
                           >
                             {acc
                               ? <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
-                              : <span className="h-5 w-5 rounded-md bg-white/[0.07]" />}
+                              : <span className="h-5 w-5 rounded-md bg-fill-3" />}
                             <span className="max-w-[92px] truncate">{acc?.name ?? 'Cuenta borrada'}</span>
                             <span className="tnum font-semibold text-label">{formatMoney(o.amount)}</span>
                           </span>
@@ -284,7 +284,7 @@ export function GoalsTab() {
 
                   <button
                     onClick={() => { haptic(6); setAsignandoA(b.categoryId) }}
-                    className="press w-full rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+                    className="press w-full rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
                   >
                     Apartar dinero
                   </button>

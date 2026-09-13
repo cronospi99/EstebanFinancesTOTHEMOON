@@ -54,7 +54,7 @@ export function BudgetSheet({
         {/* El estado del bolsillo, arriba: es lo que se viene a mirar cuando
             se abre esto desde un anillo del resumen. */}
         {bolsillo && bolsillo.asignado > 0 && (
-          <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-white/[0.04] p-3">
+          <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-fill-1 p-3">
             <div>
               <p className="text-[11px] uppercase tracking-wider text-label-tertiary">Apartado</p>
               <p className="tnum text-[15px] font-semibold text-label">{formatMoney(bolsillo.asignado)}</p>
@@ -72,7 +72,7 @@ export function BudgetSheet({
           <button
             onClick={() => { haptic(6); onApartar(bolsillo.categoryId) }}
             className="press mb-4 flex h-[46px] w-full items-center justify-center gap-2 rounded-2xl
-                       border border-hairline bg-white/[0.04] text-[15px] font-medium text-accent-blue"
+                       border border-hairline bg-fill-1 text-[15px] font-medium text-accent-blue"
           >
             <PiggyBank size={16} />
             Apartar dinero
@@ -105,7 +105,7 @@ export function BudgetSheet({
           }}
           disabled={importe <= 0}
           className="press mb-3 h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                     shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
+                     shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
           Guardar
         </button>

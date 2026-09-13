@@ -60,7 +60,7 @@ export function GoalSheet({
         <input
           value={name} onChange={(e) => setName(e.target.value)}
           placeholder="Viaje a Japón" autoFocus={!meta}
-          className="mb-3 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+          className="mb-3 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                      text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
         />
 
@@ -75,7 +75,7 @@ export function GoalSheet({
         </label>
         <input
           type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)}
-          className="mb-4 w-full rounded-xl border border-hairline bg-white/[0.05] px-4 py-3 text-[16px]
+          className="mb-4 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                      text-label focus:border-accent-blue/50 focus:outline-none [color-scheme:dark]"
         />
 
@@ -88,7 +88,7 @@ export function GoalSheet({
               aria-label={`Color ${c}`}
               className={cn(
                 'h-9 w-9 rounded-full transition-transform',
-                color === c ? 'scale-110 ring-2 ring-white/70' : 'opacity-70',
+                color === c ? 'scale-110 ring-2 ring-ring-sel' : 'opacity-70',
               )}
               style={{ backgroundColor: c }}
             />
@@ -112,7 +112,7 @@ export function GoalSheet({
           }}
           disabled={!listo}
           className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                     shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
+                     shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
           {meta ? 'Guardar' : 'Crear meta'}
         </button>

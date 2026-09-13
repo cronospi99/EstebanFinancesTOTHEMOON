@@ -32,7 +32,7 @@ export function ScrollStrip({
       className={cn(
         // Solo en escritorio: en táctil serían dos objetivos que estorban.
         'absolute top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full',
-        'border border-hairline bg-black/70 text-label-secondary backdrop-blur-sm lg:flex',
+        'border border-hairline bg-chrome text-label-secondary backdrop-blur-sm lg:flex',
         dir === -1 ? 'left-0' : 'right-0',
       )}
     >

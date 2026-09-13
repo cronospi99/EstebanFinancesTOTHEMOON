@@ -312,7 +312,8 @@ La tasa se teclea mensual, que es como se pacta por aquí, y se guarda efectiva
 anual como las de las cuentas. El formulario enseña la equivalencia, porque un
 2 % mensual no es un 24 % anual sino un 26,8 %.
 
-**El saldo pendiente NO se descuenta del patrimonio**, y es a propósito. Son dos
+**Ni el saldo pendiente ni lo que se debe en tarjetas se descuentan del
+patrimonio**, y es a propósito. Son dos
 preguntas distintas —cuánto tienes y cuánto debes— y restarlas mezcla el dinero
 que está en las cuentas con una obligación que se irá pagando desde esas mismas
 cuentas: cada abono ya baja el saldo de la cuenta de la que sale, así que
@@ -333,6 +334,40 @@ tocarla es mirar, no decidir, y una cuenta creada por mirar se queda para
 siempre si se cierra la hoja. Hay una por moneda —los dólares en efectivo no
 son los mismos pesos en efectivo— y no se ofrece cuando ya existe: entonces
 aparece como una cuenta más.
+
+---
+
+## Apariencia
+
+Oscuro, claro o lo que diga el teléfono, en **Ajustes → Apariencia**. Tres
+opciones y no un interruptor: «automático» es lo que quiere quien tiene el
+móvil programado para cambiar al anochecer, y con dos posiciones esa gente
+tiene que entrar aquí dos veces al día.
+
+Los dos temas viven en variables CSS (`app/globals.css`) y Tailwind las lee por
+nombre, así que un color se cambia en un sitio y le sigue la app entera. Los
+rellenos, que antes eran ciento cuarenta `bg-white/[0.05]` sueltos, pasaron a
+cuatro niveles con nombre —`bg-fill-1` a `bg-fill-4`—: un blanco al 5 % sobre
+fondo claro no se ve, y eran ciento cuarenta sitios donde el modo claro se
+habría roto uno a uno.
+
+El tema se aplica con un guion en línea antes del primer pintado, no en un
+efecto de React: un efecto corre después de pintar, y con el tema claro
+guardado la app abría en negro y saltaba a blanco un instante después. Ese
+fogonazo es lo único que delata que esto es una web.
+
+---
+
+## Pagar la tarjeta
+
+En **Cuentas → Pagar tarjeta**. Por dentro es una transferencia —el dinero sale
+de una cuenta y entra en la tarjeta, que pasa a deber menos— pero merecía su
+propia hoja: en la de transferir, la tarjeta era un destino más entre diez, con
+su saldo en negativo y sin decir cuánto hay que pagar.
+
+Aquí arriba está lo que se debe, debajo con qué se paga, y dos atajos: el total
+o una cuota. **No cuenta como gasto**: el gasto ocurrió al pasar la tarjeta, y
+anotarlo otra vez al pagar el extracto lo contaría dos veces en el mes.
 
 ---
 
