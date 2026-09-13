@@ -91,7 +91,9 @@ export function WealthDistribution() {
   )
 
   const total = slices.reduce((s, r) => s + r.value, 0)
-  const deudas = netWorth - total
+  // La diferencia con el patrimonio, que ahora solo puede venir de una cuenta
+  // en dólares sin convertir: las tarjetas y las deudas ya no se restan.
+  const diferencia = netWorth - total
 
   if (!slices.length) return null
 
@@ -186,9 +188,9 @@ export function WealthDistribution() {
           ))}
         </ul>
 
-        {deudas < -1 && (
+        {diferencia < -1 && (
           <p className="tnum mt-3 border-t border-hairline pt-3 text-[12px] text-label-tertiary">
-            Deudas descontadas del patrimonio: {formatMoney(deudas)}
+            Descontado del patrimonio: {formatMoney(diferencia)}
           </p>
         )}
       </Card>

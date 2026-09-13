@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, HandCoins, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, HandCoins, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/card'
 import { MoneyInput } from '@/components/ui/money-input'
 import { DebtSheet } from '@/components/debts/debt-sheet'
@@ -24,6 +24,7 @@ const hoy = () => new Date().toISOString().slice(0, 10)
  */
 export function DebtsSection() {
   const deudas = useDeudas()
+  const { deudasError, synced } = useFinance()
   const { total, cuantas } = useDeudaTotal()
 
   const [hoja, setHoja] = useState(false)
@@ -44,6 +45,26 @@ export function DebtsSection() {
           </button>
         }
       />
+
+      {/* Si el servidor las rechaza, decirlo. Sin este aviso el fallo era
+          invisible: se registraba la deuda, se veía en pantalla, y a la carga
+          siguiente ya no estaba sin que nada explicara por qué. */}
+      {synced && deudasError && (
+        <div className="mb-3 flex gap-2.5 rounded-2xl border border-accent-orange/25 bg-accent-orange/[0.08] px-4 py-3">
+          <TriangleAlert size={17} className="mt-0.5 shrink-0 text-accent-orange" />
+          <div>
+            <p className="text-[13px] font-semibold text-accent-orange">
+              Las deudas no se están guardando en tu cuenta
+            </p>
+            <p className="mt-1 text-[12px] leading-relaxed text-label-secondary">
+              {deudasError}. Lo que registres se queda en este teléfono hasta que
+              se arregle. Si acabas de desplegar, falta aplicar la migración
+              <code className="mx-1 rounded bg-white/10 px-1 py-0.5 text-[11px]">deudas_personales</code>
+              en Supabase.
+            </p>
+          </div>
+        </div>
+      )}
 
       {!deudas.length ? (
         <Card className="p-8 text-center">

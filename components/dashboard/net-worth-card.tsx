@@ -15,7 +15,7 @@ import { RANGE_LABEL, useBalanceSeries, useDeudaTotal, useExpectedYield, useFina
 import { cn, haptic } from '@/lib/utils'
 
 export function NetWorthCard() {
-  const { total: netWorth, incompleto, sinConvertir } = useNetWorthDetail()
+  const { total: netWorth, incompleto, sinConvertir, tarjetas } = useNetWorthDetail()
   const { fx } = useFinance()
   const [range, setRange] = useState<RangeKey>('1M')
   const series = useBalanceSeries(range)
@@ -25,6 +25,9 @@ export function NetWorthCard() {
   const [verDesglose, setVerDesglose] = useState(false)
   const desglose = useYieldBreakdown()
   const deuda = useDeudaTotal()
+  // Lo que se debe, junto: la tarjeta y el préstamo del amigo son la misma
+  // pregunta —cuánto debo— aunque vengan de sitios distintos de la app.
+  const debesTotal = deuda.total + tarjetas
 
   const first = series[0]?.value ?? netWorth
   const delta = netWorth - first
@@ -185,20 +188,24 @@ export function NetWorthCard() {
         mismas cuentas, que es donde se notará. Por eso va debajo de la línea,
         con su rótulo, y lleva a la pantalla donde se maneja.
       */}
-      {deuda.total > 0 && (
+      {debesTotal > 0 && (
         <Link
           href="/cuentas"
           className="mt-3 flex items-center gap-2.5 rounded-2xl border border-hairline bg-white/[0.03] px-4 py-3"
         >
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-orange" />
           <div className="min-w-0 flex-1">
-            <p className="text-[12px] text-label-secondary">
-              Deudas{deuda.cuantas > 1 ? ` · ${deuda.cuantas}` : ''}
+            <p className="text-[12px] text-label-secondary">Deudas</p>
+            {/* El desglose solo cuando hay de los dos tipos: con uno solo, la
+                cifra ya se explica sola y la línea sobraría. */}
+            <p className="text-[11px] text-label-tertiary">
+              {tarjetas > 0 && deuda.total > 0
+                ? `Tarjetas ${formatMoney(Math.round(tarjetas))} · personales ${formatMoney(deuda.total)}`
+                : 'Aparte del patrimonio'}
             </p>
-            <p className="text-[11px] text-label-tertiary">Aparte del patrimonio</p>
           </div>
           <span className="tnum shrink-0 text-[17px] font-semibold text-accent-orange">
-            {hidden ? '••••' : formatMoney(deuda.total)}
+            {hidden ? '••••' : formatMoney(Math.round(debesTotal))}
           </span>
         </Link>
       )}
