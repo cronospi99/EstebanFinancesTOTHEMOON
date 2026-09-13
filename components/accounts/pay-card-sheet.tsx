@@ -67,7 +67,7 @@ export function PayCardSheet({ open, onClose }: { open: boolean; onClose: () => 
       onClick={() => { haptic(6); onPick() }}
       className={cn(
         'press flex shrink-0 items-center gap-2 rounded-xl border py-2 pl-2 pr-3 text-left transition-colors',
-        activa ? 'border-transparent bg-white/[0.14]' : 'border-hairline',
+        activa ? 'border-transparent bg-fill-4' : 'border-hairline',
       )}
     >
       <InstitutionBadge institution={acc.institution} color={acc.color} size="xs" />
@@ -109,7 +109,7 @@ export function PayCardSheet({ open, onClose }: { open: boolean; onClose: () => 
 
             {/* Cuánto se debe, arriba y grande: es el dato que se viene a ver. */}
             {tarjeta && (
-              <div className="mb-4 rounded-2xl border border-hairline bg-white/[0.03] px-4 py-3">
+              <div className="mb-4 rounded-2xl border border-hairline bg-fill-1 px-4 py-3">
                 <div className="flex items-center gap-3">
                   <InstitutionBadge institution={tarjeta.institution} color={tarjeta.color} size="sm" />
                   <div className="min-w-0 flex-1">
@@ -167,7 +167,7 @@ export function PayCardSheet({ open, onClose }: { open: boolean; onClose: () => 
               <div className="mb-2 flex gap-2">
                 <button
                   onClick={() => { haptic(6); setMonto(String(Math.round(debe))) }}
-                  className="press flex-1 rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+                  className="press flex-1 rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
                 >
                   Pagar todo · {formatMoney(Math.round(debe), moneda)}
                 </button>
@@ -178,7 +178,7 @@ export function PayCardSheet({ open, onClose }: { open: boolean; onClose: () => 
                       const faltan = Math.max(tarjeta.installments! - (tarjeta.installmentsPaid ?? 0), 1)
                       setMonto(String(Math.round(debe / faltan)))
                     }}
-                    className="press flex-1 rounded-xl border border-hairline bg-white/[0.04] py-2 text-[13px] font-medium text-accent-blue"
+                    className="press flex-1 rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
                   >
                     Una cuota
                   </button>
@@ -233,7 +233,7 @@ export function PayCardSheet({ open, onClose }: { open: boolean; onClose: () => 
               }}
               disabled={!listo}
               className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
-                         shadow-glow disabled:bg-white/[0.06] disabled:text-label-tertiary disabled:shadow-none"
+                         shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
             >
               Pagar{importe > 0 ? ` ${formatMoney(importe, moneda)}` : ''}
             </button>

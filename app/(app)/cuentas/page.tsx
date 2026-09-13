@@ -54,7 +54,7 @@ export default function AccountsPage() {
         </Card>
       ) : (
         <Card className="divide-y divide-hairline overflow-hidden">
-          {delDia.map((acc) => {
+          {delDia.map((acc, i) => {
             const total = accountTotal(acc)
             const pockets = acc.pockets?.length ?? 0
             const apartado = saldos.get(acc.id)?.apartado ?? 0
@@ -62,14 +62,15 @@ export default function AccountsPage() {
               <button
                 key={acc.id}
                 onClick={() => { haptic(6); setDetail(acc) }}
-                className="press-soft flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/[0.04]"
+                style={{ '--i': i } as React.CSSProperties}
+                className="fila-entra press-soft flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-fill-1"
               >
                 <InstitutionBadge institution={acc.institution} color={acc.color} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-[15px] font-medium text-label">{acc.name}</span>
                     {acc.currency === 'USD' && (
-                      <span className="shrink-0 rounded bg-white/[0.09] px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
+                      <span className="shrink-0 rounded bg-fill-3 px-1 py-px text-[9px] font-bold text-label-secondary">USD</span>
                     )}
                   </div>
                   <div className="truncate text-[12px] text-label-tertiary">
@@ -107,7 +108,7 @@ export default function AccountsPage() {
           onClick={() => { haptic(6); setTransferOpen(true) }}
           disabled={delDia.length < 2}
           className="press flex items-center justify-center gap-2 rounded-2xl border border-hairline
-                     bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue
+                     bg-fill-1 py-3.5 text-[15px] font-medium text-accent-blue
                      disabled:text-label-tertiary"
         >
           <ArrowLeftRight size={17} />
@@ -116,7 +117,7 @@ export default function AccountsPage() {
         <button
           onClick={() => { haptic(6); setAddAccountOpen(true) }}
           className="press flex items-center justify-center gap-2 rounded-2xl border border-hairline
-                     bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue"
+                     bg-fill-1 py-3.5 text-[15px] font-medium text-accent-blue"
         >
           <Plus size={17} />
           Añadir
@@ -127,7 +128,7 @@ export default function AccountsPage() {
           <button
             onClick={() => { haptic(6); setPagarOpen(true) }}
             className="press col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-hairline
-                       bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue"
+                       bg-fill-1 py-3.5 text-[15px] font-medium text-accent-blue"
           >
             <CreditCard size={17} />
             Pagar tarjeta
