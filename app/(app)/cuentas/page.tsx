@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeftRight, Plus } from 'lucide-react'
+import { ArrowLeftRight, CreditCard, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardHeader } from '@/components/ui/card'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
@@ -9,6 +9,7 @@ import { AddAccountSheet } from '@/components/accounts/add-account-sheet'
 import { DebtsSection } from '@/components/debts/debts-section'
 import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
 import { TransferSheet } from '@/components/accounts/transfer-sheet'
+import { PayCardSheet } from '@/components/accounts/pay-card-sheet'
 import { CO_INSTITUTIONS } from '@/lib/categories'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { accountTotal, useAccountsAvailable, useFinance } from '@/lib/store'
@@ -32,11 +33,13 @@ export default function AccountsPage() {
   const saldos = useAccountsAvailable()
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
+  const [pagarOpen, setPagarOpen] = useState(false)
   const [detail, setDetail] = useState<Account | null>(null)
 
   // Las de inversión se gestionan en su propia pestaña: aquí solo el dinero
   // disponible del día a día.
   const delDia = accounts.filter((a) => a.type !== 'investment')
+  const hayTarjetas = accounts.some((a) => a.type === 'credit')
 
   return (
     <div className="space-y-5 px-5">
@@ -118,6 +121,18 @@ export default function AccountsPage() {
           <Plus size={17} />
           Añadir
         </button>
+        {/* A todo lo ancho y solo cuando hay tarjeta: es la acción del mes para
+            quien la tiene, y un botón muerto para quien no. */}
+        {hayTarjetas && (
+          <button
+            onClick={() => { haptic(6); setPagarOpen(true) }}
+            className="press col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-hairline
+                       bg-white/[0.04] py-3.5 text-[15px] font-medium text-accent-blue"
+          >
+            <CreditCard size={17} />
+            Pagar tarjeta
+          </button>
+        )}
       </div>
 
       {/* Las deudas van tras las cuentas y antes del catálogo: son la otra
@@ -142,6 +157,7 @@ export default function AccountsPage() {
 
       <AddAccountSheet open={addAccountOpen} onClose={() => setAddAccountOpen(false)} />
       <TransferSheet open={transferOpen} onClose={() => setTransferOpen(false)} />
+      <PayCardSheet open={pagarOpen} onClose={() => setPagarOpen(false)} />
       <AccountDetailSheet account={detail} onClose={() => setDetail(null)} />
     </div>
   )
