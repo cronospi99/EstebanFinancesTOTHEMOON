@@ -89,6 +89,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'installment', name: 'Cuota tarjeta', icon: 'CreditCard', color: '#FF9F0A', kind: 'expense', group: 'Financiero' },
   { id: 'donation', name: 'Donaciones', icon: 'HandCoins', color: '#32D74B', kind: 'expense', group: 'Financiero' },
   { id: 'loan-payment', name: 'Cuota de préstamo', icon: 'Banknote', color: '#FF453A', kind: 'expense', group: 'Financiero' },
+  // Plata que prestaste: sale de la cuenta pero no se gastó, va a volver.
+  { id: 'loan-given', name: 'Préstamo a alguien', icon: 'HandCoins', color: '#FF9F0A', kind: 'expense', group: 'Financiero' },
   { id: 'to-savings', name: 'Paso a ahorro', icon: 'PiggyBank', color: '#30D158', kind: 'expense', group: 'Financiero' },
   { id: 'to-investment', name: 'Paso a inversión', icon: 'TrendingUp', color: '#BF5AF2', kind: 'expense', group: 'Financiero' },
   { id: 'withdrawal', name: 'Retiro en cajero', icon: 'Landmark', color: '#8E8E93', kind: 'expense', group: 'Financiero' },
@@ -109,6 +111,9 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'refund', name: 'Reembolso', icon: 'Undo2', color: '#64D2FF', kind: 'income', group: 'Otros' },
   { id: 'gift-income', name: 'Regalo', icon: 'Gift', color: '#FF375F', kind: 'income', group: 'Otros' },
   { id: 'loan-income', name: 'Préstamo recibido', icon: 'Banknote', color: '#FF9F0A', kind: 'income', group: 'Otros' },
+  // Lo contrario: te devolvieron lo que prestaste. No es un ingreso nuevo,
+  // es plata tuya que vuelve, y por eso tiene su propia categoría.
+  { id: 'loan-repaid', name: 'Préstamo devuelto', icon: 'HandCoins', color: '#30D158', kind: 'income', group: 'Otros' },
   { id: 'from-savings', name: 'Retiro de ahorro', icon: 'PiggyBank', color: '#30D158', kind: 'income', group: 'Otros' },
   { id: 'other-income', name: 'Otros ingresos', icon: 'Ellipsis', color: '#98989F', kind: 'income', group: 'Otros' },
 ]

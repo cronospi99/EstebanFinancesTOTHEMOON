@@ -136,9 +136,10 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {/* Las deudas van tras las cuentas y antes del catálogo: son la otra
-          mitad de "dónde está tu dinero" —el que ya no es tuyo— y quien entra
-          aquí a mirar saldos quiere verlas en la misma pantalla. */}
+      {/* Las deudas van tras las cuentas y antes del catálogo: son los bordes
+          de "dónde está tu dinero" —el que ya no es tuyo y el que es tuyo pero
+          lo tiene otro— y quien entra aquí a mirar saldos quiere verlas en la
+          misma pantalla. */}
       <DebtsSection />
 
       <section>

@@ -144,12 +144,12 @@ components/
 ├─ dashboard/             Patrimonio, cuentas, anillos de presupuesto
 ├─ expenses/              Dona, lista de movimientos
 ├─ investments/           Fila de posición
-├─ debts/                 Deudas personales: lista y alta
+├─ debts/                 Deudas personales: lo que debes y lo que te deben
 └─ ui/                    Card, Sheet, Segmented, CategoryIcon
 
 lib/
 ├─ store.tsx              Estado + selectores derivados
-├─ deudas.ts              Saldo e intereses de un préstamo personal
+├─ deudas.ts              Saldo e intereses de un préstamo entre personas
 ├─ format.ts              Moneda COP, fechas, números tabulares
 ├─ use-quotes.ts          Sondeo de precios
 └─ supabase/              Clientes navegador y servidor
@@ -288,14 +288,37 @@ su ticker en la insignia, que ahí es justo la información útil.
 
 ## Deudas personales
 
-En **Cuentas**, debajo de las cuentas: lo que le debes a una persona, que es la
-otra mitad de dónde está tu dinero —el que ya no es tuyo aunque lo tengas en la
-mano—. De cada deuda se guarda a quién le debes, cuánto te prestó, en qué
-moneda, desde cuándo corre y, si lo pactaron, qué interés.
+En **Cuentas**, debajo de las cuentas: los bordes de dónde está tu dinero —el
+que ya no es tuyo aunque lo tengas en la mano, y el que es tuyo aunque lo tenga
+otro—. De cada deuda se guarda con quién es, cuánto fue, en qué moneda, desde
+cuándo corre y, si lo pactaron, qué interés.
 
 Va aparte de las cuentas de crédito porque el dato de partida es otro: una
 tarjeta tiene cupo, corte y cuotas; un préstamo entre personas tiene un nombre
 propio y un historial de abonos.
+
+**Va en los dos sentidos.** Prestar pasa tanto como que le presten a uno, y
+antes solo cabía la mitad: quien le había prestado a un amigo terminaba
+anotándolo como deuda propia con una nota que decía «al revés», y el saldo
+salía del lado equivocado en todas partes. Un préstamo a favor es un campo
+(`direction`) y no otra tabla porque lo demás es idéntico —un nombre, un monto,
+una fecha, una tasa opcional, un historial de abonos—; lo único que cambia es
+hacia dónde va el dinero.
+
+Eso sí cambia tres cosas. Los **rótulos**, que leídos al revés no dicen nada:
+«¿quién te debe?» en vez de «¿a quién le debes?», «te pagó» en vez de «le
+pagaste». El **signo del movimiento**: cobrar un préstamo entra a la cuenta y
+prestar otro poco sale de ella, con categorías propias —«Préstamo a alguien» y
+«Préstamo devuelto»— porque ninguna de las dos es un gasto ni un ingreso
+corriente, es plata que va y vuelve. Y el **sentido queda fijo en cuanto hay un
+abono**: cambiarlo después daría la vuelta a lo que significa cada movimiento ya
+registrado, y esos no se pueden reescribir sin tocar saldos que ya se dieron por
+buenos.
+
+Los dos lados **no se suman en una cifra**. Que un amigo te deba dos millones no
+paga el millón que le debes a tu mamá, y un neto escondería justo lo que uno
+viene a mirar: a quién hay que pagarle y a quién hay que cobrarle. La lista se
+divide en «Debo» y «Me deben», cada uno con su total.
 
 **Los abonos son filas, no un campo.** Con interés, *cuándo* pagaste cambia
 cuánto debes hoy, así que un total suelto no permitiría calcularlo. Y sin
@@ -319,6 +342,10 @@ que está en las cuentas con una obligación que se irá pagando desde esas mism
 cuentas: cada abono ya baja el saldo de la cuenta de la que sale, así que
 descontarlo además del total lo contaría dos veces por el camino. La deuda se
 enseña en su propio bloque, en el resumen bajo el patrimonio y en Cuentas.
+
+**Lo que te deben tampoco se suma**, por el reflejo del mismo motivo: la plata
+que prestaste salió de una cuenta cuyo saldo ya lo acusó, y volver a contarla
+como activo la contaría dos veces. Va en su propio bloque, al lado del otro.
 
 ---
 
