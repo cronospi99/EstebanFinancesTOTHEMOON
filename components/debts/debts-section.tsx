@@ -2,21 +2,18 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, HandCoins, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react'
+import {
+  ArrowLeftRight, Check, HandCoins, Link2, Pencil, Plus, Trash2, TriangleAlert, Wallet,
+} from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/card'
-import { MoneyInput } from '@/components/ui/money-input'
 import { DebtSheet } from '@/components/debts/debt-sheet'
+import { SettleSheet } from '@/components/debts/settle-sheet'
 import { mensualDesdeAnual, redondeaMoneda } from '@/lib/deudas'
-import { formatDate, formatMoney, formatPercent, parseKeypad } from '@/lib/format'
+import { formatDate, formatMoney, formatPercent } from '@/lib/format'
 import { useDeudaTotal, useDeudas, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
-import { hoyEnZona } from '@/lib/zona'
-import type { Debt } from '@/lib/types'
+import { formaDeAbono, type Debt } from '@/lib/types'
 import type { DeudaConSaldo } from '@/lib/store'
-
-// El día en la zona del usuario: en UTC, a partir de las 7 de la tarde en
-// Colombia ya sería mañana. Ver `zona.ts`.
-const hoy = hoyEnZona
 
 /**
  * Deudas personales: lo que le debes a gente, no a un banco.
@@ -32,6 +29,7 @@ export function DebtsSection() {
 
   const [hoja, setHoja] = useState(false)
   const [editando, setEditando] = useState<Debt | null>(null)
+  const [cuadrando, setCuadrando] = useState<DeudaConSaldo | null>(null)
 
   const abrirNueva = () => { haptic(6); setEditando(null); setHoja(true) }
 
@@ -103,6 +101,7 @@ export function DebtsSection() {
                 key={d.deuda.id}
                 item={d}
                 onEditar={() => { haptic(6); setEditando(d.deuda); setHoja(true) }}
+                onCuadrar={() => { haptic(6); setCuadrando(d) }}
               />
             ))}
           </div>
@@ -113,17 +112,20 @@ export function DebtsSection() {
         open={hoja} deuda={editando} indice={deudas.length}
         onClose={() => setHoja(false)}
       />
+      <SettleSheet
+        open={Boolean(cuadrando)} item={cuadrando}
+        onClose={() => setCuadrando(null)}
+      />
     </section>
   )
 }
 
-function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => void }) {
-  const { abonarDeuda, deleteDebtPayment } = useFinance()
+function FilaDeuda({
+  item, onEditar, onCuadrar,
+}: { item: DeudaConSaldo; onEditar: () => void; onCuadrar: () => void }) {
+  const { accounts, deleteDebtPayment } = useFinance()
   const { deuda, saldo, pagado, interes, capital, progreso, saldada, excedente, abonos } = item
 
-  const [abonando, setAbonando] = useState(false)
-  const [monto, setMonto] = useState('')
-  const [fecha, setFecha] = useState(hoy())
   const [verAbonos, setVerAbonos] = useState(false)
 
   const moneda = deuda.currency
@@ -132,14 +134,6 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
   const dias = deuda.dueDate
     ? Math.ceil((new Date(`${deuda.dueDate}T12:00:00Z`).getTime() - Date.now()) / 86_400_000)
     : null
-
-  const registrar = () => {
-    const cantidad = parseKeypad(monto)
-    if (cantidad <= 0) return
-    haptic([14, 30])
-    abonarDeuda({ debtId: deuda.id, amount: cantidad, occurredAt: fecha })
-    setMonto(''); setFecha(hoy()); setAbonando(false)
-  }
 
   return (
     <Card className={cn('p-4', saldada && 'opacity-60')}>
@@ -209,46 +203,16 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
         <p className="mt-1.5 text-[12px] leading-relaxed text-label-tertiary">{deuda.note}</p>
       )}
 
-      {abonando ? (
-        <div className="mt-3 space-y-2">
-          <div className="flex gap-2">
-            <MoneyInput
-              value={monto} onChange={setMonto} currency={moneda}
-              autoFocus size="sm" className="flex-1"
-            />
-            <button
-              onClick={registrar}
-              className="press rounded-xl bg-accent-blue px-4 text-[14px] font-semibold text-white"
-            >
-              Abonar
-            </button>
-            <button
-              onClick={() => { setAbonando(false); setMonto('') }}
-              aria-label="Cancelar abono"
-              className="press rounded-xl border border-hairline px-3 text-[14px] text-label-secondary"
-            >
-              ✕
-            </button>
-          </div>
-          {/* La fecha importa cuando hay interés: un abono de hace un mes deja
-              menos saldo hoy que el mismo abono hecho esta mañana. */}
-          <input
-            type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
-            aria-label="Fecha del abono"
-            className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2 text-[14px]
-                       text-label focus:border-accent-blue/50 focus:outline-none"
-          />
-        </div>
-      ) : (
-        !saldada && (
-          <button
-            onClick={() => { haptic(6); setAbonando(true) }}
-            className="press mt-3 w-full rounded-xl border border-hairline bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
-          >
-            Registrar un abono
-          </button>
-        )
-      )}
+      {/* Una hoja y no un campo en línea: saldar una deuda ya no es «cuánto»,
+          es «cuánto, de dónde y de qué forma», y eso no cabe en una fila. */}
+      <button
+        onClick={onCuadrar}
+        className="press mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-hairline
+                   bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
+      >
+        <ArrowLeftRight size={14} />
+        {saldada ? 'Ajustar cuentas' : 'Abonar o cuadrar'}
+      </button>
 
       {abonos.length > 0 && (
         <>
@@ -256,16 +220,38 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
             onClick={() => { haptic(6); setVerAbonos((v) => !v) }}
             className="press mt-2 w-full py-1 text-center text-[12px] text-label-tertiary"
           >
-            {verAbonos ? 'Ocultar abonos' : `Ver los ${abonos.length} abonos`}
+            {verAbonos ? 'Ocultar' : abonos.length === 1 ? 'Ver el abono' : `Ver los ${abonos.length} abonos`}
           </button>
 
           {verAbonos && (
             <ul className="mt-1 divide-y divide-hairline border-t border-hairline">
-              {abonos.map((a) => (
+              {abonos.map((a) => {
+                const forma = formaDeAbono(a)
+                const cuenta = accounts.find((c) => c.id === a.accountId)
+                return (
                 <li key={a.id} className="flex items-center gap-3 py-2">
-                  <span className="flex-1 text-[13px] text-label-secondary">{formatDate(a.occurredAt)}</span>
-                  <span className="tnum text-[14px] font-medium text-label">
-                    {importe(a.amount)}
+                  <span className="shrink-0 text-label-tertiary">
+                    {forma === 'cruce' ? <Link2 size={13} />
+                      : forma === 'cuenta' ? <Wallet size={13} />
+                      : <ArrowLeftRight size={13} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] text-label-secondary">{formatDate(a.occurredAt)}</p>
+                    {/* De qué forma se saldó: sin esto, tres abonos del mismo
+                        importe son indistinguibles y no hay manera de recordar
+                        cuál fue el que se cruzó contra la compra. */}
+                    <p className="truncate text-[11px] text-label-tertiary">
+                      {a.note ? `${a.note} · ` : ''}
+                      {forma === 'cruce' ? 'cruzado con un gasto'
+                        : forma === 'cuenta' ? `desde ${cuenta?.name ?? 'una cuenta'}`
+                        : 'ajuste'}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'tnum text-[14px] font-medium',
+                    a.amount < 0 ? 'text-accent-red' : 'text-label',
+                  )}>
+                    {a.amount < 0 ? '+' : '−'}{importe(Math.abs(a.amount))}
                   </span>
                   <button
                     onClick={() => { haptic([16, 30]); deleteDebtPayment(a.id) }}
@@ -275,7 +261,8 @@ function FilaDeuda({ item, onEditar }: { item: DeudaConSaldo; onEditar: () => vo
                     <Trash2 size={14} />
                   </button>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </>

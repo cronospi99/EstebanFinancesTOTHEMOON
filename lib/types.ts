@@ -171,10 +171,49 @@ export interface Debt {
 export interface DebtPayment {
   id: string
   debtId: string
+  /**
+   * Lo que baja la deuda. Negativo la sube: un cargo.
+   *
+   * Que pueda ir en los dos sentidos es lo que permite cuadrar cuentas de
+   * verdad. Entre personas la deuda no solo se paga: también crece porque el
+   * otro puso algo más, o se corrige porque alguien se equivocó al apuntar.
+   */
   amount: number
   occurredAt: string
   note?: string
+  /**
+   * De dónde salió el dinero, cuando salió de algún sitio.
+   *
+   * Puede ser una cuenta o una tarjeta —pagarle a alguien con la tarjeta es
+   * cambiar de acreedor, no dejar de deber— y al registrarlo se crea el
+   * movimiento correspondiente para que el saldo de esa cuenta lo acuse.
+   */
+  accountId?: string
+  /**
+   * Un movimiento que ya existía y que se cruza contra la deuda.
+   *
+   * Es el caso que no cabía de ninguna otra forma: pagaste algo con la tarjeta
+   * que en realidad era de la otra persona, ese gasto ya está registrado, y lo
+   * que falta es decir que descuenta de lo que le debes. Crear un movimiento
+   * nuevo lo cobraría dos veces; aquí solo se enlaza.
+   */
+  transactionId?: string
 }
+
+/** Cómo se saldó un abono. Se deduce de los campos, no se guarda. */
+export type FormaDeAbono = 'cuenta' | 'cruce' | 'ajuste'
+
+/*
+ * Manda `accountId`, y por eso va primero.
+ *
+ * Pagar desde una cuenta también deja `transactionId`: el del movimiento que
+ * el propio abono creó, que es lo que permite deshacerlo después. Preguntar
+ * antes por `transactionId` daba «cruzado con un gasto» a todos los pagos, que
+ * es justo lo contrario de lo que pasó. Un cruce es el único caso en que hay
+ * movimiento pero no salió dinero de ninguna cuenta por este abono.
+ */
+export const formaDeAbono = (p: Pick<DebtPayment, 'accountId' | 'transactionId'>): FormaDeAbono =>
+  p.accountId ? 'cuenta' : p.transactionId ? 'cruce' : 'ajuste'
 
 export interface Holding {
   id: string
