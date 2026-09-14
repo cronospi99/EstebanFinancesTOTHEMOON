@@ -9,7 +9,7 @@ import {
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
 import { saldoDeuda, type SaldoDeuda } from './deudas'
-import { cargarZona, diaEn } from './zona'
+import { cargarZona, diaEn, instanteEnDia } from './zona'
 import { monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
@@ -257,7 +257,8 @@ interface FinanceContextValue extends State {
   /** Proveedores que fallaron en la última consulta de precios. */
   quotesFallos: string[]
   refreshQuotes: () => Promise<void>
-  addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>
+  /** Registra un movimiento y devuelve su id. */
+  addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<string>
   updateTransaction: (id: string, patch: Partial<Omit<Transaction, 'id'>>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   addAccount: (acc: Omit<Account, 'id'>) => Promise<void>
@@ -567,6 +568,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /** Devuelve el id del movimiento creado: un abono a una deuda lo guarda para
+   *  poder deshacerlo si se borra el abono. */
   const addTransaction = useCallback(
     async (tx: Omit<Transaction, 'id'>) => {
       const full: Transaction = { ...tx, id: uid() }
@@ -584,6 +587,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         remote()?.from('transactions').insert(txToRow(full)),
         persistirSaldos(tocadas),
       ])
+      return full.id
     },
     [remote, persistirSaldos],
   )
@@ -1107,22 +1111,68 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /**
+   * Registra un abono —o un cargo— y mueve lo que tenga que moverse.
+   *
+   * Tres formas de saldar, y la diferencia entre ellas es qué pasa con el
+   * dinero:
+   *
+   *  · **Desde una cuenta** (`accountId`): el dinero sale de ahí, así que se
+   *    crea el movimiento. Si la cuenta es una tarjeta, su deuda sube: pagarle
+   *    a alguien con la tarjeta no es dejar de deber, es cambiar de acreedor.
+   *  · **Cruzando un movimiento** (`transactionId`): el gasto ya estaba
+   *    registrado y solo se enlaza. No se crea nada, que es justo el punto —
+   *    crear otro lo cobraría dos veces.
+   *  · **Ajuste** (ninguno de los dos): no se mueve un peso. Un perdón, un
+   *    descuento, un redondeo al cuadrar cuentas.
+   */
   const abonarDeuda = useCallback(
     async (a: Omit<DebtPayment, 'id'>) => {
       const full: DebtPayment = { ...a, id: uid() }
+      const deuda = stateRef.current.debts.find((d) => d.id === a.debtId)
+
+      // El movimiento va primero: el abono guarda su id para poder deshacerlo
+      // después. Al revés habría que volver a escribir el abono.
+      if (full.accountId && !full.transactionId) {
+        const cuenta = stateRef.current.accounts.find((c) => c.id === full.accountId)
+        full.transactionId = await addTransaction({
+          accountId: full.accountId,
+          // Un abono sale de la cuenta y un cargo entra: si el otro puso algo
+          // más de su bolsillo, ese dinero llegó.
+          type: full.amount > 0 ? 'expense' : 'income',
+          categoryId: full.amount > 0 ? 'loan-payment' : 'other',
+          amount: Math.abs(full.amount),
+          currency: cuenta?.currency ?? deuda?.currency ?? 'COP',
+          description: `${full.amount > 0 ? 'Abono' : 'Cargo'} · ${deuda?.person ?? 'deuda'}`,
+          occurredAt: instanteEnDia(full.occurredAt),
+        })
+      }
+
       setState((s) => ({ ...s, debtPayments: [...s.debtPayments, full] }))
       const r = await remote()?.from('debt_payments').insert(debtPaymentToRow(full))
       anotarFallo(r?.error)
     },
-    [remote, anotarFallo],
+    [remote, anotarFallo, addTransaction],
   )
 
   const deleteDebtPayment = useCallback(
     async (id: string) => {
+      const abono = stateRef.current.debtPayments.find((p) => p.id === id)
       setState((s) => ({ ...s, debtPayments: s.debtPayments.filter((p) => p.id !== id) }))
       await remote()?.from('debt_payments').delete().eq('id', id)
+
+      /*
+       * El movimiento se borra solo si lo creó este abono.
+       *
+       * Un cruce enlaza un gasto que ya existía por su cuenta —la compra que
+       * de verdad se hizo con la tarjeta—, y borrarlo al deshacer el cruce se
+       * llevaría por delante un movimiento que el usuario nunca pidió borrar.
+       */
+      if (abono?.transactionId && abono.accountId) {
+        await deleteTransaction(abono.transactionId)
+      }
     },
-    [remote],
+    [remote, deleteTransaction],
   )
 
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
@@ -1926,10 +1976,12 @@ const debtPatchToRow = (p: Partial<Debt>) => {
 const rowToDebtPayment = (r: Row): DebtPayment => ({
   id: r.id, debtId: r.debt_id, amount: Number(r.amount),
   occurredAt: String(r.occurred_at).slice(0, 10), note: r.note ?? undefined,
+  accountId: r.account_id ?? undefined, transactionId: r.transaction_id ?? undefined,
 })
 const debtPaymentToRow = (p: DebtPayment) => ({
   id: p.id, debt_id: p.debtId, amount: p.amount,
   occurred_at: p.occurredAt, note: p.note ?? null,
+  account_id: p.accountId ?? null, transaction_id: p.transactionId ?? null,
 })
 
 const rowToAllocation = (r: Row): BudgetAllocation => ({

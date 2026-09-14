@@ -1,4 +1,5 @@
 import type { Currency, Debt, DebtPayment } from './types'
+import { diaEn } from './zona'
 
 /**
  * Cuánto se debe hoy de un préstamo entre personas.
@@ -48,8 +49,10 @@ export interface SaldoDeuda {
   capital: number
   /** Intereses corridos hasta hoy sobre el saldo pendiente. */
   interes: number
-  /** Todo lo abonado, sumado. */
+  /** Todo lo abonado, sumado. Los cargos no restan aquí: lo pagado es lo pagado. */
   pagado: number
+  /** Lo que se añadió después con cargos: la deuda que creció sobre la marcha. */
+  cargos: number
   /** Lo que falta por pagar. Cero si ya se saldó. */
   saldo: number
   /** Lo que se pagó de más, si se pagó de más. */
@@ -72,12 +75,30 @@ export function saldoDeuda(
   hasta: Date | number = Date.now(),
 ): SaldoDeuda {
   const capital = Math.max(0, deuda.principal)
-  const fin = typeof hasta === 'number' ? hasta : hasta.getTime()
+  /*
+   * El corte va en la misma escala que los abonos: el día, anclado a mediodía.
+   *
+   * Antes se comparaba el instante real contra un abono anclado a mediodía
+   * UTC, y un abono registrado hoy por la mañana quedaba «en el futuro»: la
+   * pantalla sumaba lo pagado pero el saldo no se movía hasta pasado el
+   * mediodía. Con las dos fechas en la misma escala, un abono de hoy cuenta
+   * hoy, y los días de interés salen enteros en vez de depender de la hora a
+   * la que se abra la app.
+   */
+  const fin = tiempo(diaEn(hasta))
   const inicio = tiempo(deuda.startedAt)
   const tasa = deuda.rate && deuda.rate > 0 ? deuda.rate / 100 : 0
 
   const ordenados = [...pagos].sort((a, b) => tiempo(a.occurredAt) - tiempo(b.occurredAt))
+  /*
+   * Lo abonado y lo cargado se cuentan por separado.
+   *
+   * Un importe negativo es un cargo: la deuda sube porque el otro puso algo
+   * más o porque alguien apuntó mal. Mezclarlo con lo pagado daría un «llevas
+   * pagado» que baja solo, que es justo lo que nadie entendería al leerlo.
+   */
   const pagado = ordenados.reduce((t, p) => t + Math.max(0, p.amount), 0)
+  const cargos = ordenados.reduce((t, p) => t + Math.max(0, -p.amount), 0)
 
   let pendiente = capital
   let interes = 0
@@ -99,18 +120,24 @@ export function saldoDeuda(
     const cuando = Math.max(tiempo(p.occurredAt), inicio)
     if (cuando > fin) break // un abono con fecha futura aún no ha ocurrido
     correr(cuando)
-    pendiente -= Math.max(0, p.amount)
+    // Con signo: un abono baja el saldo y un cargo lo sube, y desde su fecha,
+    // que es lo que hace que el interés corra sobre lo que de verdad se debía.
+    pendiente -= p.amount
   }
   correr(fin)
 
   const saldo = Math.max(0, pendiente)
   const excedente = Math.max(0, -pendiente)
-  const total = capital + interes
+  // Lo cargado también es deuda que hubo que cubrir, así que entra en el total
+  // sobre el que se mide el progreso. Sin esto, un cargo dejaba la barra por
+  // encima del 100 %.
+  const total = capital + interes + cargos
 
   return {
     capital,
     interes,
     pagado,
+    cargos,
     saldo,
     excedente,
     progreso: total > 0 ? Math.min(1, Math.max(0, (total - saldo) / total)) : 1,
