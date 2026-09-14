@@ -111,19 +111,26 @@ export const DEMO_GOALS: Goal[] = [
 const diaAtras = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
 
 /**
- * Dos deudas de ejemplo, elegidas para enseñar los dos casos que existen: una
- * con interés pactado y otra sin él, que es lo normal entre conocidos.
+ * Deudas de ejemplo, elegidas para enseñar los casos que existen: con interés
+ * pactado y sin él —lo normal entre conocidos— y de los dos lados, porque
+ * prestar pasa tanto como que le presten a uno.
  */
 export const DEMO_DEBTS: Debt[] = [
   {
-    id: 'd1', person: 'Mamá', principal: 3_000_000, currency: 'COP',
+    id: 'd1', person: 'Mamá', direction: 'owe', principal: 3_000_000, currency: 'COP',
     startedAt: diaAtras(120), color: '#FF9F0A',
     note: 'Para la cuota inicial de la moto',
   },
   {
-    id: 'd2', person: 'Andrés', principal: 1_500_000, currency: 'COP',
+    id: 'd2', person: 'Andrés', direction: 'owe', principal: 1_500_000, currency: 'COP',
     // 2 % mensual, la forma en que se pacta esto por aquí, en su equivalente anual.
     rate: 26.824, startedAt: diaAtras(75), dueDate: diaAtras(-45), color: '#FF453A',
+  },
+  {
+    // El otro lado: plata que prestaste tú y te van devolviendo.
+    id: 'd3', person: 'Juli', direction: 'lent', principal: 800_000, currency: 'COP',
+    startedAt: diaAtras(50), dueDate: diaAtras(-10), color: '#30D158',
+    note: 'El vuelo a Cartagena',
   },
 ]
 
@@ -132,4 +139,5 @@ export const DEMO_DEBT_PAYMENTS: DebtPayment[] = [
   { id: 'dp2', debtId: 'd1', amount: 500_000, occurredAt: diaAtras(60) },
   { id: 'dp3', debtId: 'd1', amount: 400_000, occurredAt: diaAtras(20) },
   { id: 'dp4', debtId: 'd2', amount: 300_000, occurredAt: diaAtras(40) },
+  { id: 'dp5', debtId: 'd3', amount: 300_000, occurredAt: diaAtras(25) },
 ]

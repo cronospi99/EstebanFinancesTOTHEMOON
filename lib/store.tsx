@@ -8,7 +8,7 @@ import {
 } from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
-import { saldoDeuda, type SaldoDeuda } from './deudas'
+import { movimientoDeAbono, saldoDeuda, type SaldoDeuda } from './deudas'
 import { cargarZona, diaEn, instanteEnDia } from './zona'
 import { monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
@@ -1117,9 +1117,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    * Tres formas de saldar, y la diferencia entre ellas es qué pasa con el
    * dinero:
    *
-   *  · **Desde una cuenta** (`accountId`): el dinero sale de ahí, así que se
-   *    crea el movimiento. Si la cuenta es una tarjeta, su deuda sube: pagarle
-   *    a alguien con la tarjeta no es dejar de deber, es cambiar de acreedor.
+   *  · **Desde una cuenta** (`accountId`): el dinero cambia de sitio, así que
+   *    se crea el movimiento. Si la cuenta es una tarjeta, su deuda sube:
+   *    pagarle a alguien con la tarjeta no es dejar de deber, es cambiar de
+   *    acreedor.
    *  · **Cruzando un movimiento** (`transactionId`): el gasto ya estaba
    *    registrado y solo se enlaza. No se crea nada, que es justo el punto —
    *    crear otro lo cobraría dos veces.
@@ -1135,15 +1136,24 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       // después. Al revés habría que volver a escribir el abono.
       if (full.accountId && !full.transactionId) {
         const cuenta = stateRef.current.accounts.find((c) => c.id === full.accountId)
+        /*
+         * Hacia dónde va la plata: el signo del abono dice qué le pasa al
+         * saldo, y el sentido de la deuda dice de qué bolsillo sale.
+         *
+         * En una deuda propia, abonar es pagar —el dinero se va— y un cargo es
+         * que el otro puso algo más, que llega. En un préstamo que hiciste tú
+         * es al revés: que te devuelvan entra a la cuenta, y prestar otro poco
+         * sale de ella. Sin esta vuelta, cobrar un préstamo quedaba anotado
+         * como gasto y la cuenta bajaba justo cuando acababa de subir.
+         */
+        const movimiento = movimientoDeAbono(deuda?.direction ?? 'owe', full.amount)
         full.transactionId = await addTransaction({
           accountId: full.accountId,
-          // Un abono sale de la cuenta y un cargo entra: si el otro puso algo
-          // más de su bolsillo, ese dinero llegó.
-          type: full.amount > 0 ? 'expense' : 'income',
-          categoryId: full.amount > 0 ? 'loan-payment' : 'other',
+          type: movimiento.entra ? 'income' : 'expense',
+          categoryId: movimiento.categoryId,
           amount: Math.abs(full.amount),
           currency: cuenta?.currency ?? deuda?.currency ?? 'COP',
-          description: `${full.amount > 0 ? 'Abono' : 'Cargo'} · ${deuda?.person ?? 'deuda'}`,
+          description: `${movimiento.etiqueta} · ${deuda?.person ?? 'deuda'}`,
           occurredAt: instanteEnDia(full.occurredAt),
         })
       }
@@ -1439,16 +1449,37 @@ export function useDeudas(): DeudaConSaldo[] {
   }, [debts, debtPayments, fxRate])
 }
 
-/** Lo que se debe en total, en pesos. */
+export interface TotalDeudas {
+  /** Saldo pendiente sumado, en pesos. */
+  total: number
+  /** Cuántas quedaron fuera por estar en dólares sin tasa de cambio. */
+  sinConvertir: number
+  /** Cuántas siguen abiertas. Las saldadas no cuentan. */
+  cuantas: number
+}
+
+/**
+ * Lo que debes y lo que te deben, cada uno por su lado.
+ *
+ * Separados y no netos porque son dos cosas distintas: que un amigo te deba
+ * dos millones no paga el millón que le debes a tu mamá, y un neto escondería
+ * justo lo que uno viene a mirar: a quién hay que pagarle y a quién hay que
+ * cobrarle.
+ */
 export function useDeudaTotal() {
   const deudas = useDeudas()
   return useMemo(() => {
-    let total = 0, sinConvertir = 0
-    for (const d of deudas) {
-      if (d.saldoCOP === null) sinConvertir++
-      else total += d.saldoCOP
+    const suma = (lado: 'owe' | 'lent'): TotalDeudas => {
+      let total = 0, sinConvertir = 0, cuantas = 0
+      for (const d of deudas) {
+        if (d.deuda.direction !== lado) continue
+        if (d.saldoCOP === null) sinConvertir++
+        else total += d.saldoCOP
+        if (!d.saldada) cuantas++
+      }
+      return { total, sinConvertir, cuantas }
     }
-    return { total, sinConvertir, cuantas: deudas.filter((d) => !d.saldada).length }
+    return { debo: suma('owe'), meDeben: suma('lent') }
   }, [deudas])
 }
 
@@ -1486,6 +1517,11 @@ export function useNetWorthDetail() {
      * que sale, así que descontarlo además del total lo contaría dos veces por
      * el camino—. La deuda se enseña como su propio bloque, en el resumen y en
      * Cuentas, para que se vea sin quedar enterrada en una resta.
+     *
+     * Lo que te deben tampoco se suma, por el reflejo del mismo motivo: la
+     * plata que prestaste salió de una cuenta cuyo saldo ya lo acusó, así que
+     * sumarla otra vez como activo la contaría dos veces. Va en su propio
+     * bloque, al lado del anterior.
      */
     return {
       total: cuentas + inv.value,
@@ -1946,6 +1982,9 @@ const goalPatchToRow = (p: Partial<Goal>) => {
 
 const rowToDebt = (r: Row): Debt => ({
   id: r.id, person: r.person, principal: Number(r.principal),
+  // Lo guardado antes de que existiera la columna es todo deuda propia: es lo
+  // único que se podía registrar entonces.
+  direction: r.direction === 'lent' ? 'lent' : 'owe',
   currency: r.currency ?? 'COP',
   rate: r.rate == null ? undefined : Number(r.rate),
   startedAt: String(r.started_at).slice(0, 10),
@@ -1954,13 +1993,15 @@ const rowToDebt = (r: Row): Debt => ({
   color: r.color,
 })
 const debtToRow = (d: Debt) => ({
-  id: d.id, person: d.person, principal: d.principal, currency: d.currency,
+  id: d.id, person: d.person, direction: d.direction,
+  principal: d.principal, currency: d.currency,
   rate: d.rate ?? null, started_at: d.startedAt, due_date: d.dueDate ?? null,
   note: d.note ?? null, color: d.color,
 })
 const debtPatchToRow = (p: Partial<Debt>) => {
   const r: Row = {}
   if (p.person !== undefined) r.person = p.person
+  if (p.direction !== undefined) r.direction = p.direction
   if (p.principal !== undefined) r.principal = p.principal
   if (p.currency !== undefined) r.currency = p.currency
   // `rate` con 'in' y no con !== undefined: quitarle el interés a una deuda es

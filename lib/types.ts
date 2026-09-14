@@ -128,18 +128,36 @@ export interface Goal {
 }
 
 /**
- * Deuda con una persona: lo que le debes a alguien, no a un banco.
+ * De qué lado está el préstamo.
+ *
+ * `owe` es la deuda de toda la vida: alguien te prestó. `lent` es la misma
+ * historia contada al revés —prestaste tú— y necesita ser un campo y no otra
+ * tabla porque todo lo demás es idéntico: un nombre, un monto, una fecha, una
+ * tasa opcional y un historial de abonos. Lo único que cambia es hacia dónde
+ * va el dinero, y por eso cambia el signo del movimiento que se crea al
+ * cuadrar y cambia cada rótulo de la pantalla.
+ */
+export type DebtDirection = 'owe' | 'lent'
+
+/**
+ * Préstamo entre personas: lo que le debes a alguien —o lo que alguien te
+ * debe— y no a un banco.
  *
  * Va aparte de las cuentas de crédito porque el dato de partida es otro. Una
- * tarjeta tiene cupo, corte y cuotas; un préstamo entre personas tiene a quién
- * le debes, cuánto te prestó, desde cuándo y —si lo pactaron— qué interés
- * corre. Meterlo como cuenta en negativo obligaba a inventar una institución y
- * dejaba sin sitio lo único que de verdad se consulta: cuánto llevas pagado.
+ * tarjeta tiene cupo, corte y cuotas; un préstamo entre personas tiene con
+ * quién es, cuánto fue, desde cuándo y —si lo pactaron— qué interés corre.
+ * Meterlo como cuenta en negativo obligaba a inventar una institución y dejaba
+ * sin sitio lo único que de verdad se consulta: cuánto se lleva pagado.
  */
 export interface Debt {
   id: string
-  /** A quién le debes. */
+  /** La otra persona: a quién le debes, o quién te debe. */
   person: string
+  /**
+   * Quién le prestó a quién. Las deudas de antes de que existiera el campo son
+   * todas `owe`, que es lo único que se podía registrar entonces.
+   */
+  direction: DebtDirection
   /** El monto prestado, en la moneda de la deuda. */
   principal: number
   currency: Currency
@@ -161,12 +179,12 @@ export interface Debt {
 }
 
 /**
- * Un abono a una deuda.
+ * Un abono a una deuda, la deba quien la deba.
  *
- * Filas y no un campo `pagado` en la deuda: con interés, *cuándo* pagaste
- * cambia cuánto debes hoy —cada abono baja el saldo sobre el que corre la
+ * Filas y no un campo `pagado` en la deuda: con interés, *cuándo* se pagó
+ * cambia cuánto se debe hoy —cada abono baja el saldo sobre el que corre la
  * tasa—, así que un total suelto no permitiría calcularlo. Y sin interés
- * sigue siendo lo que uno quiere ver: qué le has ido dando y en qué fechas.
+ * sigue siendo lo que uno quiere ver: qué se ha ido dando y en qué fechas.
  */
 export interface DebtPayment {
   id: string
@@ -177,6 +195,11 @@ export interface DebtPayment {
    * Que pueda ir en los dos sentidos es lo que permite cuadrar cuentas de
    * verdad. Entre personas la deuda no solo se paga: también crece porque el
    * otro puso algo más, o se corrige porque alguien se equivocó al apuntar.
+   *
+   * El signo es siempre respecto al saldo, no respecto a tu bolsillo: en un
+   * préstamo que hiciste tú, un positivo es lo que te devolvieron y un
+   * negativo es lo que le prestaste de más. Quién recibe la plata lo decide
+   * `direction`, no este número.
    */
   amount: number
   occurredAt: string

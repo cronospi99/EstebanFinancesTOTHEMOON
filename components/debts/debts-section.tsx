@@ -1,37 +1,58 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeftRight, Check, HandCoins, Link2, Pencil, Plus, Trash2, TriangleAlert, Wallet,
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/card'
+import { Segmented } from '@/components/ui/segmented'
 import { DebtSheet } from '@/components/debts/debt-sheet'
 import { SettleSheet } from '@/components/debts/settle-sheet'
-import { mensualDesdeAnual, redondeaMoneda } from '@/lib/deudas'
+import { mensualDesdeAnual, movimientoDeAbono, redondeaMoneda } from '@/lib/deudas'
 import { formatDate, formatMoney, formatPercent } from '@/lib/format'
 import { useDeudaTotal, useDeudas, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
-import { formaDeAbono, type Debt } from '@/lib/types'
+import { formaDeAbono, type Debt, type DebtDirection } from '@/lib/types'
 import type { DeudaConSaldo } from '@/lib/store'
 
 /**
- * Deudas personales: lo que le debes a gente, no a un banco.
+ * Deudas personales: lo que le debes a gente y lo que la gente te debe.
  *
  * Vive en Cuentas y no en Metas porque responde a la misma pregunta que el
- * resto de la pantalla —dónde está tu dinero— solo que del otro lado: es
- * dinero que ya no es tuyo aunque lo tengas en la mano.
+ * resto de la pantalla —dónde está tu dinero— solo que en los bordes: dinero
+ * que ya no es tuyo aunque lo tengas en la mano, y dinero que es tuyo aunque no
+ * lo tengas.
+ *
+ * Los dos lados no se suman en una sola cifra. Que un amigo te deba dos
+ * millones no paga el millón que le debes a tu mamá, y un neto escondería
+ * justo lo que uno viene a mirar: a quién hay que pagarle y a quién hay que
+ * cobrarle.
  */
 export function DebtsSection() {
-  const deudas = useDeudas()
+  const todas = useDeudas()
   const { deudasError, synced } = useFinance()
-  const { total, cuantas } = useDeudaTotal()
+  const { debo, meDeben } = useDeudaTotal()
 
+  const [lado, setLado] = useState<DebtDirection>('owe')
   const [hoja, setHoja] = useState(false)
   const [editando, setEditando] = useState<Debt | null>(null)
   const [cuadrando, setCuadrando] = useState<DeudaConSaldo | null>(null)
 
-  const abrirNueva = () => { haptic(6); setEditando(null); setHoja(true) }
+  const deudas = useMemo(
+    () => todas.filter((d) => d.deuda.direction === lado),
+    [todas, lado],
+  )
+  const prestado = lado === 'lent'
+  const totales = prestado ? meDeben : debo
+
+  /** Abre el alta con el lado que se está mirando ya elegido. */
+  const abrirNueva = (direccion: DebtDirection = lado) => {
+    haptic(6)
+    setLado(direccion)
+    setEditando(null)
+    setHoja(true)
+  }
 
   return (
     <section>
@@ -39,7 +60,7 @@ export function DebtsSection() {
         title="Deudas personales"
         action={
           <button
-            onClick={abrirNueva}
+            onClick={() => abrirNueva()}
             className="flex items-center gap-1 text-[13px] font-medium text-accent-blue"
           >
             <Plus size={14} /> Nueva
@@ -59,57 +80,103 @@ export function DebtsSection() {
             </p>
             <p className="mt-1 text-[12px] leading-relaxed text-label-secondary">
               {deudasError}. Lo que registres se queda en este teléfono hasta que
-              se arregle. Si acabas de desplegar, falta aplicar la migración
+              se arregle. Si acabas de desplegar, falta aplicar las migraciones
               <code className="mx-1 rounded bg-white/10 px-1 py-0.5 text-[11px]">deudas_personales</code>
+              y
+              <code className="mx-1 rounded bg-white/10 px-1 py-0.5 text-[11px]">prestamos_a_favor</code>
               en Supabase.
             </p>
           </div>
         </div>
       )}
 
-      {!deudas.length ? (
+      {!todas.length ? (
         <Card className="p-8 text-center">
           <HandCoins size={22} className="mx-auto mb-2 text-label-tertiary" />
-          <p className="text-[15px] font-medium text-label">No le debes nada a nadie</p>
+          <p className="text-[15px] font-medium text-label">No hay cuentas pendientes con nadie</p>
           <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
-            Si alguien te prestó, anótalo aquí: cuánto fue, qué llevas pagado y,
-            si lo pactaron, qué interés corre.
+            Si alguien te prestó —o si prestaste tú— anótalo aquí: cuánto fue,
+            qué se lleva pagado y, si lo pactaron, qué interés corre.
           </p>
-          <button
-            onClick={abrirNueva}
-            className="press mt-3 rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
-          >
-            Registrar una deuda
-          </button>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <button
+              onClick={() => abrirNueva('owe')}
+              className="press rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
+            >
+              Me prestaron
+            </button>
+            <button
+              onClick={() => abrirNueva('lent')}
+              className="press rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
+            >
+              Yo presté
+            </button>
+          </div>
         </Card>
       ) : (
         <>
+          {/* Los dos lados, siempre visibles aunque uno esté vacío: enterarse de
+              que lo que te deben también se puede anotar no debería depender de
+              haberlo anotado ya. */}
+          <Segmented
+            id="lado-deudas" className="mb-3"
+            value={lado} onChange={setLado}
+            options={[
+              { value: 'owe' as DebtDirection, label: `Debo${debo.cuantas ? ` · ${debo.cuantas}` : ''}` },
+              { value: 'lent' as DebtDirection, label: `Me deben${meDeben.cuantas ? ` · ${meDeben.cuantas}` : ''}` },
+            ]}
+          />
+
           {/* El total arriba: es lo que uno viene a mirar, y sumar de cabeza
               cuatro tarjetas no es forma de enterarse. */}
-          {cuantas > 0 && (
+          {totales.cuantas > 0 && (
             <Card className="mb-3 flex items-baseline justify-between p-4">
               <span className="text-[13px] text-label-secondary">
-                Debes en total{cuantas > 1 ? ` · ${cuantas} deudas` : ''}
+                {prestado ? 'Te deben en total' : 'Debes en total'}
+                {totales.cuantas > 1 ? ` · ${totales.cuantas} ${prestado ? 'préstamos' : 'deudas'}` : ''}
               </span>
-              <span className="tnum text-[20px] font-bold text-accent-red">{formatMoney(total)}</span>
+              <span className={cn(
+                'tnum text-[20px] font-bold',
+                prestado ? 'text-accent-green' : 'text-accent-red',
+              )}>
+                {formatMoney(totales.total)}
+              </span>
             </Card>
           )}
 
-          <div className="space-y-3">
-            {deudas.map((d) => (
-              <FilaDeuda
-                key={d.deuda.id}
-                item={d}
-                onEditar={() => { haptic(6); setEditando(d.deuda); setHoja(true) }}
-                onCuadrar={() => { haptic(6); setCuadrando(d) }}
-              />
-            ))}
-          </div>
+          {!deudas.length ? (
+            <Card className="p-6 text-center">
+              <p className="text-[14px] text-label-secondary">
+                {prestado ? 'No le has prestado a nadie.' : 'No le debes nada a nadie.'}
+              </p>
+              <button
+                onClick={() => abrirNueva()}
+                className="press mt-3 rounded-xl border border-hairline bg-fill-1 px-4 py-2 text-[14px] font-medium text-accent-blue"
+              >
+                {prestado ? 'Registrar un préstamo' : 'Registrar una deuda'}
+              </button>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {deudas.map((d) => (
+                <FilaDeuda
+                  key={d.deuda.id}
+                  item={d}
+                  onEditar={() => { haptic(6); setEditando(d.deuda); setHoja(true) }}
+                  onCuadrar={() => { haptic(6); setCuadrando(d) }}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
 
       <DebtSheet
-        open={hoja} deuda={editando} indice={deudas.length}
+        open={hoja} deuda={editando} indice={todas.length} direccionInicial={lado}
+        // Si se cambió el sentido dentro de la hoja, la lista se mueve con él:
+        // guardar un préstamo y que no aparezca por ningún lado es la forma más
+        // rápida de creer que no se guardó.
+        onGuardado={setLado}
         onClose={() => setHoja(false)}
       />
       <SettleSheet
@@ -129,6 +196,7 @@ function FilaDeuda({
   const [verAbonos, setVerAbonos] = useState(false)
 
   const moneda = deuda.currency
+  const prestado = deuda.direction === 'lent'
   /** Importe listo para pintar: en la moneda de la deuda y sin centavos en pesos. */
   const importe = (v: number) => formatMoney(redondeaMoneda(v, moneda), moneda)
   const dias = deuda.dueDate
@@ -152,15 +220,17 @@ function FilaDeuda({
             )}
           </div>
           {/* Lo prestado y lo pagado, que es la pregunta literal: cuánto era y
-              cuánto le llevo dado. */}
+              cuánto lleva dado. */}
           <p className="tnum text-[12px] text-label-secondary">
-            {importe(pagado)} pagados de {importe(capital)}
+            {prestado
+              ? `te ha devuelto ${importe(pagado)} de ${importe(capital)}`
+              : `${importe(pagado)} pagados de ${importe(capital)}`}
             {interes > 0.5 && ` + ${importe(interes)} de interés`}
           </p>
         </div>
         <button
           onClick={onEditar}
-          aria-label={`Editar deuda con ${deuda.person}`}
+          aria-label={`Editar ${prestado ? 'préstamo a' : 'deuda con'} ${deuda.person}`}
           className="press-icon shrink-0 p-1 text-label-tertiary"
         >
           <Pencil size={15} />
@@ -179,11 +249,15 @@ function FilaDeuda({
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         {saldada ? (
           <span className="text-[13px] font-semibold text-accent-green">
-            {excedente > 0.5 ? `Pagaste ${importe(excedente)} de más` : 'Sin saldo pendiente'}
+            {excedente > 0.5
+              ? prestado
+                ? `Te pagó ${importe(excedente)} de más`
+                : `Pagaste ${importe(excedente)} de más`
+              : 'Sin saldo pendiente'}
           </span>
         ) : (
           <span className="tnum text-[15px] font-bold text-label">
-            Debes {importe(saldo)}
+            {prestado ? 'Te debe' : 'Debes'} {importe(saldo)}
           </span>
         )}
         {/* La tasa se enseña mensual, que es como se pactó, aunque se guarde anual. */}
@@ -211,7 +285,7 @@ function FilaDeuda({
                    bg-fill-1 py-2 text-[13px] font-medium text-accent-blue"
       >
         <ArrowLeftRight size={14} />
-        {saldada ? 'Ajustar cuentas' : 'Abonar o cuadrar'}
+        {saldada ? 'Ajustar cuentas' : prestado ? 'Cobrar o cuadrar' : 'Abonar o cuadrar'}
       </button>
 
       {abonos.length > 0 && (
@@ -243,7 +317,10 @@ function FilaDeuda({
                     <p className="truncate text-[11px] text-label-tertiary">
                       {a.note ? `${a.note} · ` : ''}
                       {forma === 'cruce' ? 'cruzado con un gasto'
-                        : forma === 'cuenta' ? `desde ${cuenta?.name ?? 'una cuenta'}`
+                        : forma === 'cuenta'
+                          // «a» o «desde» según a dónde fue la plata: en un
+                          // préstamo tuyo lo que te devuelven entra a la cuenta.
+                          ? `${movimientoDeAbono(deuda.direction, a.amount).entra ? 'a' : 'desde'} ${cuenta?.name ?? 'una cuenta'}`
                         : 'ajuste'}
                     </p>
                   </div>

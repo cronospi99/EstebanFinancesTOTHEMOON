@@ -24,10 +24,10 @@ export function NetWorthCard() {
   const [hidden, setHidden] = useState(false)
   const [verDesglose, setVerDesglose] = useState(false)
   const desglose = useYieldBreakdown()
-  const deuda = useDeudaTotal()
+  const { debo, meDeben } = useDeudaTotal()
   // Lo que se debe, junto: la tarjeta y el préstamo del amigo son la misma
   // pregunta —cuánto debo— aunque vengan de sitios distintos de la app.
-  const debesTotal = deuda.total + tarjetas
+  const debesTotal = debo.total + tarjetas
 
   const first = series[0]?.value ?? netWorth
   const delta = netWorth - first
@@ -199,13 +199,38 @@ export function NetWorthCard() {
             {/* El desglose solo cuando hay de los dos tipos: con uno solo, la
                 cifra ya se explica sola y la línea sobraría. */}
             <p className="text-[11px] text-label-tertiary">
-              {tarjetas > 0 && deuda.total > 0
-                ? `Tarjetas ${formatMoney(Math.round(tarjetas))} · personales ${formatMoney(deuda.total)}`
+              {tarjetas > 0 && debo.total > 0
+                ? `Tarjetas ${formatMoney(Math.round(tarjetas))} · personales ${formatMoney(debo.total)}`
                 : 'Aparte del patrimonio'}
             </p>
           </div>
           <span className="tnum shrink-0 text-[17px] font-semibold text-accent-orange">
             {hidden ? '••••' : formatMoney(Math.round(debesTotal))}
+          </span>
+        </Link>
+      )}
+
+      {/*
+        Y lo que te deben, que tampoco suma al patrimonio.
+
+        Por el reflejo del mismo motivo: la plata que prestaste salió de una
+        cuenta cuyo saldo ya lo acusó, así que sumarla otra vez como activo la
+        contaría dos veces. Va aquí para que se vea, no para que cuadre.
+      */}
+      {meDeben.total > 0 && (
+        <Link
+          href="/cuentas"
+          className="mt-3 flex items-center gap-2.5 rounded-2xl border border-hairline bg-fill-1 px-4 py-3"
+        >
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-green" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] text-label-secondary">Te deben</p>
+            <p className="text-[11px] text-label-tertiary">
+              {meDeben.cuantas > 1 ? `${meDeben.cuantas} préstamos por cobrar` : 'Aparte del patrimonio'}
+            </p>
+          </div>
+          <span className="tnum shrink-0 text-[17px] font-semibold text-accent-green">
+            {hidden ? '••••' : formatMoney(Math.round(meDeben.total))}
           </span>
         </Link>
       )}
