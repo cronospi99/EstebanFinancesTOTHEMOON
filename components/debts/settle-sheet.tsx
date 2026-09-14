@@ -8,7 +8,7 @@ import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { CategoryIcon } from '@/components/ui/category-icon'
 import { ScrollStrip } from '@/components/ui/scroll-strip'
 import { categoryById } from '@/lib/categories'
-import { redondeaMoneda } from '@/lib/deudas'
+import { movimientoDeAbono, redondeaMoneda } from '@/lib/deudas'
 import { formatDate, formatMoney, parseKeypad } from '@/lib/format'
 import { accountTotal, useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
@@ -18,8 +18,10 @@ import type { DeudaConSaldo } from '@/lib/store'
 /** Las tres formas de saldar. La diferencia entre ellas es qué pasa con el dinero. */
 type Forma = 'cuenta' | 'cruce' | 'ajuste'
 
-const FORMAS: { value: Forma; label: string; icono: React.ReactNode }[] = [
-  { value: 'cuenta', label: 'Pagar', icono: <Wallet size={15} /> },
+const FORMAS = (prestado: boolean): { value: Forma; label: string; icono: React.ReactNode }[] => [
+  // «Pagar» solo vale para la deuda propia: si te deben, lo que pasa por la
+  // cuenta es plata que entra.
+  { value: 'cuenta', label: prestado ? 'Cobrar' : 'Pagar', icono: <Wallet size={15} /> },
   { value: 'cruce', label: 'Cruzar', icono: <Link2 size={15} /> },
   { value: 'ajuste', label: 'Ajuste', icono: <ArrowLeftRight size={15} /> },
 ]
@@ -45,6 +47,12 @@ const CUANTOS = 40
  *
  * Y en los tres casos puede ir al revés: un cargo, porque el otro puso algo más
  * o porque alguien apuntó mal. Cuadrar cuentas es en dos direcciones.
+ *
+ * Todo esto vale igual para un préstamo que hiciste tú, con el dinero en el
+ * sentido contrario: lo que te devuelven entra a la cuenta, lo que le prestas
+ * de más sale, y un gasto cruzado es algo suyo que pagaste y que por tanto
+ * *sube* lo que te debe. Lo único que cambia son los rótulos y el signo del
+ * movimiento; el saldo se calcula igual.
  */
 export function SettleSheet({
   open, item, onClose,
@@ -65,6 +73,10 @@ export function SettleSheet({
 
   const deuda = item?.deuda
   const moneda = deuda?.currency ?? 'COP'
+  const prestado = deuda?.direction === 'lent'
+  // Qué movimiento va a quedar registrado, para poder anunciarlo antes de
+  // pulsar en vez de después.
+  const efecto = movimientoDeAbono(deuda?.direction ?? 'owe', signo)
 
   useEffect(() => {
     if (!open) return
@@ -127,11 +139,13 @@ export function SettleSheet({
         </h2>
         {item && (
           <p className="tnum mb-4 text-center text-[13px] text-label-secondary">
-            Debes {formatMoney(redondeaMoneda(item.saldo, moneda), moneda)}
+            {prestado ? 'Te debe' : 'Debes'}{' '}
+            {formatMoney(redondeaMoneda(item.saldo, moneda), moneda)}
           </p>
         )}
 
-        {/* Abono o cargo: cuadrar cuentas va en las dos direcciones. */}
+        {/* Abono o cargo: cuadrar cuentas va en las dos direcciones, y el
+            rótulo dice quién hizo qué, que es como se recuerda. */}
         <div className="mb-4 flex gap-2">
           {([1, -1] as const).map((s) => (
             <button
@@ -147,7 +161,9 @@ export function SettleSheet({
               )}
             >
               {s === 1 ? <Minus size={14} /> : <Plus size={14} />}
-              {s === 1 ? 'Baja la deuda' : 'Sube la deuda'}
+              {prestado
+                ? s === 1 ? 'Te pagó' : 'Le prestaste más'
+                : s === 1 ? 'Le pagaste' : 'Te prestó más'}
             </button>
           ))}
         </div>
@@ -156,7 +172,7 @@ export function SettleSheet({
           Cómo
         </label>
         <div className="mb-4 flex gap-1 rounded-pill bg-fill-3 p-[3px]">
-          {FORMAS.map((f) => (
+          {FORMAS(prestado).map((f) => (
             <button
               key={f.value}
               onClick={() => { haptic(6); setForma(f.value) }}
@@ -195,9 +211,11 @@ export function SettleSheet({
               ))}
             </ScrollStrip>
             <p className="mb-4 px-1 text-[12px] leading-relaxed text-label-tertiary">
-              {cuenta?.type === 'credit'
+              {cuenta?.type === 'credit' && !efecto.entra
                 ? 'Con tarjeta la deuda de la tarjeta sube por el mismo importe: no dejas de deber, cambias de acreedor.'
-                : 'Se registra el movimiento para que el saldo de la cuenta lo acuse.'}
+                : efecto.entra
+                  ? 'Se registra como ingreso para que el saldo de la cuenta lo acuse: es plata que vuelve, no un ingreso nuevo.'
+                  : 'Se registra el movimiento para que el saldo de la cuenta lo acuse.'}
             </p>
           </>
         )}
@@ -208,6 +226,7 @@ export function SettleSheet({
             <p className="mb-2 px-1 text-[12px] leading-relaxed text-label-tertiary">
               Un gasto que ya registraste y que en realidad era suyo. No se crea
               nada nuevo: crear otro movimiento lo cobraría dos veces.
+              {prestado && ' Si lo pagaste tú por él, sube lo que te debe: elige «Le prestaste más».'}
             </p>
             {!cruzables.length ? (
               <p className="mb-4 px-1 text-[13px] text-label-secondary">
@@ -278,7 +297,9 @@ export function SettleSheet({
         )}
         {item && signo === 1 && importe > item.saldo + 0.5 && (
           <p className="mb-2 px-1 text-[12px] text-label-tertiary">
-            Es más de lo que debes: la deuda quedará a tu favor.
+            {prestado
+              ? 'Es más de lo que te debe: quedarás debiéndole la diferencia.'
+              : 'Es más de lo que debes: la deuda quedará a tu favor.'}
           </p>
         )}
 
@@ -312,7 +333,9 @@ export function SettleSheet({
           className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
                      shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
-          {signo === 1 ? 'Abonar' : 'Cargar'}
+          {prestado
+            ? signo === 1 ? 'Cobrar' : 'Prestar'
+            : signo === 1 ? 'Abonar' : 'Cargar'}
           {importe > 0 ? ` ${formatMoney(importe, moneda)}` : ''}
         </button>
       </div>

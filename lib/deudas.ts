@@ -1,4 +1,4 @@
-import type { Currency, Debt, DebtPayment } from './types'
+import type { Currency, Debt, DebtDirection, DebtPayment } from './types'
 import { diaEn } from './zona'
 
 /**
@@ -166,3 +166,29 @@ export const mensualDesdeAnual = (anual: number) => ((1 + anual / 100) ** (1 / 1
  */
 export const redondeaMoneda = (valor: number, moneda: Currency) =>
   moneda === 'USD' ? Math.round(valor * 100) / 100 : Math.round(valor)
+
+/**
+ * Qué movimiento deja un abono que pasa por una cuenta.
+ *
+ * Son dos preguntas cruzadas —para qué lado va la deuda y para qué lado va el
+ * abono— y de las cuatro combinaciones salen cuatro movimientos distintos.
+ * Vive aquí y no en el store para que la hoja de cuadrar pueda anunciar de
+ * antemano lo mismo que luego se registra: nada peor que leer «entra a la
+ * cuenta» y encontrarse un gasto.
+ */
+export function movimientoDeAbono(direction: DebtDirection, amount: number) {
+  const baja = amount > 0 // baja el saldo de la deuda, la deba quien la deba
+  if (direction === 'lent') {
+    // Te deben: que te paguen es plata que vuelve, prestar más es plata que se
+    // va. Ninguna de las dos es un ingreso ni un gasto corriente, y por eso
+    // tienen categorías propias.
+    return baja
+      ? { entra: true, categoryId: 'loan-repaid', etiqueta: 'Cobro' } as const
+      : { entra: false, categoryId: 'loan-given', etiqueta: 'Préstamo' } as const
+  }
+  // Debes: abonar saca plata; un cargo es que el otro puso algo más, y ese
+  // dinero llegó.
+  return baja
+    ? { entra: false, categoryId: 'loan-payment', etiqueta: 'Abono' } as const
+    : { entra: true, categoryId: 'loan-income', etiqueta: 'Cargo' } as const
+}

@@ -10,9 +10,35 @@ import { formatPercent, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 import { hoyEnZona } from '@/lib/zona'
-import type { Currency, Debt } from '@/lib/types'
+import type { Currency, Debt, DebtDirection } from '@/lib/types'
 
 export const COLORES_DEUDA = ['#FF453A', '#FF9F0A', '#BF5AF2', '#0A84FF', '#30D158', '#98989F']
+
+/**
+ * Los rótulos de cada lado.
+ *
+ * La pantalla es la misma —un nombre, un monto, una fecha, una tasa— pero leída
+ * al revés no dice nada: «¿a quién le debes?» encima del nombre de alguien que
+ * te debe a ti es justo la clase de detalle que hace desconfiar de una cifra.
+ */
+const TEXTOS: Record<DebtDirection, {
+  titulo: string; quien: string; cuanto: string; ejemploNota: string; guardar: string
+}> = {
+  owe: {
+    titulo: 'deuda',
+    quien: '¿A quién le debes?',
+    cuanto: 'Cuánto te prestó',
+    ejemploNota: 'Para la cuota inicial de la moto',
+    guardar: 'Registrar deuda',
+  },
+  lent: {
+    titulo: 'préstamo',
+    quien: '¿Quién te debe?',
+    cuanto: 'Cuánto le prestaste',
+    ejemploNota: 'El vuelo a Cartagena',
+    guardar: 'Registrar préstamo',
+  },
+}
 
 /** Cómo se teclea la tasa. Lo que se guarda siempre es la anual. */
 type Periodo = 'mensual' | 'anual'
@@ -30,17 +56,27 @@ const hoy = hoyEnZona
  * pagos.
  */
 export function DebtSheet({
-  open, deuda, indice, onClose,
+  open, deuda, indice, direccionInicial = 'owe', onGuardado, onClose,
 }: {
   open: boolean
   deuda: Debt | null
   /** Cuántas deudas hay ya, para elegir color al crear. */
   indice: number
+  /**
+   * Con qué lado se abre al crear. La lista manda el que se está mirando: quien
+   * pulsa «Nueva» desde «Me deben» va a registrar un préstamo suyo, no una
+   * deuda, y encontrarse el interruptor al revés es una forma barata de
+   * guardarlo al revés.
+   */
+  direccionInicial?: DebtDirection
+  /** Con qué lado se guardó, para que la lista enseñe donde quedó. */
+  onGuardado?: (direccion: DebtDirection) => void
   onClose: () => void
 }) {
-  const { addDebt, updateDebt, deleteDebt } = useFinance()
+  const { addDebt, updateDebt, deleteDebt, debtPayments } = useFinance()
 
   const [person, setPerson] = useState('')
+  const [direction, setDirection] = useState<DebtDirection>('owe')
   const [principal, setPrincipal] = useState('')
   const [currency, setCurrency] = useState<Currency>('COP')
   const [conInteres, setConInteres] = useState(false)
@@ -57,6 +93,7 @@ export function DebtSheet({
   useEffect(() => {
     if (!open) return
     setPerson(deuda?.person ?? '')
+    setDirection(deuda?.direction ?? direccionInicial)
     setPrincipal(deuda ? String(Math.round(deuda.principal)) : '')
     setCurrency(deuda?.currency ?? 'COP')
     const tieneTasa = Boolean(deuda?.rate && deuda.rate > 0)
@@ -69,7 +106,7 @@ export function DebtSheet({
     setNote(deuda?.note ?? '')
     setColor(deuda?.color ?? COLORES_DEUDA[indice % COLORES_DEUDA.length])
     setConfirmarBorrado(false)
-  }, [open, deuda, indice])
+  }, [open, deuda, indice, direccionInicial])
 
   const monto = parseKeypad(principal)
   const tecleada = parseKeypad(tasa)
@@ -78,16 +115,46 @@ export function DebtSheet({
     ? undefined
     : periodo === 'mensual' ? anualDesdeMensual(tecleada) : tecleada
   const listo = Boolean(person.trim()) && monto > 0
+  const t = TEXTOS[direction]
+
+  /*
+   * El sentido se fija en cuanto hay un abono.
+   *
+   * Cambiarlo después daría la vuelta a lo que significa cada movimiento ya
+   * registrado —un abono que salió de la cuenta pasaría a leerse como plata que
+   * entró— y esos movimientos no se pueden reescribir sin tocar saldos que el
+   * usuario ya dio por buenos. Si se registró al revés: se borra y se vuelve a
+   * crear, que además deja las cuentas cuadradas.
+   */
+  const conAbonos = Boolean(deuda) && debtPayments.some((p) => p.debtId === deuda!.id)
 
   return (
     <Sheet open={open} onClose={onClose}>
       <div className="px-5 pb-8 pt-1">
         <h2 className="mb-5 text-center text-[17px] font-semibold">
-          {deuda ? 'Editar deuda' : 'Nueva deuda'}
+          {deuda ? `Editar ${t.titulo}` : direction === 'lent' ? 'Nuevo préstamo' : 'Nueva deuda'}
         </h2>
 
+        {/* Lo primero, porque decide cómo se lee todo lo demás. */}
+        {conAbonos ? (
+          <p className="mb-4 rounded-xl border border-hairline bg-fill-1 px-4 py-3 text-[13px] leading-relaxed text-label-secondary">
+            {direction === 'lent' ? 'Le prestaste tú.' : 'Te prestaron a ti.'} No se
+            puede cambiar el sentido: ya hay abonos registrados y cada uno movió
+            una cuenta en su dirección.
+          </p>
+        ) : (
+          <Segmented
+            id="sentido-deuda" className="mb-4"
+            value={direction} onChange={setDirection}
+            options={[
+              { value: 'owe' as DebtDirection, label: 'Me prestaron' },
+              { value: 'lent' as DebtDirection, label: 'Yo presté' },
+            ]}
+          />
+        )}
+
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
-          ¿A quién le debes?
+          {t.quien}
         </label>
         <input
           value={person} onChange={(e) => setPerson(e.target.value)}
@@ -109,14 +176,16 @@ export function DebtSheet({
         />
 
         <label className="mb-2 block px-1 text-[12px] font-medium uppercase tracking-wider text-label-tertiary">
-          Cuánto te prestó
+          {t.cuanto}
         </label>
         <MoneyInput
           value={principal} onChange={setPrincipal} currency={currency}
           placeholder={currency === 'USD' ? '500' : '1.500.000'} className="mb-1"
         />
         <p className="mb-4 px-1 text-[12px] text-label-tertiary">
-          El monto original. Lo que llevas pagado se registra aparte, abono a abono.
+          El monto original. {direction === 'lent'
+            ? 'Lo que te ha devuelto se registra aparte, abono a abono.'
+            : 'Lo que llevas pagado se registra aparte, abono a abono.'}
         </p>
 
         {/* ---- Interés ---------------------------------------------------- */}
@@ -125,7 +194,9 @@ export function DebtSheet({
           className="press mb-3 flex w-full items-center justify-between rounded-xl border border-hairline
                      bg-fill-1 px-4 py-3 text-left"
         >
-          <span className="text-[15px] text-label">Cobra intereses</span>
+          <span className="text-[15px] text-label">
+            {direction === 'lent' ? 'Cobras intereses' : 'Cobra intereses'}
+          </span>
           <span
             className={cn(
               'flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors',
@@ -200,7 +271,7 @@ export function DebtSheet({
         </label>
         <input
           value={note} onChange={(e) => setNote(e.target.value)}
-          placeholder="Para la cuota inicial de la moto"
+          placeholder={t.ejemploNota}
           className="mb-4 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3 text-[16px]
                      text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
         />
@@ -229,6 +300,7 @@ export function DebtSheet({
             haptic([14, 40, 22])
             const campos = {
               person: person.trim(),
+              direction,
               principal: monto,
               currency,
               rate: anual,
@@ -239,13 +311,14 @@ export function DebtSheet({
             }
             if (deuda) updateDebt(deuda.id, campos)
             else addDebt(campos)
+            onGuardado?.(direction)
             onClose()
           }}
           disabled={!listo}
           className="press h-[52px] w-full rounded-2xl bg-accent-blue text-[17px] font-semibold text-white
                      shadow-glow disabled:bg-fill-2 disabled:text-label-tertiary disabled:shadow-none"
         >
-          {deuda ? 'Guardar' : 'Registrar deuda'}
+          {deuda ? 'Guardar' : t.guardar}
         </button>
 
         {/* Borrar pide confirmación: se lleva por delante todos los abonos. */}
@@ -276,7 +349,7 @@ export function DebtSheet({
                        border border-hairline text-[15px] font-medium text-accent-red"
           >
             <Trash2 size={16} />
-            Eliminar deuda
+            Eliminar {t.titulo}
           </button>
         ))}
       </div>
