@@ -66,7 +66,24 @@
 
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
-    --nav-h: 64px;
+    /*
+     * La barra de abajo, en dos piezas: la fila de iconos y el hueco que se
+     * deja bajo ella para el indicador de inicio.
+     *
+     * 56 de fila porque el contenido —icono de 20, hueco de 3 y la etiqueta—
+     * ocupa 42 y el resto es aire. Una barra de iOS mide 49; a 64 la fila
+     * quedaba alta y sobraba negro.
+     *
+     * Y el hueco no es el inset entero. iOS declara 34 px abajo, pero el
+     * indicador ocupa en realidad los 13 de abajo: reservar los 34 completos
+     * dejaba dos centímetros de negro muerto bajo las etiquetas, que sobre un
+     * fondo negro no se lee como barra sino como nada. Con 22 el indicador
+     * sigue despejado y la fila baja a donde llega el pulgar. El `max` es para
+     * las pantallas sin inset —Android, escritorio—, donde `--sab` es 0 y sin
+     * él la barra quedaría pegada al canto.
+     */
+    --nav-h: 56px;
+    --nav-pb: max(var(--sab) - 12px, 8px);
     /* Una hairline real de iOS es de 1 píxel físico, no 1 CSS px: en pantallas
        de 3x eso es 0,33 px. Sin esto los bordes se ven gruesos y "web". */
     --hairline: 1px;
@@ -294,8 +311,11 @@
 
 @layer utilities {
   .pt-safe { padding-top: calc(var(--sat) + 0.5rem); }
+  /* El inset entero. Lo usan las hojas, donde el contenido llega al canto y sí
+     tiene que despejar el indicador del todo; la barra de abajo se queda con
+     el hueco recortado de `--nav-pb`. */
   .pb-safe { padding-bottom: var(--sab); }
-  .pb-nav { padding-bottom: calc(var(--nav-h) + var(--sab) + 1.5rem); }
+  .pb-nav { padding-bottom: calc(var(--nav-h) + var(--nav-pb) + 1.5rem); }
   /* Frenado de scroll al estilo iOS dentro de contenedores. */
   .momentum { -webkit-overflow-scrolling: touch; }
 }
