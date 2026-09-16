@@ -43,6 +43,11 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
         <Plus size={26} strokeWidth={2.6} />
       </motion.button>
 
+      {/* Sigue siendo `fixed`, y ahora sí se queda quieta: el documento no se
+          desplaza, el contenido corre dentro del `main` del shell. Mientras
+          scrolleaba el documento, esta barra —cristal, con `backdrop-filter`—
+          se despegaba y flotaba a media pantalla durante el impulso del dedo.
+          Ver el comentario del marco en `app-shell.tsx`. */}
       <nav
         className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-chrome backdrop-blur-2xl pb-safe"
         style={{ height: 'calc(var(--nav-h) + var(--sab))' }}
