@@ -310,14 +310,8 @@ interface FinanceContextValue extends State {
   addSubscription: (sub: Omit<Subscription, 'id'>) => Promise<void>
   updateSubscription: (id: string, patch: Partial<Subscription>) => Promise<void>
   deleteSubscription: (id: string) => Promise<void>
-  /**
-   * Anota el cobro que ya tocaba y adelanta el ciclo.
-   *
-   * Lo dispara el usuario y no un reloj: la app no corre en un servidor que
-   * pueda despertarse el día 19, y un movimiento inventado sin que el banco
-   * haya cobrado deja el saldo mintiendo.
-   */
-  registrarCobro: (id: string) => Promise<void>
+  /** Sí me cobraron: el gasto que puso la app deja de estar sin confirmar. */
+  confirmarCobro: (id: string) => Promise<void>
   resetDemo: () => void
   /** Cierra la sesión y borra de este dispositivo lo que era del usuario. */
   signOut: () => Promise<void>
@@ -1252,42 +1246,82 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   )
 
   /**
-   * Anota el cobro que ya tocaba y adelanta el ciclo.
+   * Anota los cobros de suscripción que ya cayeron, y los deja sin confirmar.
    *
-   * Se registra el importe entero aunque la suscripción se comparta: al banco
-   * le sale el recibo completo, y lo que pongan los demás llega después. Con
-   * la mitad, el saldo de la cuenta no cuadraría con el extracto, que es la
-   * única cifra contra la que uno compara.
+   * Corre al abrir la app y no en un servidor, porque no hay servidor: es una
+   * app que vive en el teléfono. Eso tiene una consecuencia que se nota —los
+   * cobros aparecen cuando uno entra, no a medianoche— y otra que hay que
+   * evitar: que dos aperturas anoten el mismo cobro dos veces. De ahí las dos
+   * defensas. El ancla se adelanta en cuanto se anota, así que un cobro ya
+   * anotado deja de estar pendiente; y antes de crear nada se comprueba que no
+   * exista ya un movimiento de esa misma suscripción en ese mismo día, que es
+   * lo que salva el caso de dos teléfonos con la misma cuenta.
    *
-   * El ancla se mueve al cobro siguiente en vez de quedarse donde estaba: es
-   * lo que evita que el mismo cobro se pueda anotar dos veces seguidas.
+   * El tope de doce por suscripción es para quien vuelve después de un año:
+   * anotar cincuenta y dos cobros de golpe no es recuperar el historial, es
+   * llenar la pantalla de ruido.
    */
-  const registrarCobro = useCallback(
-    async (id: string) => {
-      const sub = stateRef.current.subscriptions.find((x) => x.id === id)
-      if (!sub) return
-      const cobro = proximoCobro(sub)
+  const generarCobros = useCallback(async () => {
+    const hoy = hoyEnZona()
+    const { subscriptions, transactions } = stateRef.current
 
-      if (sub.accountId) {
-        await addTransaction({
-          accountId: sub.accountId,
-          type: 'expense',
-          categoryId: 'subs',
-          amount: sub.amount,
-          currency: sub.currency,
-          description: sub.name,
-          occurredAt: instanteEnDia(cobro),
-        })
+    for (const sub of subscriptions) {
+      // Sin cuenta no hay de dónde sacarlo, y cancelada ya no cobra.
+      if (sub.cancelled || !sub.accountId) continue
+
+      let fecha = sub.anchorAt
+      let anotados = 0
+      const nuevas: string[] = []
+
+      while (fecha <= hoy && anotados < 12) {
+        const yaEsta = transactions.some(
+          (t) => t.subscriptionId === sub.id && diaEn(t.occurredAt) === fecha,
+        ) || nuevas.includes(fecha)
+        // Durante la prueba la fecha pasa sin cobro: es gratis, esa es la
+        // gracia. El ciclo avanza igual.
+        const gratis = Boolean(sub.trialEndsAt && fecha <= sub.trialEndsAt)
+
+        if (!yaEsta && !gratis) {
+          nuevas.push(fecha)
+          anotados++
+          await addTransaction({
+            accountId: sub.accountId,
+            type: 'expense',
+            categoryId: 'subs',
+            amount: sub.amount,
+            currency: sub.currency,
+            description: sub.name,
+            occurredAt: instanteEnDia(fecha),
+            subscriptionId: sub.id,
+            pending: true,
+          })
+        }
+        fecha = proximoCobro({ anchorAt: fecha, cycle: sub.cycle }, sumarDias(fecha, 1))
       }
 
-      // Desde el propio cobro que se acaba de anotar: la siguiente fecha sale
-      // de sumarle un ciclo, que es justo lo que hace `proximoCobro` con el día
-      // de después.
-      const siguiente = proximoCobro({ anchorAt: cobro, cycle: sub.cycle }, sumarDias(cobro, 1))
-      await updateSubscription(id, { anchorAt: siguiente })
-    },
-    [addTransaction, updateSubscription],
+      if (fecha !== sub.anchorAt) await updateSubscription(sub.id, { anchorAt: fecha })
+    }
+  }, [addTransaction, updateSubscription])
+
+  /** Sí me cobraron: deja de estar pendiente y pasa a ser un gasto normal. */
+  const confirmarCobro = useCallback(
+    (id: string) => updateTransaction(id, { pending: false }),
+    [updateTransaction],
   )
+
+  /*
+   * Los cobros que ya cayeron se anotan una vez por arranque, cuando los datos
+   * ya están. Con la guarda de `ref` y no solo con `ready`: el efecto se
+   * vuelve a disparar si `ready` cambia, y anotar dos veces el mismo cobro es
+   * justo lo que no puede pasar.
+   */
+  const cobrosCorridos = useRef(false)
+  useEffect(() => {
+    if (!ready || cobrosCorridos.current) return
+    cobrosCorridos.current = true
+    void generarCobros()
+  }, [ready, generarCobros])
+
 
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
   // explícita para que nunca pueda llevarse por delante los datos de un usuario.
@@ -1345,7 +1379,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
       addGoal, updateGoal, deleteGoal, resetDemo, signOut,
       addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
-      addSubscription, updateSubscription, deleteSubscription, registrarCobro, suscripcionesError,
+      addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
@@ -1355,7 +1389,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
      addGoal, updateGoal, deleteGoal, resetDemo, signOut,
      addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
-     addSubscription, updateSubscription, deleteSubscription, registrarCobro, suscripcionesError],
+     addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -1663,6 +1697,29 @@ export function useSuscripciones(): SubConCobro[] {
         Number(Boolean(a.sub.cancelled)) - Number(Boolean(b.sub.cancelled))
         || a.cobro.localeCompare(b.cobro))
   }, [subscriptions, fxRate])
+}
+
+export interface CobroPendiente {
+  tx: Transaction
+  /** La suscripción que lo generó, si sigue existiendo. */
+  sub?: Subscription
+}
+
+/**
+ * Los cobros que la app anotó sola y nadie ha confirmado todavía.
+ *
+ * Del más reciente al más antiguo: el de esta mañana es el que uno reconoce,
+ * y el de hace tres semanas el que hay que mirar con cuidado.
+ */
+export function useCobrosPendientes(): CobroPendiente[] {
+  const { transactions, subscriptions } = useFinance()
+  return useMemo(
+    () => transactions
+      .filter((t) => t.pending && t.subscriptionId)
+      .map((tx) => ({ tx, sub: subscriptions.find((s) => s.id === tx.subscriptionId) }))
+      .sort((a, b) => b.tx.occurredAt.localeCompare(a.tx.occurredAt)),
+    [transactions, subscriptions],
+  )
 }
 
 export interface ResumenSuscripciones {
@@ -2122,12 +2179,15 @@ const rowToTx = (r: Row): Transaction => ({
   toAccountId: r.to_account_id ?? undefined, toPocketId: r.to_pocket_id ?? undefined,
   categoryId: r.category_id, amount: Number(r.amount), type: r.type,
   description: r.description ?? '', occurredAt: r.occurred_at, currency: r.currency ?? undefined,
+  subscriptionId: r.subscription_id ?? undefined,
+  pending: r.pending ? true : undefined,
 })
 const txToRow = (t: Transaction) => ({
   id: t.id, account_id: t.accountId, pocket_id: t.pocketId ?? null,
   to_account_id: t.toAccountId ?? null, to_pocket_id: t.toPocketId ?? null,
   category_id: t.categoryId, amount: t.amount, type: t.type,
   description: t.description, occurred_at: t.occurredAt, currency: t.currency ?? null,
+  subscription_id: t.subscriptionId ?? null, pending: Boolean(t.pending),
 })
 const txPatchToRow = (p: Partial<Transaction>) => {
   const r: Row = {}
@@ -2143,6 +2203,10 @@ const txPatchToRow = (p: Partial<Transaction>) => {
   if (p.description !== undefined) r.description = p.description
   if (p.occurredAt !== undefined) r.occurred_at = p.occurredAt
   if (p.currency !== undefined) r.currency = p.currency ?? null
+  if ('subscriptionId' in p) r.subscription_id = p.subscriptionId ?? null
+  // Con 'in': confirmar un cobro es ponerlo a undefined, y eso tiene que
+  // llegar al servidor como false en vez de no viajar.
+  if ('pending' in p) r.pending = Boolean(p.pending)
   return r
 }
 const rowToHolding = (r: Row): Holding => ({

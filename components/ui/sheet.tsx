@@ -126,11 +126,28 @@ export function Sheet({
           <div className="h-[5px] w-9 rounded-full bg-white/25" />
         </div>
 
-        {/* El contenido scrollea por su cuenta; con el teclado abierto,
-            scroll-pb deja aire para alcanzar el último campo. */}
+        {/*
+          El contenido scrollea por su cuenta, y solo en vertical.
+
+          Hacen falta las dos cosas. `overflow-x-hidden` quita la barra y el
+          arrastre del dedo, que es como se corría la hoja al deslizar una tira
+          de fichas; pero un contenedor con `overflow-y: auto` sigue siendo
+          desplazable por programa en los dos ejes —`overflow-x: clip` no sirve
+          de nada aquí: si un eje es `auto`, el otro computa a `hidden`—, y
+          basta con que el navegador quiera traer a la vista un campo enfocado
+          para correrlo de lado. Entonces las etiquetas salen cortadas por la
+          izquierda —«RÓXIMO COBRO»— y el formulario parece roto.
+
+          Así que además se devuelve a cero en cuanto se mueve. Una hoja no
+          tiene nada que enseñar a los lados: el único desplazamiento legítimo
+          es hacia abajo.
+        */}
         <div
           ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe [scrollbar-width:none] lg:pt-5"
+          onScroll={(e) => {
+            if (e.currentTarget.scrollLeft !== 0) e.currentTarget.scrollLeft = 0
+          }}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-safe [scrollbar-width:none] lg:pt-5"
         >
           {children}
         </div>
