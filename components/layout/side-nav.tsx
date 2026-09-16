@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChartPie, LayoutGrid, Plus, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
+import { ChartPie, LayoutGrid, Plus, Repeat, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
 import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +10,10 @@ const TABS = [
   { href: '/', label: 'Resumen', icon: LayoutGrid },
   { href: '/gastos', label: 'Gastos', icon: ChartPie },
   { href: '/cuentas', label: 'Cuentas', icon: Wallet },
+  // En escritorio sobra alto en la lateral, así que las suscripciones tienen
+  // su sitio propio. En el móvil, donde la barra de abajo ya va llena, se
+  // llega a ellas desde Gastos.
+  { href: '/suscripciones', label: 'Suscripciones', icon: Repeat },
   { href: '/metas', label: 'Metas', icon: Target },
   { href: '/inversiones', label: 'Inversión', icon: TrendingUp },
   { href: '/ajustes', label: 'Ajustes', icon: Settings },

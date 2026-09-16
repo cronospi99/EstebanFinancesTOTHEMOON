@@ -145,11 +145,13 @@ components/
 ├─ expenses/              Dona, lista de movimientos
 ├─ investments/           Fila de posición
 ├─ debts/                 Deudas personales: lo que debes y lo que te deben
+├─ subscriptions/        Lo que se cobra solo: baraja, resumen y alta
 └─ ui/                    Card, Sheet, Segmented, CategoryIcon
 
 lib/
 ├─ store.tsx              Estado + selectores derivados
 ├─ deudas.ts              Saldo e intereses de un préstamo entre personas
+├─ suscripciones.ts       Próximo cobro, coste mensual y anual, catálogo
 ├─ format.ts              Moneda COP, fechas, números tabulares
 ├─ use-quotes.ts          Sondeo de precios
 └─ supabase/              Clientes navegador y servidor
@@ -346,6 +348,59 @@ enseña en su propio bloque, en el resumen bajo el patrimonio y en Cuentas.
 **Lo que te deben tampoco se suma**, por el reflejo del mismo motivo: la plata
 que prestaste salió de una cuenta cuyo saldo ya lo acusó, y volver a contarla
 como activo la contaría dos veces. Va en su propio bloque, al lado del otro.
+
+---
+
+## Suscripciones
+
+Pantalla propia, en **Suscripciones**, y no una categoría de gastos más, porque
+la pregunta es otra. Un gasto se mira hacia atrás —en qué se me fue— y una
+suscripción hacia adelante: qué me van a cobrar, cuándo, y cuánto suma todo
+esto al año. Esa última cifra es la que sorprende y la que ninguna lista de
+movimientos enseña: nueve cobros pequeños que nadie recuerda haber aceptado y
+que juntos valen más que el arriendo de una semana.
+
+**La fecha del próximo cobro no se guarda, se calcula.** De cada suscripción se
+guarda un ancla —un día en el que cobraron— y el ciclo; la siguiente fecha sale
+de los dos. Un «próximo cobro» guardado caduca en cuanto pasa: quien no abre la
+app en dos meses volvería a una pantalla anunciando cobros de julio. Así sigue
+saliendo bien dentro de un año y sin que nadie la mantenga. El cálculo recorta a
+fin de mes como lo hacen los bancos —un cobro del 31 cae el 30 en un mes de 30—
+pero siempre desde el ancla original, así que el mes siguiente vuelve al 31.
+
+**El importe que se pide es el del ciclo**, lo que dice el recibo, y el promedio
+mensual lo calcula la app: 219.000 al año son 18.250 al mes, y esa es la cuenta
+que nadie hace. Es lo que permite comparar una anual con una mensual y con lo
+que uno gana.
+
+**No genera movimientos por su cuenta.** La app no corre en un servidor que
+pueda despertarse el día 19 a cobrar, y un movimiento inventado sin que el banco
+lo haya hecho deja el saldo mintiendo. El día que toca, la suscripción sale
+arriba con un botón para anotarlo: crea el gasto en su cuenta y adelanta el
+ciclo. Al día siguiente la fecha ya se ha corrido sola, así que la app no puede
+saber si un cobro de la semana pasada se anotó o no — y por eso no lo pregunta:
+lo que ofrece es el cobro de hoy, que es cuando llega el mensaje del banco.
+
+**Las pruebas y las compartidas tienen su propia cuenta.** Una prueba gratis no
+suma al gasto, pero sí a «podrías ahorrar»: es lo que te quitas de encima si la
+cancelas antes de que empiece a cobrar, que es el agujero clásico. Y una
+compartida se paga entera desde tu cuenta aunque de tu bolsillo salga solo una
+parte: la diferencia sale en «te deben».
+
+**Dos formas según el ancho, no dos tamaños.** En el móvil las tarjetas van
+apiladas como una baraja, solapándose, y se despliegan al tocarlas: así caben
+siete en una pantalla. A partir de `lg` la píldora de la fecha baja a su propio
+renglón y el detalle va siempre abierto, con el resumen fijo en un carril al
+lado. El plegado va con `grid-template-rows` y `visibility`, no con altura ni
+con `display`: es lo que permite que la misma marca esté cerrada en el móvil y
+abierta en el escritorio sin preguntarle a JavaScript por el ancho de la ventana
+—que es lo que provoca el parpadeo al hidratar— y deja el detalle fuera del
+recorrido del tabulador mientras está cerrado.
+
+En el móvil se llega desde **Gastos**, donde el acceso enseña lo que suman al
+mes y cuál es el próximo cobro; la barra de abajo ya va llena con seis destinos
+y el botón de captura, y un séptimo dejaría las etiquetas en un tamaño que no se
+lee. En escritorio tiene su sitio en la barra lateral.
 
 ---
 
