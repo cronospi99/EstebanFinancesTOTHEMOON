@@ -131,25 +131,49 @@ Datos de mercado* dice qué llaves ve el servidor y qué proveedor respondió.
 app/
 ├─ (app)/                 Pestañas con barra inferior
 │  ├─ page.tsx            Dashboard
-│  ├─ gastos/             Gastos, categorías y cuentas
+│  ├─ gastos/             Gastos y categorías
+│  ├─ cuentas/            Cuentas, tarjetas y deudas
+│  ├─ salud/              Liquidez, 50/30/20, anomalías y sueldo pasivo
+│  ├─ suscripciones/      Lo que se cobra solo
 │  ├─ inversiones/        Portafolio
-│  └─ ajustes/            Estado de conexión y datos
+│  └─ ajustes/            Conexión, recordatorios, datos y declaración
 ├─ login/                 Enlace mágico (sin barra inferior)
 ├─ auth/callback/         Intercambio de código por sesión
-└─ api/quotes/            Proxy de mercado (servidor)
+└─ api/
+   ├─ quotes/ history/    Proxy de mercado (servidor)
+   ├─ fx/ trm/            Tasa de mercado y TRM oficial
+   ├─ quick-add/          Ingesta desde atajos de iOS y SMS
+   ├─ ocr/                Lectura de la foto de una factura
+   └─ push/               Alta de avisos y recordatorios diarios
 
 components/
-├─ layout/                Shell, barra inferior, encabezados
-├─ quick-add/             Sheet + teclado numérico
+├─ layout/                Shell, barra inferior, bloqueo, cola, recordatorios
+├─ quick-add/             Sheet, teclado numérico, foto de factura
 ├─ dashboard/             Patrimonio, cuentas, anillos de presupuesto
+├─ salud/                 Liquidez, 50/30/20, anomalías, FIRE, dólar
 ├─ expenses/              Dona, lista de movimientos
+├─ accounts/              Cuentas, ciclo de tarjeta y recomendador
 ├─ investments/           Fila de posición
 ├─ debts/                 Deudas personales: lo que debes y lo que te deben
-├─ subscriptions/        Lo que se cobra solo: baraja, resumen y alta
+├─ subscriptions/         Lo que se cobra solo: baraja, resumen y alta
+├─ settings/              Avisos, biometría, atajos, datos, DIAN
 └─ ui/                    Card, Sheet, Segmented, CategoryIcon
 
 lib/
 ├─ store.tsx              Estado + selectores derivados
+├─ liquidez.ts            Proyección de saldo a 30/60/90 días
+├─ tarjetas.ts            Corte, fecha límite y días de financiación
+├─ salud.ts               Reparto 50/30/20 e indicadores
+├─ anomalias.ts           Duplicados, gastos fantasma, subidas de precio
+├─ fire.ts                Sueldo pasivo e independencia financiera
+├─ dian.ts                UVT, topes de declaración y tarifas
+├─ datos.ts               Exportar CSV, respaldo JSON, importar extractos
+├─ parseo.ts              Leer un SMS del banco o una factura
+├─ cola.ts                Cola de escrituras en IndexedDB
+├─ avisos.ts              Qué recordar y cuándo
+├─ webpush.ts             Cifrado RFC 8291 y firma VAPID
+├─ canales.ts             Correo (Resend) y SMS (Twilio)
+├─ biometria.ts           Cerrojo con WebAuthn
 ├─ deudas.ts              Saldo e intereses de un préstamo entre personas
 ├─ suscripciones.ts       Próximo cobro, coste mensual y anual, catálogo
 ├─ format.ts              Moneda COP, fechas, números tabulares
@@ -550,6 +574,445 @@ Sin ella la app sigue funcionando, pero sin historial.
 
 ---
 
+## Salud financiera
+
+Una pantalla que responde a las preguntas que un saldo, por sí solo, no
+responde. Se llega desde el resumen —la barra de abajo ya va llena con seis
+destinos y el botón de captura— y desde la lateral en escritorio.
+
+### Liquidez proyectada a 30, 60 y 90 días
+
+La pregunta es «¿puedo hacer este gasto hoy sin quedarme sin dinero a fin de
+mes?», y el saldo no la contesta: ahora casi siempre hay. Lo que no dice el
+saldo es que el día 3 se va el arriendo, el 5 corta la tarjeta, el 8 cobran
+cuatro suscripciones y el 15 hay que abonarle a alguien.
+
+La línea junta seis cosas que ya están en la app:
+
+```
+  saldo líquido de hoy          cuentas, ahorros y efectivo
++ ingresos recurrentes          sueldo, arriendos, clientes fijos
+− suscripciones                 lo que se cobra solo
+− cuotas de tarjeta             lo ya facturado, en su fecha límite
+− abonos de deudas con plazo    lo pactado con personas
+− gasto corriente estimado      la mediana diaria de los últimos 60 días
+```
+
+La cifra grande no es el saldo de hoy ni el del final del tramo: es **el punto
+más bajo**. El final puede acabar bien después de haber pasado por cero, y el
+de hoy es justo el que engaña.
+
+El último sumando es el único que no ocurrió: es una estimación, se puede
+apagar con un toque y la tarjeta dice cuánto está aplicando. Sin él la
+proyección es inútil y además peligrosa —una línea que solo baja los días de
+cobro termina el mes en máximos y le diría a cualquiera que puede gastar lo que
+quiera—, pero nadie deja de comer entre quincena y quincena. Se usa la mediana
+y no la media: la nevera que se compró hace un mes no es el martes típico.
+
+Debajo hay un simulador. Se escribe una cifra y la app dice «sí», «sí, pero
+queda justo» o «te quedarías corto», con el día crítico y lo que quedaría. El
+colchón mínimo no es cero: quedarse exactamente en cero el peor día significa
+que cualquier imprevisto pasa a ser un sobregiro, así que por debajo de una
+semana de gasto corriente la respuesta es «justo» —que no es un no, es un sí
+con la cifra delante—.
+
+### Necesidades, deseos y ahorro (50/30/20)
+
+Las categorías se reparten solas en los tres grupos. Tres decisiones que no son
+obvias y conviene tener escritas:
+
+- **Mercado es necesidad, restaurantes es deseo.** Comer hay que comer; comer
+  fuera es una elección, y es la que más se desmadra sin que nadie se dé cuenta.
+- **Las cuotas de tarjeta y de préstamo son necesidad.** No porque comprar a
+  cuotas lo fuera, sino porque a estas alturas ya no se puede no pagarlas.
+- **Lo que prestas a alguien es ahorro, no gasto.** Sale de la cuenta pero sigue
+  siendo tuyo.
+
+El ahorro incluye **lo que sencillamente no se gastó**. Sin eso, quien vive muy
+por debajo de sus medios pero deja el dinero quieto en la cuenta aparecería con
+un 0 % de ahorro y un aviso rojo, que es exactamente al revés de lo que está
+haciendo.
+
+Los casos de frontera son reales y personales —el gimnasio es salud para quien
+va y un recibo olvidado para quien no—, así que cualquier categoría se puede
+mover de grupo. Se guarda en el dispositivo: es una preferencia de lectura, y
+ninguna cifra de dinero depende de ella.
+
+El retiro en cajero queda fuera del reparto y la tarjeta lo dice. Sacar plata no
+es gastarla, y contarla duplicaría todo lo que luego se pague en efectivo.
+
+### Cinco indicadores y un puntaje
+
+Colchón de emergencia, tasa de ahorro, carga de deuda, peso de lo prescindible y
+peso de lo recurrente. Los cinco se enseñan por separado además de en el total,
+porque un 62 sobre 100 no dice qué arreglar y «cubres 1,2 meses de gastos» sí.
+El colchón y el ahorro pesan más que el resto: el primero decide si un imprevisto
+es un mal rato o una deuda, y el segundo es lo único que construye el primero.
+
+### Anomalías y gastos fantasma
+
+Lo que uno no pregunta porque no sabe que hay algo que preguntar:
+
+| Detector | Qué busca | Cuánta historia necesita |
+|---|---|---|
+| Duplicados | Mismo importe **exacto**, misma cuenta, ≤ 4 días | 35 días |
+| Categoría disparada | ≥ 35 % y ≥ $40.000 sobre la semana típica | 4 semanas con gasto |
+| Gasto fantasma | Mismo comercio y monto 3 meses seguidos, sin estar en suscripciones | 3 cobros en 3 meses |
+| Subida de precio | Una suscripción que cobra ≥ 8 % más que la vez anterior | 2 cobros |
+| Gasto atípico | Un movimiento 4× la mediana de su categoría | 8 movimientos previos |
+
+Dos reglas de diseño, porque un detector que se equivoca mucho se ignora entero:
+**nada se marca sin una cifra que lo sostenga** («un 68 % más que tu semana
+típica, $140.000 de diferencia», no «gastaste más en comida»), y **cada
+detector se calla hasta tener historia suficiente**.
+
+El importe de un duplicado tiene que coincidir al peso. Con tolerancia, dos
+cafés del mismo sitio en la misma semana salían marcados, y un aviso falso al
+día enseña a ignorar todos los avisos.
+
+Cada aviso se descarta con un toque. Sin eso, el duplicado que sí era real se
+queda en la pantalla para siempre y en tres semanas nadie lee la tarjeta.
+
+### Sueldo pasivo (FIRE)
+
+El indicador que manda es **cuánto de tus gastos del mes paga ya tu dinero**, no
+«te faltan 23,4 años». El primero se comprueba, sube cuando aportas y convierte
+una meta lejana en una barra que se mueve; el segundo depende de rendimientos
+que nadie conoce y da una precisión que no existe, así que va debajo, en gris y
+con sus supuestos al lado.
+
+Se enseñan dos cifras juntas a propósito: la **estimada** (el capital por la tasa
+de retiro seguro) y la **realmente cobrada** en dividendos y rendimientos de los
+últimos doce meses. Un fondo de acumulación no reparte nada y sale en cero
+aunque el portafolio crezca; enseñar solo esa diría que no rinde, y enseñar solo
+la estimada escondería que todavía no entra un peso.
+
+La tasa del 4 % viene del estudio Trinity, hecho sobre carteras en dólares. En
+pesos conviene ser más conservador, y lo que se pide es el rendimiento **real**
+—ya descontada la inflación—: un CDT al 11 % con inflación del 6 % no renta un
+11 %, renta un 5 % escaso.
+
+---
+
+## Tarjetas de crédito: corte y fecha límite
+
+Dos fechas que todo el mundo confunde y que deciden cuánto dinero gratis te
+presta el banco.
+
+El **corte** es el día en que la tarjeta cierra el período: todo lo comprado
+hasta ese día entra en el extracto que están a punto de emitir. La **fecha
+límite de pago** es el día en que hay que pagar ese extracto, entre quince y
+veinte días después. En el corte no hay que hacer nada; en el límite sí.
+
+De ahí sale la única jugada que de verdad da dinero con una tarjeta: **comprar el
+día después del corte**. Esa compra no entra en el extracto que acaba de cerrar
+sino en el siguiente, que se paga un mes y medio más tarde. Comprar la víspera
+es lo contrario: entra en el extracto que cierra mañana y se paga en dos semanas.
+
+```
+Tarjeta que corta el 15 y se paga el 5:
+
+  compra el 14 de septiembre  →  extracto del 15 sep  →  paga el 5 oct   (21 días)
+  compra el 16 de septiembre  →  extracto del 15 oct  →  paga el 5 nov   (50 días)
+```
+
+Con la misma tarjeta y la misma compra. El **recomendador** ordena las tarjetas
+por días de financiación y no por cupo disponible, que es lo que uno miraría sin
+pensar: el cupo dice si la compra cabe, los días dicen cuánto tiempo el dinero
+sigue en tu cuenta en vez de en la del banco. Aparece en la pantalla de Salud y,
+en compacto, dentro del registro rápido —justo donde se elige con qué se paga—.
+
+Las descartadas se enseñan igual, atenuadas y con el motivo. Esconderlas dejaría
+a alguien mirando la pantalla con la tarjeta en la mano sin entender por qué no
+aparece.
+
+El cálculo da por hecho que la compra se paga entera el día del límite. Diferir a
+cuotas tiene una tasa detrás: ahí ya no es dinero gratis, y la app lo dice.
+
+Los avisos de las dos fechas van con colores distintos y el de pago manda cuando
+caen cerca: el límite es una tarea con consecuencias y el corte es información
+que abre una oportunidad. Mezclarlos es lo que hace que la gente los confunda.
+
+---
+
+## TRM y el dólar
+
+La app usa dos tasas y **no son la misma**, aunque las dos den «pesos por dólar»:
+
+- **`/api/fx`** — el precio de mercado. Lo que vale un dólar ahora mismo en el
+  mundo. Sirve para pintar el patrimonio al instante.
+- **`/api/trm`** — la Tasa Representativa del Mercado, que calcula la
+  Superintendencia Financiera con las operaciones del día hábil anterior. Es la
+  que manda para lo que tiene consecuencias: declarar ante la DIAN, cuadrar con
+  el banco cuando llega la factura de una compra en dólares, valorar un
+  portafolio en un informe.
+
+Se separan por décimas de por ciento, pero no son intercambiables, y usar la de
+mercado donde toca la oficial es la clase de error que solo aparece meses después
+al cuadrar con un extracto. La fuente es el conjunto `32sa-8pi3` de
+[datos.gov.co](https://www.datos.gov.co/), abierto y sin llave. Si no responde se
+cae al precio de mercado y **se dice que es una aproximación**.
+
+Detalle que no es intuitivo: la TRM tiene vigencia de un día completo y se
+publica con un día de desfase. Un sábado devuelve la del viernes, y eso es
+correcto.
+
+### La tasa se guarda con el movimiento
+
+Todo movimiento en dólares guarda la TRM del día en que se registró. Esa es toda
+la diferencia entre «esto costó» y «esto costaría hoy». Sin el dato, una compra
+de US$100 de enero se revalorizaba sola cada vez que el dólar se movía: el gasto
+de un mes ya cerrado cambiaba de cifra al abrir la app, y la diferencia en cambio
+—que es un resultado real del patrimonio— quedaba invisible porque estaba
+repartida entre todos los movimientos.
+
+Con la tasa guardada, la pantalla de Salud puede decir cuánto de tu patrimonio
+depende del dólar, cuánto cambia por cada peso que se mueva, qué pasa con una
+subida o bajada del 5 %, y **cuánto te ha dado o quitado el dólar** sobre lo que
+ya está registrado.
+
+---
+
+## Registrar un gasto sin abrir la app
+
+Cuatro caminos, todos por el mismo intérprete (`lib/parseo.ts`), así que mejorar
+el reconocimiento del Éxito o de Terpel los arregla todos a la vez.
+
+### Atajos de iOS y webhooks
+
+En *Ajustes → Atajos y automatizaciones* se crea un token. Dos formas de usarlo:
+
+```
+GET  /api/quick-add?token=…&amount=15000&category=food&account=Nequi
+
+POST /api/quick-add
+     Authorization: Bearer …
+     Content-Type: text/plain
+
+     Bancolombia le informa compra por $47.900 en EXITO ENVIGADO…
+```
+
+El `GET` existe porque un atajo de iOS manda una URL y nada más. Es menos
+elegante que un `POST` y es lo que hace que esto se use. El `POST` con texto
+plano es el que lee el SMS entero: de ahí salen el monto, el comercio, la
+categoría y el banco.
+
+**Cómo se autoriza.** No hay sesión: un atajo no tiene cookies. La escritura la
+hace una función de Postgres `security definer` que comprueba el token antes de
+tocar nada, y el token se guarda **cifrado con SHA-256**, nunca en claro. Este
+servidor nunca ve la llave de servicio de Supabase. El token solo puede
+**insertar un movimiento**: ni leer saldos, ni borrar, ni ver nada de la cuenta.
+Si se filtra, lo peor que pasa es que alguien anote gastos falsos, y se revoca de
+un toque.
+
+Se enseña una sola vez, al crearlo. Del hash no se vuelve atrás; es el mismo
+trato que hacen GitHub y Stripe con sus llaves.
+
+### Foto de la factura
+
+Un botón de cámara en el registro rápido. Antes de subir nada intenta reconocer
+el texto **en el propio teléfono** con `TextDetector` (Chrome de Android): ahí la
+foto no sale del dispositivo y responde en menos de un segundo. Donde eso no
+existe —iPhone, escritorio— se reduce a 1.600 px y se manda al servidor, que la
+pasa por Google Vision o por OCR.space, el primero que esté configurado.
+
+Rellena el formulario y **no guarda**: el botón queda a un toque pero la última
+palabra la tiene quien mira. Un OCR sobre papel térmico se equivoca lo suficiente
+como para que guardar a ciegas sea mala idea.
+
+La foto no se guarda en ningún momento. Una factura lleva el comercio, la fecha,
+la hora y a veces los últimos dígitos de la tarjeta.
+
+### Dictado
+
+El que ya estaba: «cuarenta y cinco mil en comida».
+
+---
+
+## Trabajar sin señal
+
+El caso dura treinta segundos y pasa todas las semanas: sales del parqueadero de
+un centro comercial y registras lo que acabas de pagar. No hay señal.
+
+Toda escritura que no consigue salir se guarda en **IndexedDB** y se reenvía, en
+orden, en cuanto vuelve la red. Un indicador flotante dice cuántas cosas esperan
+—en condiciones normales, ninguna— y se puede tocar para reintentar ya.
+
+**Se intercepta en el `fetch` del cliente de Supabase, no en cada mutación.** La
+alternativa era envolver las cuarenta y cinco escrituras del store una a una:
+habría funcionado y habría sido frágil para siempre, porque cada escritura nueva
+nace fuera de la cola hasta que alguien se acuerde de meterla, y nadie se
+acuerda. Además así se guarda la petición exacta que iba a salir, y reproducirla
+es literalmente volver a mandarla.
+
+Detalles que importan:
+
+- **El token no se guarda.** La cabecera `Authorization` lleva un JWT que caduca
+  en una hora; se quita al encolar y se vuelve a poner, recién sacado de la
+  sesión, justo antes de reenviar.
+- **Se para en el primer fallo recuperable.** Las escrituras tienen orden entre
+  sí —se crea una cuenta y después se le ajusta el saldo— y adelantar una por
+  encima de otra que falló deja los datos en un estado que no ocurrió nunca.
+- **Un 409 se da por bueno.** Significa que la petición sí llegó y lo que se
+  perdió fue la respuesta.
+- **Un 4xx no se reintenta pero tampoco se borra.** Es un movimiento del usuario
+  y tiene derecho a verlo.
+- Donde existe **Background Sync** (Chrome, Edge) el sistema despierta al service
+  worker aunque la pestaña esté cerrada. En iPhone no existe, así que la cola se
+  vacía al volver a la app —peor, pero cubre el caso—.
+
+---
+
+## Recordatorios
+
+Un aviso la víspera sirve; el mismo aviso dentro de la app, no: el día que se te
+olvida pagar la tarjeta es justamente un día en que no la abriste.
+
+Se avisa de cobros de suscripción, cortes y pagos de tarjeta, deudas con plazo y
+**pruebas gratis que están por terminar** —este último con tres días, porque es
+el único que sirve para no gastar y cancelar el mismo día ya no sirve de nada—.
+
+El criterio de qué merece un aviso: **solo lo que se puede arreglar el día
+anterior**. Que la tarjeta corte mañana se puede aprovechar; que el patrimonio
+haya bajado un 2 % no se arregla con nada. Una app que manda notificaciones que
+no llevan a ninguna acción se silencia entera, y con ella las que sí importaban.
+
+Tres canales, todos opcionales:
+
+| Canal | Requiere | Llega con la app cerrada |
+|---|---|---|
+| Web Push | `VAPID_*` | Sí, con `CRON_SECRET` y el cron diario |
+| Correo | `RESEND_API_KEY` | Sí |
+| SMS | `TWILIO_*` | Sí, solo lo urgente |
+| Local | Nada | No: solo con la app abierta |
+
+El cifrado del Web Push (RFC 8291) y la firma VAPID (RFC 8292) están escritos a
+mano sobre `node:crypto`, sin la biblioteca `web-push`. Node ya trae ECDH sobre
+P-256, HKDF y AES-128-GCM; lo que queda es encadenarlos en el orden que dice la
+especificación. Y una dependencia que firma y cifra es una dependencia que, el
+día que se comprometa, tiene en la mano las llaves y el contenido de todos los
+avisos.
+
+En iPhone los avisos web **solo funcionan con la app instalada** en la pantalla
+de inicio. La app lo detecta y lo explica, en vez de enseñar un botón que no va a
+hacer nada.
+
+---
+
+## Bloqueo con Face ID, Touch ID o huella
+
+Un cerrojo con WebAuthn para cuando la app vuelve de segundo plano. Qué es y qué
+no es, porque la diferencia importa:
+
+- **Lo que hace:** si alguien coge tu teléfono desbloqueado y abre la app, se
+  encuentra una pantalla que pide tu cara o tu huella. Ese es el riesgo real de
+  una app de finanzas en un móvil que se deja en una mesa.
+- **Lo que no hace:** proteger los datos de alguien que controle el dispositivo.
+  La comprobación ocurre en el navegador y no la verifica ningún servidor.
+  Quien guarda la puerta de verdad es Supabase: sin sesión válida no devuelve una
+  sola fila.
+
+No se guarda ninguna huella ni ninguna imagen. La clave vive en el chip seguro
+del teléfono —el Secure Enclave en iPhone— y de aquí solo sale un identificador
+público. Se puede elegir cada cuánto volver a pedirla; «a los 15 minutos»
+significa quince minutos **fuera** de la app, no usándola.
+
+---
+
+## Exportar, respaldar e importar
+
+Tres cosas que parecen la misma:
+
+- **CSV** para *mirar*: abrirlo en Excel, mandárselo al contador. Pierde
+  información —bolsillos, asignaciones, el enlace entre un abono y su
+  movimiento— y por eso **no vale como respaldo**.
+- **JSON** para *volver*: lo trae todo y se restaura entero. Un archivo que solo
+  se puede descargar y nunca devolver no es un respaldo, es un recuerdo.
+- **Importar** para *traer* el extracto que descarga el banco.
+
+El CSV se escribe con punto y coma, con BOM y con coma decimal sin separador de
+miles. Las tres cosas salieron de archivos que se abrían mal: con comas, Excel en
+español mete «45» y «900» en dos columnas; sin BOM, «Suscripción» sale
+«SuscripciÃ³n»; con punto de miles, «1.250.000» se convierte en 1,25.
+
+La **restauración** escribe con `upsert` sobre el id y no borrando antes: si la
+escritura se corta a la mitad, borrar primero habría dejado la cuenta vacía, que
+es exactamente el desastre del que un respaldo debería proteger.
+
+### Importar un extracto bancario
+
+Tres pasos, y el del medio es el que hace que funcione: elegir el archivo, decir
+qué columna es cuál, y revisar antes de escribir.
+
+El paso del mapeo existe porque no hay dos bancos que exporten igual —uno manda
+el monto con signo en una columna, otro parte débitos y créditos en dos, unos
+escriben `12/09/2026` y otros `20260912`— y casi todos meten tres o cuatro líneas
+de logo antes de la cabecera de verdad. La app detecta el separador, busca dónde
+empieza la tabla, propone el mapeo por el nombre de las columnas y deja
+corregirlo. Adivinar sin preguntar significa importar seiscientos movimientos con
+el signo al revés y descubrirlo tres días después.
+
+Volver a importar el mismo archivo no duplica nada: cada fila lleva una
+referencia construida con la cuenta, la fecha, el importe y la descripción.
+
+---
+
+## Declaración de renta (DIAN)
+
+*Ajustes → Declaración de renta* responde a la pregunta de cada agosto: **¿me toca
+declarar?** Y si toca, deja el desglose listo para sentarse a hacerlo.
+
+Todo el sistema tributario colombiano se expresa en **UVT**, que la DIAN fija cada
+año por resolución:
+
+| Año gravable | UVT | Norma |
+|---|---|---|
+| 2026 | $52.374 | Resolución DIAN 000238 del 15-dic-2025 |
+| 2025 | $49.799 | Resolución DIAN 000193 de 2024 |
+| 2024 | $47.065 | Resolución DIAN 000187 de 2023 |
+| 2023 | $42.412 | Resolución DIAN 001264 de 2022 |
+
+**Cuál se usa: la del año gravable, no la del año en que se declara.** La
+declaración que se presenta en 2026 es la del año gravable 2025 y va con la UVT
+de 2025. Confundirlas es el error más común y mueve los topes un 5 % largo, justo
+en el margen donde está la gente que duda.
+
+Basta superar **uno** de estos cinco para quedar obligado (cifras del AG 2025):
+
+| Tope | UVT | En pesos |
+|---|---|---|
+| Patrimonio bruto al 31 de diciembre | 4.500 | $224.095.500 |
+| Ingresos brutos | 1.400 | $69.718.600 |
+| Consumos con tarjeta de crédito | 1.400 | $69.718.600 |
+| Compras y consumos totales | 1.400 | $69.718.600 |
+| Consignaciones, depósitos e inversiones | 1.400 | $69.718.600 |
+
+Y también quien fue responsable de IVA en cualquier momento del año.
+
+Los cinco se enseñan siempre, no solo el que dispara: el valor está en ver lo
+cerca que se anda de los otros. Quien va por el 90 % del tope de consignaciones en
+septiembre sabe que el año que viene le toca, y eso es accionable hoy.
+
+Dos que sorprenden: **«bruto» significa sin restar deudas** —un apartamento
+hipotecado cuenta por su valor completo— y **pasarte plata de una cuenta tuya a
+otra también consigna**.
+
+También se listan los beneficios de la cédula general con su tope: renta exenta
+del 25 % (790 UVT), dependientes (72 UVT cada uno, hasta cuatro), 1 % de compras
+con factura electrónica (240 UVT), intereses de vivienda (1.200 UVT), medicina
+prepagada (192 UVT) y aportes voluntarios (30 % del ingreso, hasta 3.800 UVT). El
+conjunto no puede pasar del 40 % de los ingresos netos ni de 1.340 UVT —salvo
+dependientes y factura electrónica, que quedan **fuera** de ese límite—.
+
+**Lo que esto no hace, y está escrito en la pantalla:** no calcula el impuesto
+definitivo. Faltan datos que la app no tiene por qué conocer —seguridad social,
+retenciones practicadas, dependientes, qué parte del patrimonio es la casa,
+ganancias ocasionales— y una cifra de impuesto a medias es peor que ninguna
+porque se cree. Y las cifras salen de lo registrado aquí: la DIAN cruza lo que
+reportan bancos, empleadores y comercios, así que lo que no se anotó no aparece.
+
+---
+
 ## Pendientes
 
 Lo que falta, en orden de lo que más duele.
@@ -573,21 +1036,39 @@ Lo que falta, en orden de lo que más duele.
       [twelvedata.com](https://twelvedata.com). Sus 8 llamadas por minuto
       bastan porque las series se guardan seis horas. Sin ella hay precios pero
       no gráfico.
+- [ ] **`VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY` para los avisos.** Se generan
+      con un comando de Node, sin instalar nada (ver `.env.example`). Sin ellas
+      los recordatorios salen igual, pero solo con la app abierta — que es
+      justo cuando no hacen falta.
+- [ ] **`CRON_SECRET` y `SUPABASE_SERVICE_ROLE_KEY` para el aviso de la
+      víspera.** El trabajo diario está declarado en `vercel.json` y llama a
+      `/api/push/recordatorios`. Es el único sitio de la app que usa la llave de
+      servicio, y el porqué está escrito en la cabecera de esa ruta: a las ocho
+      de la mañana no hay ninguna sesión y hay que mirar los datos de todas las
+      cuentas. Sin estas dos variables la ruta está apagada y no pasa nada más.
+- [ ] **`GOOGLE_VISION_API_KEY` u `OCR_SPACE_API_KEY` para leer facturas.** Solo
+      hacen falta donde el navegador no sabe reconocer texto por su cuenta —o
+      sea, en iPhone y en escritorio—. Sin ninguna, el botón de la cámara lo
+      dice en vez de fallar.
+- [ ] **Aplicar las migraciones nuevas.** `supabase db push` con las cinco de
+      `20260917*`: la TRM y el origen de cada movimiento, el ciclo de las
+      tarjetas, los ingresos recurrentes, la ingesta rápida y los avisos. Sin
+      ellas la app arranca igual pero cada pantalla nueva avisa de que su tabla
+      no existe.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.
 
 ### Código
 
-- [ ] **Cola de escrituras.** Con sesión iniciada el estado deja de guardarse en
-      el dispositivo (`store.tsx`: `if (!ready || synced) return`) y cada
-      escritura sale directa a Supabase. Si esa petición falla —sin red, plazo
-      agotado— el movimiento solo existe en memoria y se pierde al recargar.
-      Falta una cola persistente que reintente al recuperar la conexión.
-- [ ] **Los errores de escritura siguen siendo mudos.** Una lectura fallida ya
-      se ve (aviso «Sin conexión con el servidor» con reintento), pero ninguna
-      escritura comprueba el error que devuelve Supabase: si un gasto no llega
-      al servidor, nadie se entera.
+- [ ] **Sin tiempo real en la cola.** La cola reenvía en cuanto vuelve la red,
+      pero si el mismo movimiento se editó en otro dispositivo mientras tanto,
+      gana el último que llegue. Con dos teléfonos y un movimiento editado a la
+      vez en los dos, uno de los dos cambios se pierde sin avisar.
+- [ ] **Los errores de escritura siguen siendo mudos** fuera de la cola. Un
+      fallo de red ya se recupera solo, pero si Supabase rechaza una escritura
+      por otra razón —una restricción, un permiso— solo lo dicen las deudas y
+      las suscripciones; el resto lo traga en silencio.
 - [ ] **Sin tiempo real.** El esquema ya publica `transactions` y `accounts` en
       `supabase_realtime`, pero nadie se suscribe. Hoy los datos se releen al
       volver a primer plano (como mucho una vez por minuto), que cubre el caso
@@ -605,6 +1086,20 @@ Lo que falta, en orden de lo que más duele.
 
 ### Verificado
 
+- [x] **Registrar sin señal ya no pierde nada.** Toda escritura que no consigue
+      salir se guarda en IndexedDB y se reenvía, en orden, en cuanto vuelve la
+      red. Se intercepta en el `fetch` del cliente de Supabase y no en cada
+      mutación, así que cubre las cuarenta y cinco escrituras de hoy y las que
+      se añadan mañana. Ver `lib/cola.ts`.
+- [x] **El cifrado de los avisos está probado de extremo a extremo.** El cuerpo
+      que produce `lib/webpush.ts` se descifra con la clave del navegador
+      simulado y la firma VAPID se valida contra su llave pública. Sin esa
+      comprobación, un error en la derivación de claves produce un aviso que el
+      servicio de push acepta y el navegador descarta en silencio.
+- [x] **Las fechas de los ciclos no se corren.** Un ingreso del 31 de enero cae
+      el 28 en febrero y vuelve al 31 en marzo, en vez de quedarse en el 28
+      para siempre. Cada fecha se cuenta desde el ancla, nunca encadenando una
+      sobre la anterior.
 - [x] El esquema cubre todo lo que el cliente escribe: bolsillos
       (`pockets` jsonb), cupo y cuotas de las tarjetas, `goals`, y la
       restricción única `budgets_user_id_category_id_key` que necesita el

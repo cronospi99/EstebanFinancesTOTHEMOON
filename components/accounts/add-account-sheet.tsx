@@ -7,6 +7,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { InstitutionPicker } from '@/components/ui/institution-picker'
 import { CO_INSTITUTIONS, institutionsByGroup } from '@/lib/categories'
 import { formatKeypad, parseKeypad } from '@/lib/format'
+import { CicloEditor } from './ciclo-tarjeta'
 import { useFinance } from '@/lib/store'
 import type { AccountType, Currency } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -57,6 +58,9 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
   const [amount, setAmount] = useState('')
   const [apy, setApy] = useState('')
   const [installments, setInstallments] = useState('')
+  // Las dos fechas del ciclo, como día del mes. Ver `ciclo-tarjeta.tsx`.
+  const [corte, setCorte] = useState('')
+  const [pago, setPago] = useState('')
   const [cupo, setCupo] = useState('')
   const [negative, setNegative] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -81,6 +85,8 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
       creditLimit: isCredit && cupo ? parseKeypad(cupo) : undefined,
       installments: isCredit && installments ? Number(installments) : undefined,
       installmentsPaid: isCredit && installments ? 0 : undefined,
+      statementDay: isCredit && corte ? Number(corte) : undefined,
+      dueDay: isCredit && pago ? Number(pago) : undefined,
     })
 
     setName(''); setAmount(''); setApy(''); setInstallments(''); setCupo(''); setNegative(false)
@@ -171,10 +177,17 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
               className="w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
                          text-[16px] text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
             />
-            <p className="mt-1.5 px-1 text-[12px] text-label-tertiary">
+            <p className="mb-5 mt-1.5 px-1 text-[12px] text-label-tertiary">
               En cuántas cuotas está diferida la deuda. Se irá descontando a medida
               que registres los pagos.
             </p>
+
+            <Label>Ciclo de facturación</Label>
+            <CicloEditor
+              statementDay={corte}
+              dueDay={pago}
+              onChange={(campo, v) => (campo === 'corte' ? setCorte(v) : setPago(v))}
+            />
           </div>
         )}
 

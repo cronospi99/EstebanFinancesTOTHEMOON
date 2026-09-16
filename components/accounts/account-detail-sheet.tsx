@@ -7,6 +7,7 @@ import { Sheet } from '@/components/ui/sheet'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { institutionCanonicalName } from '@/lib/categories'
 import { formatKeypad, formatMoney, formatPercent, monthlyFromApy, parseKeypad } from '@/lib/format'
+import { CicloBloque } from './ciclo-tarjeta'
 import { accountTotal, useAccountsAvailable, useCashback, useFinance, useSaldoConMovimientos } from '@/lib/store'
 import type { Account } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -419,6 +420,9 @@ export function AccountDetailSheet({
             )}
           </div>
         )}
+
+        {/* Corte y fecha límite de pago */}
+        {account.type === 'credit' && <CicloBloque account={account} />}
 
         {/* Cuotas de tarjeta */}
         {account.type === 'credit' && account.installments ? (

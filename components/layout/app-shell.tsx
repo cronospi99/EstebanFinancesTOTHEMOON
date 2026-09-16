@@ -5,6 +5,9 @@ import { AnimatePresence } from 'framer-motion'
 import { BottomNav } from './bottom-nav'
 import { SideNav } from './side-nav'
 import { QuickAddSheet } from '@/components/quick-add/quick-add-sheet'
+import { Bloqueo } from './bloqueo'
+import { EstadoCola } from './estado-cola'
+import { Recordatorios } from './recordatorios'
 import { WelcomeScreen } from './welcome-screen'
 
 /**
@@ -33,11 +36,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     /*
+     * El cerrojo biométrico envuelve a todo y va antes que nada: una pantalla
+     * de bloqueo que aparece medio segundo después de los saldos no bloquea
+     * nada. Con la biometría apagada no existe y no cuesta nada. Ver
+     * `bloqueo.tsx`.
+     *
      * Móvil: una columna estrecha centrada, como siempre.
      * Escritorio: barra lateral fija y el contenido corrido hacia la derecha,
      * con un ancho máximo mayor para que la ventana no quede vacía a los lados
      * sin que las líneas se hagan ilegibles de largas.
      */
+    <Bloqueo>
     <div className="relative mx-auto min-h-dvh w-full max-w-md lg:max-w-none lg:pl-[248px]">
       {/* Halo de color detrás del contenido: rompe el negro plano sin
           introducir una superficie visible. */}
@@ -64,6 +73,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <BottomNav onQuickAdd={() => setQuickAddOpen(true)} />
       </div>
       <QuickAddSheet open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+
+      {/* Lo que quedó sin enviar por falta de señal. Ver `estado-cola.tsx`. */}
+      <EstadoCola />
+
+      {/* Los recordatorios que salen con la app abierta, para cuando el
+          servidor no puede mandarlos. No pinta nada. */}
+      <Recordatorios />
     </div>
+    </Bloqueo>
   )
 }

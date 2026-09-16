@@ -31,6 +31,23 @@ export interface Account {
   installments?: number
   /** Solo tarjetas de crédito: cuotas ya pagadas. */
   installmentsPaid?: number
+  /**
+   * Solo tarjetas de crédito: día del mes en que cierra el extracto.
+   *
+   * Es la fecha que decide en cuál de los dos extractos cae una compra, y con
+   * ella cuánto falta para pagarla. Comprar el día después del corte da hasta
+   * mes y medio sin intereses; comprar la víspera, dos semanas. Ver
+   * `tarjetas.ts`.
+   */
+  statementDay?: number
+  /**
+   * Solo tarjetas de crédito: día del mes en que vence el pago del extracto.
+   *
+   * Va aparte del corte porque son dos fechas distintas y confundirlas cuesta
+   * dinero: el corte no hay que hacer nada, el límite sí. Suele caer entre 15
+   * y 20 días después del corte, ya en el mes siguiente.
+   */
+  dueDay?: number
 }
 
 export interface Category {
@@ -88,7 +105,44 @@ export interface Transaction {
    * anotarlo, se arregla cuando el banco ya cobró y nadie se acuerda.
    */
   pending?: boolean
+  /**
+   * Pesos por dólar el día en que ocurrió. Solo en movimientos en USD.
+   *
+   * Se guarda la tasa y no se recalcula con la de hoy, y esa es toda la
+   * diferencia entre «esto costó» y «esto costaría hoy». Sin el dato, una
+   * compra de US$100 de enero se revalorizaba sola cada vez que el dólar se
+   * movía: el gasto de un mes cerrado cambiaba de cifra al abrir la app, y la
+   * diferencia en cambio —que es un resultado de verdad del patrimonio—
+   * quedaba invisible, repartida entre todos los movimientos.
+   */
+  fxRate?: number
+  /**
+   * El comercio, tal y como lo dijo el banco o la factura.
+   *
+   * No se mezcla con `description` a propósito: esa es la nota que escribe una
+   * persona, y pisarla con «PAYU*NETFLIX COL» borraría lo único que el usuario
+   * había puesto de su parte.
+   */
+  merchant?: string
+  /** Quién lo anotó. Ver `TxSource`. */
+  source?: TxSource
+  /**
+   * El identificador que traía el origen: el del SMS, la referencia del
+   * extracto. Es lo que impide que reenviar dos veces el mismo mensaje —o
+   * volver a importar el mismo archivo— cobre dos veces.
+   */
+  externalId?: string
 }
+
+/**
+ * Quién anotó un movimiento.
+ *
+ * Importa porque no todos merecen la misma confianza: lo que tecleó una
+ * persona está bien, lo que leyó una foto hay que mirarlo. Y porque permite
+ * deshacer una importación entera sin llevarse por delante lo registrado a
+ * mano, que es lo que uno quiere cuando el mapeo de columnas salió torcido.
+ */
+export type TxSource = 'manual' | 'voz' | 'foto' | 'sms' | 'atajo' | 'import' | 'suscripcion'
 
 export interface Budget {
   categoryId: string
@@ -127,6 +181,19 @@ export interface BudgetAllocation {
 export interface Settings {
   /** Tope de gasto diario para todo, sin distinguir categoría. */
   dailyCap?: number
+  /**
+   * Cuántos días antes avisar de un cobro. `undefined` = no avisar.
+   *
+   * Un día es lo que hay que poder mover: avisar el mismo día de la fecha
+   * límite no deja hacer nada si el dinero está en otra cuenta, y avisar con
+   * una semana se olvida igual que no avisar.
+   */
+  avisoDias?: number
+  avisarSuscripciones?: boolean
+  avisarTarjetas?: boolean
+  avisarDeudas?: boolean
+  /** Correo para los avisos. Vacío = el de la sesión. */
+  avisoEmail?: string
 }
 
 /** Meta de ahorro: un objetivo con importe y, si se quiere, fecha límite. */
@@ -315,6 +382,49 @@ export interface Subscription {
   sharedWith?: number
   /** Cancelada: se conserva por historial, pero ya no cuenta en los totales. */
   cancelled?: boolean
+  note?: string
+  color: string
+}
+
+/**
+ * Cada cuánto entra un ingreso recurrente.
+ *
+ * Es el catálogo de las suscripciones más la quincena, que en Colombia es el
+ * ciclo del sueldo y no cabía en ninguno de los otros: «cada 15 días» son 24
+ * pagos al año y dos veces al mes son 24 también, pero caen en días
+ * distintos, y el 30 y el 15 es como paga casi todo el mundo.
+ */
+export type IncomeCycle = 'semanal' | 'quincenal' | 'mensual' | 'trimestral' | 'semestral' | 'anual'
+
+/**
+ * Un ingreso que se repite: el sueldo, el arriendo que cobras, el cliente fijo.
+ *
+ * Es el espejo de una suscripción y comparte su forma a propósito —un ancla,
+ * un ciclo, un importe—, pero no es una suscripción de signo cambiado: los
+ * totales de «cuánto se me va al mes» se habrían llenado de cifras que entran.
+ *
+ * Existe por la proyección de liquidez. Sin saber qué entra, un saldo
+ * proyectado a 90 días solo puede bajar, y una app que le dice a cualquiera
+ * que en tres meses estará en cero no sirve para decidir nada. La quincena del
+ * 30 es justo lo que convierte un mes apretado en un mes normal.
+ *
+ * A diferencia de las suscripciones, no anota movimientos por su cuenta. Los
+ * dos errores no son simétricos: un cobro que la app dio por hecho y no
+ * ocurrió se corrige con un toque, pero un sueldo que se da por recibido y no
+ * llegó deja el saldo mintiendo hacia arriba, que es el lado caro.
+ */
+export interface RecurringIncome {
+  id: string
+  name: string
+  amount: number
+  currency: Currency
+  cycle: IncomeCycle
+  /** Un día en que entró —o va a entrar—. De aquí sale todo lo demás. */
+  anchorAt: string
+  /** En qué cuenta cae. Sin ella suma al total pero no se sabe dónde estará. */
+  accountId?: string
+  /** Se apaga sin borrarse: un contrato que terminó deja de proyectarse. */
+  active?: boolean
   note?: string
   color: string
 }

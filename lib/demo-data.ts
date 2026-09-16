@@ -1,6 +1,6 @@
 import type {
-  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, Settings, Subscription,
-  Transaction,
+  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, RecurringIncome, Settings,
+  Subscription, Transaction,
 } from './types'
 
 const daysAgo = (n: number, hour = 12) => {
@@ -31,6 +31,9 @@ export const DEMO_ACCOUNTS: Account[] = [
     id: 'acc_rappicard', name: 'RappiCard', institution: 'RappiCard', type: 'credit',
     balance: -2_380_000, currency: 'COP', color: '#141414',
     creditLimit: 8_000_000, installments: 12, installmentsPaid: 4,
+    // Corta el 15 y se paga el 5 del mes siguiente: veinte días entre una
+    // fecha y otra, que es lo normal en Colombia.
+    statementDay: 15, dueDay: 5,
   },
   {
     id: 'acc_littio', name: 'Littio USD', institution: 'Littio', type: 'savings',
@@ -185,5 +188,25 @@ export const DEMO_SUBSCRIPTIONS: Subscription[] = [
   {
     id: 's7', name: 'Gimnasio', amount: 129_000, currency: 'COP', cycle: 'trimestral',
     anchorAt: diaAtras(-34), accountId: 'acc_banco', color: '#FF9F0A',
+  },
+]
+
+/**
+ * Lo que entra todos los meses en el Modo Demo.
+ *
+ * Una quincena y un arriendo, que es la mezcla que hace interesante la
+ * proyección de liquidez: el sueldo llega en dos tandas y el arriendo cae el
+ * día 5, así que hay un tramo del mes en que la cuerda se tensa y otro en que
+ * sobra. Sin ingresos, la proyección de la demo solo podría bajar.
+ */
+export const DEMO_INGRESOS: RecurringIncome[] = [
+  {
+    id: 'in1', name: 'Salario', amount: 4_200_000, currency: 'COP', cycle: 'quincenal',
+    anchorAt: diaAtras(-2), accountId: 'acc_banco', color: '#30D158',
+    note: 'Quincena del 15 y del 30',
+  },
+  {
+    id: 'in2', name: 'Arriendo del apartaestudio', amount: 1_150_000, currency: 'COP',
+    cycle: 'mensual', anchorAt: diaAtras(-6), accountId: 'acc_nequi', color: '#40C8E0',
   },
 ]

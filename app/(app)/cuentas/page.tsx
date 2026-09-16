@@ -10,6 +10,7 @@ import { DebtsSection } from '@/components/debts/debts-section'
 import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
 import { TransferSheet } from '@/components/accounts/transfer-sheet'
 import { PayCardSheet } from '@/components/accounts/pay-card-sheet'
+import { AvisosTarjetas } from '@/components/accounts/avisos-tarjetas'
 import { CO_INSTITUTIONS } from '@/lib/categories'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { accountTotal, useAccountsAvailable, useFinance } from '@/lib/store'
@@ -44,6 +45,10 @@ export default function AccountsPage() {
   return (
     <div className="space-y-5 px-5">
       <PageHeader title="Cuentas" subtitle="Dónde está tu dinero" />
+
+      {/* Cortes y vencimientos, arriba del todo: es lo único de esta pantalla
+          que tiene fecha límite. Solo sale cuando hay algo que hacer. */}
+      <AvisosTarjetas titulo="Atención" />
 
       {!delDia.length ? (
         <Card className="p-8 text-center">
