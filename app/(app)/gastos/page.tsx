@@ -9,6 +9,7 @@ import { CategoryIcon } from '@/components/ui/category-icon'
 import { SpendDonut } from '@/components/expenses/spend-donut'
 import { PeriodPicker } from '@/components/expenses/period-picker'
 import { TransactionList } from '@/components/expenses/transaction-list'
+import { SubscriptionsTeaser } from '@/components/subscriptions/subscriptions-teaser'
 import { categoryById } from '@/lib/categories'
 import { formatDate, formatMoney } from '@/lib/format'
 import { enRango, rangoPeriodo, type Periodo } from '@/lib/periodos'
@@ -75,6 +76,11 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-5 px-5">
       <PageHeader title="Gastos" />
+
+      {/* Lo que se cobra solo, arriba del todo: es gasto como el resto, pero
+          del que nadie decide cada mes, y por eso es el que se olvida. Desde
+          aquí se llega a su pantalla, que en el móvil no cabe en la barra. */}
+      <SubscriptionsTeaser />
 
       <Card className="p-5">
         <div className="mb-4">

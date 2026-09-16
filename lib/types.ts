@@ -238,6 +238,70 @@ export type FormaDeAbono = 'cuenta' | 'cruce' | 'ajuste'
 export const formaDeAbono = (p: Pick<DebtPayment, 'accountId' | 'transactionId'>): FormaDeAbono =>
   p.accountId ? 'cuenta' : p.transactionId ? 'cruce' : 'ajuste'
 
+/**
+ * Cada cuánto se cobra una suscripción.
+ *
+ * Cerrado a cinco ciclos y no a «cada N días» a propósito: así se cobra de
+ * verdad —al mes, al año, y de vez en cuando por trimestre o semestre— y un
+ * catálogo cerrado permite decir «un pago anual» en vez de «cada 365 días»,
+ * que es como lo diría cualquiera.
+ */
+export type SubCycle = 'semanal' | 'mensual' | 'trimestral' | 'semestral' | 'anual'
+
+/**
+ * Una suscripción: lo que se cobra solo, mes tras mes, sin que nadie decida
+ * nada.
+ *
+ * Va aparte de los gastos normales porque la pregunta es otra. Un gasto se
+ * mira hacia atrás —en qué se me fue— y una suscripción hacia adelante: qué me
+ * van a cobrar, cuándo, y cuánto suma todo esto al año. Esa última cifra es la
+ * que sorprende: nueve cobros pequeños que nadie recuerda haber aceptado y que
+ * juntos valen más que el arriendo de una semana.
+ *
+ * No genera movimientos por su cuenta. La app no corre en un servidor que
+ * pueda despertarse el día 19 a cobrar, y un movimiento inventado sin que el
+ * banco lo haya cobrado deja el saldo mintiendo. Lo que hay es un botón para
+ * registrarlo cuando llega, que además sirve de recordatorio.
+ */
+export interface Subscription {
+  id: string
+  /** Cómo se llama el servicio: Netflix, iCloud+, el gimnasio. */
+  name: string
+  /** Lo que cobran cada ciclo, en su moneda. */
+  amount: number
+  currency: Currency
+  cycle: SubCycle
+  /**
+   * Un día en el que cobraron —o van a cobrar—. De aquí sale todo lo demás.
+   *
+   * Se guarda un ancla y no «el próximo cobro» porque el próximo cobro caduca:
+   * quien no abre la app en dos meses volvería a una fecha pasada. Con el ancla
+   * y el ciclo, la siguiente fecha se calcula siempre, y sigue saliendo bien
+   * dentro de un año.
+   */
+  anchorAt: string
+  /** Con qué se paga. Sirve para avisar de la tarjeta que vence. */
+  accountId?: string
+  /**
+   * Si es una prueba gratis, cuándo deja de serlo. ISO (solo día).
+   *
+   * Es el agujero clásico: la prueba de un mes que nadie cancela y que lleva
+   * cobrando desde marzo. Por eso tiene campo propio y su propio filtro.
+   */
+  trialEndsAt?: string
+  /**
+   * Entre cuántos se reparte, contándote a ti. 1 o vacío = la pagas tú solo.
+   *
+   * Lo que sale de tu bolsillo es el importe entre esta cifra; el resto te lo
+   * deben. Un plan familiar de cuatro no cuesta lo que dice la factura.
+   */
+  sharedWith?: number
+  /** Cancelada: se conserva por historial, pero ya no cuenta en los totales. */
+  cancelled?: boolean
+  note?: string
+  color: string
+}
+
 export interface Holding {
   id: string
   symbol: string

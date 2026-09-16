@@ -6,6 +6,7 @@ import { AccountsStrip } from '@/components/dashboard/accounts-strip'
 import { RecentTransactions } from '@/components/dashboard/recent-transactions'
 import { BudgetRings } from '@/components/dashboard/budget-rings'
 import { WealthDistribution } from '@/components/dashboard/wealth-distribution'
+import { SubscriptionsTeaser } from '@/components/subscriptions/subscriptions-teaser'
 import { DemoBanner } from '@/components/layout/demo-banner'
 import { monthName } from '@/lib/format'
 import { saludo, useProfileName } from '@/lib/use-profile'
@@ -62,6 +63,7 @@ export default function DashboardPage() {
         <div className="space-y-6">
           {[
             <WealthDistribution key="dist" />,
+            <SubscriptionsTeaser key="subs" />,
             <BudgetRings key="bud" />,
           ].map((child, i) => (
             <motion.div key={i} custom={i + 1} variants={stagger} initial="hidden" animate="show">

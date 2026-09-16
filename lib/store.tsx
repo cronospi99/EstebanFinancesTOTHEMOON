@@ -4,19 +4,23 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import {
   DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_DEBTS, DEMO_DEBT_PAYMENTS, DEMO_GOALS,
-  DEMO_HOLDINGS, DEMO_SETTINGS, DEMO_TRANSACTIONS,
+  DEMO_HOLDINGS, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
 } from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
 import { movimientoDeAbono, saldoDeuda, type SaldoDeuda } from './deudas'
-import { cargarZona, diaEn, instanteEnDia } from './zona'
+import {
+  cobraDeVerdad, costeAnual, costeMensual, cuantosComparten, diasEntre, enPrueba,
+  parteAjena, proximoCobro, tuParte,
+} from './suscripciones'
+import { cargarZona, diaEn, hoyEnZona, instanteEnDia, sumarDias } from './zona'
 import { monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useQuotes } from './use-quotes'
 import type {
   Account, Budget, BudgetAllocation, Currency, Debt, DebtPayment, Goal, Holding, Pocket, Quote,
-  Settings, Trade, Transaction,
+  Settings, Subscription, Trade, Transaction,
 } from './types'
 import { uid } from './utils'
 
@@ -36,6 +40,8 @@ interface State {
   debts: Debt[]
   /** Abonos a esas deudas; el saldo se deriva de ellos. */
   debtPayments: DebtPayment[]
+  /** Lo que se cobra solo: Netflix, el gimnasio, la nube. */
+  subscriptions: Subscription[]
   settings: Settings
 }
 
@@ -50,12 +56,13 @@ const INITIAL: State = {
   trades: [],
   debts: DEMO_DEBTS,
   debtPayments: DEMO_DEBT_PAYMENTS,
+  subscriptions: DEMO_SUBSCRIPTIONS,
   settings: DEMO_SETTINGS,
 }
 
 const VACIO: State = {
   accounts: [], transactions: [], budgets: [], allocations: [],
-  holdings: [], goals: [], trades: [], debts: [], debtPayments: [], settings: {},
+  holdings: [], goals: [], trades: [], debts: [], debtPayments: [], subscriptions: [], settings: {},
 }
 
 /**
@@ -300,11 +307,24 @@ interface FinanceContextValue extends State {
   deleteDebt: (id: string) => Promise<void>
   abonarDeuda: (a: Omit<DebtPayment, 'id'>) => Promise<void>
   deleteDebtPayment: (id: string) => Promise<void>
+  addSubscription: (sub: Omit<Subscription, 'id'>) => Promise<void>
+  updateSubscription: (id: string, patch: Partial<Subscription>) => Promise<void>
+  deleteSubscription: (id: string) => Promise<void>
+  /**
+   * Anota el cobro que ya tocaba y adelanta el ciclo.
+   *
+   * Lo dispara el usuario y no un reloj: la app no corre en un servidor que
+   * pueda despertarse el día 19, y un movimiento inventado sin que el banco
+   * haya cobrado deja el saldo mintiendo.
+   */
+  registrarCobro: (id: string) => Promise<void>
   resetDemo: () => void
   /** Cierra la sesión y borra de este dispositivo lo que era del usuario. */
   signOut: () => Promise<void>
   /** Por qué las deudas no se están guardando en la cuenta, si es que no. */
   deudasError: string | null
+  /** Lo mismo para las suscripciones: su tabla es la más nueva de todas. */
+  suscripcionesError: string | null
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
@@ -336,6 +356,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    * siguiente ya no estaba, sin que nada dijera por qué.
    */
   const [deudasError, setDeudasError] = useState<string | null>(null)
+  // Igual que el de las deudas, y por el mismo motivo: su tabla es la última
+  // que se añadió y es la que puede faltar en un proyecto sin migrar.
+  const [suscripcionesError, setSuscripcionesError] = useState<string | null>(null)
   const fx = useExchangeRate()
   const fxRate = fx.rate
 
@@ -391,7 +414,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           }
 
           const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
-                 debts, debtPayments] =
+                 debts, debtPayments, subscriptions] =
             await Promise.all([
               supabase.from('accounts').select('*').order('created_at'),
               supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
@@ -403,6 +426,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               supabase.from('settings').select('*').maybeSingle(),
               supabase.from('debts').select('*').order('started_at'),
               supabase.from('debt_payments').select('*').order('occurred_at'),
+              supabase.from('subscriptions').select('*').order('anchor_at'),
             ])
           if (!vivo.current) return
 
@@ -457,11 +481,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             allocations: conservar(allocations, () => (allocations.data ?? []).map(rowToAllocation), previo.allocations),
             debts: conservar(debts, () => (debts.data ?? []).map(rowToDebt), previo.debts),
             debtPayments: conservar(debtPayments, () => (debtPayments.data ?? []).map(rowToDebtPayment), previo.debtPayments),
+            subscriptions: conservar(subscriptions, () => (subscriptions.data ?? []).map(rowToSub), previo.subscriptions),
             settings: settings.error || !settings.data
               ? {}
               : { dailyCap: settings.data.daily_cap == null ? undefined : Number(settings.data.daily_cap) },
           }
           setDeudasError(motivoTabla(debts.error) ?? motivoTabla(debtPayments.error))
+          setSuscripcionesError(motivoTabla(subscriptions.error))
           setState(remoto)
           guardarEstado(claveEstado(uid), remoto)
           ultimaCarga.current = Date.now()
@@ -1185,6 +1211,84 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote, deleteTransaction],
   )
 
+  // ---- Suscripciones -------------------------------------------------------
+  /*
+   * Las escrituras comprueban el resultado, igual que las de deudas y por el
+   * mismo motivo: el fallo que ocurre de verdad —la tabla que aún no existe—
+   * no se corrige solo y dejaría al usuario registrando en el vacío.
+   */
+  const anotarFalloSub = useCallback((error: unknown) => {
+    setSuscripcionesError(motivoTabla(error) ?? null)
+  }, [])
+
+  const addSubscription = useCallback(
+    async (sub: Omit<Subscription, 'id'>) => {
+      const full: Subscription = { ...sub, id: uid() }
+      setState((s) => ({ ...s, subscriptions: [...s.subscriptions, full] }))
+      const r = await remote()?.from('subscriptions').insert(subToRow(full))
+      anotarFalloSub(r?.error)
+    },
+    [remote, anotarFalloSub],
+  )
+
+  const updateSubscription = useCallback(
+    async (id: string, patch: Partial<Subscription>) => {
+      setState((s) => ({
+        ...s,
+        subscriptions: s.subscriptions.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+      }))
+      const r = await remote()?.from('subscriptions').update(subPatchToRow(patch)).eq('id', id)
+      anotarFalloSub(r?.error)
+    },
+    [remote, anotarFalloSub],
+  )
+
+  const deleteSubscription = useCallback(
+    async (id: string) => {
+      setState((s) => ({ ...s, subscriptions: s.subscriptions.filter((x) => x.id !== id) }))
+      await remote()?.from('subscriptions').delete().eq('id', id)
+    },
+    [remote],
+  )
+
+  /**
+   * Anota el cobro que ya tocaba y adelanta el ciclo.
+   *
+   * Se registra el importe entero aunque la suscripción se comparta: al banco
+   * le sale el recibo completo, y lo que pongan los demás llega después. Con
+   * la mitad, el saldo de la cuenta no cuadraría con el extracto, que es la
+   * única cifra contra la que uno compara.
+   *
+   * El ancla se mueve al cobro siguiente en vez de quedarse donde estaba: es
+   * lo que evita que el mismo cobro se pueda anotar dos veces seguidas.
+   */
+  const registrarCobro = useCallback(
+    async (id: string) => {
+      const sub = stateRef.current.subscriptions.find((x) => x.id === id)
+      if (!sub) return
+      const cobro = proximoCobro(sub)
+
+      if (sub.accountId) {
+        await addTransaction({
+          accountId: sub.accountId,
+          type: 'expense',
+          categoryId: 'subs',
+          amount: sub.amount,
+          currency: sub.currency,
+          description: sub.name,
+          occurredAt: instanteEnDia(cobro),
+        })
+      }
+
+      // Desde el propio cobro que se acaba de anotar: la siguiente fecha sale
+      // de sumarle un ciclo, que es justo lo que hace `proximoCobro` con el día
+      // de después.
+      const siguiente = proximoCobro({ anchorAt: cobro, cycle: sub.cycle }, sumarDias(cobro, 1))
+      await updateSubscription(id, { anchorAt: siguiente })
+    },
+    [addTransaction, updateSubscription],
+  )
+
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
   // explícita para que nunca pueda llevarse por delante los datos de un usuario.
   const resetDemo = useCallback(() => {
@@ -1241,6 +1345,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
       addGoal, updateGoal, deleteGoal, resetDemo, signOut,
       addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
+      addSubscription, updateSubscription, deleteSubscription, registrarCobro, suscripcionesError,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
@@ -1249,7 +1354,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      updateHolding, deleteHolding, registrarOperacion, updateTrade, deleteTrade,
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
      addGoal, updateGoal, deleteGoal, resetDemo, signOut,
-     addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError],
+     addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
+     addSubscription, updateSubscription, deleteSubscription, registrarCobro, suscripcionesError],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -1481,6 +1587,136 @@ export function useDeudaTotal() {
     }
     return { debo: suma('owe'), meDeben: suma('lent') }
   }, [deudas])
+}
+
+export interface SubConCobro {
+  sub: Subscription
+  /** Cuándo es el próximo cobro. ISO, solo día. */
+  cobro: string
+  /** Días que faltan. Cero el mismo día del cobro. */
+  faltan: number
+  /**
+   * Cobran hoy: es lo que se puede anotar de un toque.
+   *
+   * Hoy y no «se pasó la fecha» porque no hay tal cosa. El próximo cobro se
+   * calcula desde el ancla, así que en cuanto pasa un día la fecha ya se ha
+   * corrido sola al mes siguiente: la app no lleva registro de qué cobros se
+   * anotaron, y no puede saber si el del día 10 se le olvidó a alguien o lo
+   * apuntó por su cuenta. Lo que sí sabe es cuáles caen hoy, que es cuando
+   * llega el mensaje del banco y cuando anotarlo cuesta un toque.
+   */
+  cobraHoy: boolean
+  /** Todavía es gratis. No suma al gasto, pero va a sumar. */
+  prueba: boolean
+  /** La pagas tú y la usan varios. */
+  compartida: boolean
+  /** Coste promedio en su moneda. */
+  mensual: number
+  anual: number
+  /** Los mismos, en pesos. Null si está en dólares y falta la tasa. */
+  mensualCOP: number | null
+  /** Lo que sale de tu bolsillo al mes, en pesos, ya descontado el reparto. */
+  tuParteCOP: number | null
+  /** Lo que ponen los demás al mes, en pesos: lo que estás adelantando. */
+  ajenaCOP: number | null
+}
+
+/**
+ * Las suscripciones con su próximo cobro ya calculado, la más próxima primero.
+ *
+ * El cálculo vive aquí y no en la pantalla porque la fecha de un cobro no es
+ * un campo: sale del ancla y del ciclo, y se recorta a fin de mes. Ver
+ * `suscripciones.ts`.
+ */
+export function useSuscripciones(): SubConCobro[] {
+  const { subscriptions, fxRate } = useFinance()
+  return useMemo(() => {
+    const hoy = hoyEnZona()
+    return subscriptions
+      .map((sub) => {
+        const cobro = proximoCobro(sub, hoy)
+        const mensual = costeMensual(sub)
+        const prueba = enPrueba(sub, hoy)
+        const enCOP = (v: number) => redondeaPesos(toCOP(v, sub.currency, fxRate))
+        return {
+          sub,
+          cobro,
+          faltan: diasEntre(hoy, cobro),
+          // Una cancelada no cobra nada, hoy tampoco.
+          cobraHoy: !sub.cancelled && cobro <= hoy,
+          prueba,
+          compartida: cuantosComparten(sub) > 1,
+          mensual,
+          anual: costeAnual(sub),
+          mensualCOP: enCOP(mensual),
+          tuParteCOP: enCOP(tuParte(sub)),
+          ajenaCOP: enCOP(parteAjena(sub)),
+        }
+      })
+      /*
+       * Por fecha de cobro, lo más próximo arriba, y lo cancelado al fondo.
+       *
+       * Es el orden en que se lee: lo que viene esta semana es lo que se mira,
+       * y lo que ya no se paga estorba en medio pero sirve de historial.
+       */
+      .sort((a, b) =>
+        Number(Boolean(a.sub.cancelled)) - Number(Boolean(b.sub.cancelled))
+        || a.cobro.localeCompare(b.cobro))
+  }, [subscriptions, fxRate])
+}
+
+export interface ResumenSuscripciones {
+  /** Lo que se va al mes en promedio, en pesos. */
+  mensual: number
+  /** Lo mismo al año: la cifra que sorprende. */
+  anual: number
+  /** Cuántas cobran de verdad hoy: ni canceladas, ni todavía gratis. */
+  cuantas: number
+  /** Lo que ponen los demás en las compartidas, al mes. */
+  teDeben: number
+  /**
+   * Lo que te ahorrarías cancelando las pruebas antes de que empiecen a cobrar.
+   *
+   * Es el agujero clásico y por eso es la cifra que se enseña: una prueba
+   * todavía no suma al gasto, pero va a sumar el día que termine, y para
+   * entonces ya nadie se acuerda de que la aceptó.
+   */
+  podriasAhorrar: number
+  /** Cuántas quedaron fuera por estar en dólares sin tasa de cambio. */
+  sinConvertir: number
+  /** Cuántas cobran hoy. */
+  cobranHoy: number
+}
+
+/** Lo que suman todas: al mes, al año, y lo que se podría recortar. */
+export function useSuscripcionesResumen(): ResumenSuscripciones {
+  const items = useSuscripciones()
+  return useMemo(() => {
+    const hoy = hoyEnZona()
+    let mensual = 0, cuantas = 0, teDeben = 0, podriasAhorrar = 0, sinConvertir = 0, cobranHoy = 0
+    for (const it of items) {
+      if (it.cobraHoy) cobranHoy++
+      if (it.sub.cancelled) continue
+      if (it.mensualCOP === null) { sinConvertir++; continue }
+      if (it.prueba) { podriasAhorrar += it.mensualCOP; continue }
+      if (!cobraDeVerdad(it.sub, hoy)) continue
+      mensual += it.mensualCOP
+      cuantas++
+      teDeben += it.ajenaCOP ?? 0
+    }
+    return {
+      mensual,
+      // Del mensual y no al revés: así las dos cifras no se contradicen por un
+      // redondeo, que es lo que pasaba enseñando «$53.466 al mes» junto a un
+      // anual que no era doce veces eso.
+      anual: mensual * 12,
+      cuantas,
+      teDeben,
+      podriasAhorrar,
+      sinConvertir,
+      cobranHoy,
+    }
+  }, [items])
 }
 
 /**
@@ -2024,6 +2260,43 @@ const debtPaymentToRow = (p: DebtPayment) => ({
   occurred_at: p.occurredAt, note: p.note ?? null,
   account_id: p.accountId ?? null, transaction_id: p.transactionId ?? null,
 })
+
+const rowToSub = (r: Row): Subscription => ({
+  id: r.id, name: r.name, amount: Number(r.amount),
+  currency: r.currency ?? 'COP',
+  cycle: r.cycle ?? 'mensual',
+  anchorAt: String(r.anchor_at).slice(0, 10),
+  accountId: r.account_id ?? undefined,
+  trialEndsAt: r.trial_ends_at ?? undefined,
+  sharedWith: r.shared_with == null ? undefined : Number(r.shared_with),
+  cancelled: Boolean(r.cancelled),
+  note: r.note ?? undefined,
+  color: r.color,
+})
+const subToRow = (x: Subscription) => ({
+  id: x.id, name: x.name, amount: x.amount, currency: x.currency, cycle: x.cycle,
+  anchor_at: x.anchorAt, account_id: x.accountId ?? null,
+  trial_ends_at: x.trialEndsAt ?? null, shared_with: x.sharedWith ?? null,
+  cancelled: Boolean(x.cancelled), note: x.note ?? null, color: x.color,
+})
+const subPatchToRow = (p: Partial<Subscription>) => {
+  const r: Row = {}
+  if (p.name !== undefined) r.name = p.name
+  if (p.amount !== undefined) r.amount = p.amount
+  if (p.currency !== undefined) r.currency = p.currency
+  if (p.cycle !== undefined) r.cycle = p.cycle
+  if (p.anchorAt !== undefined) r.anchor_at = p.anchorAt
+  // Con 'in' y no con !== undefined: quitarle la cuenta, la prueba o el
+  // reparto a una suscripción es ponerlos a undefined, y eso tiene que llegar
+  // al servidor como null en vez de no viajar.
+  if ('accountId' in p) r.account_id = p.accountId ?? null
+  if ('trialEndsAt' in p) r.trial_ends_at = p.trialEndsAt ?? null
+  if ('sharedWith' in p) r.shared_with = p.sharedWith ?? null
+  if (p.cancelled !== undefined) r.cancelled = p.cancelled
+  if ('note' in p) r.note = p.note ?? null
+  if (p.color !== undefined) r.color = p.color
+  return r
+}
 
 const rowToAllocation = (r: Row): BudgetAllocation => ({
   id: r.id,
