@@ -205,58 +205,83 @@ export interface Servicio {
   color: string
   /** Color del texto sobre el color de marca. Negro en las marcas claras. */
   fg?: string
-  /** Monograma de 1-3 letras. Por defecto, la inicial. */
+  /** Monograma de 1-3 letras. El respaldo cuando no hay logotipo. */
   short?: string
+  /** Archivo en /public/services, sin extensión. Si falta, se pinta el monograma. */
+  logo?: string
   grupo: 'Video' | 'Música' | 'Nube y trabajo' | 'Juegos' | 'IA' | 'Otros'
 }
 
 export const SERVICIOS: Servicio[] = [
   // ---- Video ---------------------------------------------------------------
-  { name: 'Netflix', color: '#E50914', short: 'N', grupo: 'Video' },
-  { name: 'Disney+', color: '#113CCF', short: 'D+', grupo: 'Video' },
-  { name: 'Max', color: '#002BE7', short: 'M', grupo: 'Video' },
-  { name: 'Prime Video', color: '#00A8E1', short: 'PV', grupo: 'Video' },
-  { name: 'YouTube Premium', color: '#FF0000', short: 'YT', grupo: 'Video' },
-  { name: 'Crunchyroll', color: '#F47521', short: 'CR', grupo: 'Video' },
-  { name: 'Apple TV+', color: '#1C1C1E', short: 'TV', grupo: 'Video' },
-  { name: 'Paramount+', color: '#0064FF', short: 'P+', grupo: 'Video' },
+  { name: 'Netflix', color: '#E50914', short: 'N', logo: 'netflix', grupo: 'Video' },
+  { name: 'Disney+', color: '#113CCF', short: 'D+', logo: 'disney', grupo: 'Video' },
+  { name: 'Max', color: '#002BE7', short: 'M', logo: 'hbo-max', grupo: 'Video' },
+  { name: 'Prime Video', color: '#00A8E1', short: 'PV', logo: 'prime-video', grupo: 'Video' },
+  { name: 'YouTube Premium', color: '#FF0000', short: 'YT', logo: 'youtube', grupo: 'Video' },
+  { name: 'Crunchyroll', color: '#F47521', short: 'CR', logo: 'crunchyroll', grupo: 'Video' },
+  { name: 'Paramount+', color: '#0064FF', short: 'P+', logo: 'paramount', grupo: 'Video' },
+  { name: 'Apple TV+', color: '#2A2A2E', short: 'TV', logo: 'apple', grupo: 'Video' },
   { name: 'Win Sports+', color: '#E30613', short: 'W+', grupo: 'Video' },
 
   // ---- Música --------------------------------------------------------------
-  { name: 'Spotify', color: '#1DB954', short: 'S', grupo: 'Música' },
-  { name: 'Apple Music', color: '#FA243C', short: 'AM', grupo: 'Música' },
-  { name: 'YouTube Music', color: '#FF0000', short: 'YM', grupo: 'Música' },
+  { name: 'Spotify', color: '#1DB954', short: 'S', logo: 'spotify', grupo: 'Música' },
+  { name: 'Apple Music', color: '#FA243C', short: 'AM', logo: 'apple', grupo: 'Música' },
+  { name: 'YouTube Music', color: '#FF0000', short: 'YM', logo: 'youtube', grupo: 'Música' },
+  { name: 'Audible', color: '#F8991C', short: 'AU', logo: 'amazon', grupo: 'Música' },
   { name: 'Deezer', color: '#A238FF', short: 'DZ', grupo: 'Música' },
-  { name: 'Audible', color: '#F8991C', fg: '#1C1C1E', short: 'AU', grupo: 'Música' },
 
   // ---- Nube y trabajo ------------------------------------------------------
-  { name: 'iCloud+', color: '#3693F3', short: 'iC', grupo: 'Nube y trabajo' },
-  { name: 'Google One', color: '#4285F4', short: 'G1', grupo: 'Nube y trabajo' },
-  { name: 'Microsoft 365', color: '#F25022', short: 'M365', grupo: 'Nube y trabajo' },
-  { name: 'Dropbox', color: '#0061FF', short: 'DB', grupo: 'Nube y trabajo' },
-  { name: 'Notion', color: '#1C1C1E', short: 'N', grupo: 'Nube y trabajo' },
-  { name: 'Canva', color: '#00C4CC', short: 'C', grupo: 'Nube y trabajo' },
+  { name: 'iCloud+', color: '#3693F3', short: 'iC', logo: 'icloud', grupo: 'Nube y trabajo' },
+  { name: 'Google One', color: '#4285F4', short: 'G1', logo: 'google-one', grupo: 'Nube y trabajo' },
+  { name: 'Google Drive', color: '#1FA463', short: 'GD', logo: 'google-drive', grupo: 'Nube y trabajo' },
+  { name: 'Google Fotos', color: '#4285F4', short: 'GF', logo: 'google-photos', grupo: 'Nube y trabajo' },
+  { name: 'Google Workspace', color: '#EA4335', short: 'GW', logo: 'gmail', grupo: 'Nube y trabajo' },
+  { name: 'Microsoft 365', color: '#F25022', short: 'M365', logo: 'microsoft', grupo: 'Nube y trabajo' },
+  { name: 'Dropbox', color: '#0061FF', short: 'DB', logo: 'dropbox', grupo: 'Nube y trabajo' },
+  { name: 'Notion', color: '#2A2A2E', short: 'N', logo: 'notion', grupo: 'Nube y trabajo' },
+  { name: 'Canva', color: '#00C4CC', short: 'C', logo: 'canva', grupo: 'Nube y trabajo' },
+  { name: 'CapCut', color: '#2A2A2E', short: 'CC', logo: 'capcut', grupo: 'Nube y trabajo' },
+  { name: 'Figma', color: '#A259FF', short: 'F', logo: 'figma', grupo: 'Nube y trabajo' },
+  { name: 'Slack', color: '#4A154B', short: 'SL', logo: 'slack', grupo: 'Nube y trabajo' },
+  { name: 'GitHub', color: '#24292F', short: 'GH', logo: 'github', grupo: 'Nube y trabajo' },
+  { name: 'Trello', color: '#0052CC', short: 'TR', logo: 'trello', grupo: 'Nube y trabajo' },
+  { name: 'LinkedIn Premium', color: '#0A66C2', short: 'in', logo: 'linkedin', grupo: 'Nube y trabajo' },
   { name: 'Adobe', color: '#EC1C24', short: 'A', grupo: 'Nube y trabajo' },
-  { name: 'CapCut', color: '#B9B9BE', fg: '#1C1C1E', short: 'CC', grupo: 'Nube y trabajo' },
-  { name: 'LinkedIn Premium', color: '#0A66C2', short: 'in', grupo: 'Nube y trabajo' },
 
   // ---- Juegos --------------------------------------------------------------
-  { name: 'Xbox Game Pass', color: '#107C10', short: 'XB', grupo: 'Juegos' },
-  { name: 'PlayStation Plus', color: '#0070D1', short: 'PS', grupo: 'Juegos' },
-  { name: 'Nintendo Switch Online', color: '#E60012', short: 'NS', grupo: 'Juegos' },
-  { name: 'Discord Nitro', color: '#5865F2', short: 'DC', grupo: 'Juegos' },
+  { name: 'Xbox Game Pass', color: '#107C10', short: 'XB', logo: 'xbox', grupo: 'Juegos' },
+  { name: 'PlayStation Plus', color: '#0070D1', short: 'PS', logo: 'playstation', grupo: 'Juegos' },
+  { name: 'Nintendo Switch Online', color: '#E60012', short: 'NS', logo: 'nintendo', grupo: 'Juegos' },
+  { name: 'Discord Nitro', color: '#5865F2', short: 'DC', logo: 'discord', grupo: 'Juegos' },
+  { name: 'GeForce Now', color: '#76B900', fg: '#1C1C1E', short: 'GFN', logo: 'nvidia', grupo: 'Juegos' },
+  { name: 'Steam', color: '#1B2838', short: 'ST', logo: 'steam', grupo: 'Juegos' },
+  { name: 'Epic Games', color: '#2A2A2E', short: 'EG', logo: 'epic-games', grupo: 'Juegos' },
   { name: 'Twitch', color: '#9146FF', short: 'TW', grupo: 'Juegos' },
 
   // ---- IA ------------------------------------------------------------------
-  { name: 'ChatGPT Plus', color: '#10A37F', short: 'GPT', grupo: 'IA' },
-  { name: 'Claude', color: '#D97757', short: 'C', grupo: 'IA' },
-  { name: 'Gemini', color: '#8E7CFF', short: 'G', grupo: 'IA' },
+  { name: 'ChatGPT Plus', color: '#10A37F', short: 'GPT', logo: 'openai', grupo: 'IA' },
+  { name: 'Claude', color: '#D97757', short: 'C', logo: 'claude', grupo: 'IA' },
+  { name: 'Google Gemini', color: '#4285F4', short: 'G', logo: 'google', grupo: 'IA' },
   { name: 'Perplexity', color: '#20808D', short: 'PX', grupo: 'IA' },
 
   // ---- Otros ---------------------------------------------------------------
+  { name: 'Amazon Prime', color: '#FF9900', fg: '#1C1C1E', short: 'AP', logo: 'amazon', grupo: 'Otros' },
+  { name: 'Apple One', color: '#2A2A2E', short: 'A1', logo: 'apple', grupo: 'Otros' },
+  { name: 'Rappi Pro', color: '#FF441F', short: 'RP', logo: 'rappi', grupo: 'Otros' },
+  { name: 'Uber One', color: '#2A2A2E', short: 'U1', logo: 'uber', grupo: 'Otros' },
+  { name: 'Uber Eats', color: '#06C167', fg: '#1C1C1E', short: 'UE', logo: 'uber-eats', grupo: 'Otros' },
+  { name: 'Airbnb', color: '#FF5A5F', short: 'AB', logo: 'airbnb', grupo: 'Otros' },
+  { name: 'Booking.com', color: '#003580', short: 'BK', logo: 'booking', grupo: 'Otros' },
+  { name: 'WhatsApp', color: '#25D366', fg: '#1C1C1E', short: 'WA', logo: 'whatsapp', grupo: 'Otros' },
+  { name: 'Telegram Premium', color: '#229ED9', short: 'TG', logo: 'telegram', grupo: 'Otros' },
+  { name: 'X Premium', color: '#16181C', short: 'X', logo: 'x', grupo: 'Otros' },
+  { name: 'Reddit Premium', color: '#FF4500', short: 'RD', logo: 'reddit', grupo: 'Otros' },
+  { name: 'Instagram', color: '#E1306C', short: 'IG', logo: 'instagram', grupo: 'Otros' },
+  { name: 'TikTok', color: '#2A2A2E', short: 'TT', logo: 'tiktok', grupo: 'Otros' },
+  { name: 'Virgin Mobile', color: '#E10A0A', short: 'VM', logo: 'virgin-mobile', grupo: 'Otros' },
   { name: 'Duolingo', color: '#58CC02', fg: '#1C1C1E', short: 'DL', grupo: 'Otros' },
   { name: 'Truecaller', color: '#0A84FF', short: 'TC', grupo: 'Otros' },
-  { name: 'WhatsApp', color: '#25D366', fg: '#1C1C1E', short: 'WA', grupo: 'Otros' },
   { name: 'Strava', color: '#FC4C02', short: 'ST', grupo: 'Otros' },
   { name: 'Gimnasio', color: '#FF9F0A', fg: '#1C1C1E', short: 'GYM', grupo: 'Otros' },
   { name: 'Seguro', color: '#5E5CE6', short: 'SG', grupo: 'Otros' },
@@ -285,6 +310,9 @@ export function serviciosPorGrupo() {
  */
 export const colorDe = (sub: Pick<Subscription, 'name' | 'color'>) =>
   sub.color || servicioPorNombre(sub.name)?.color || '#8E8E93'
+
+/** El archivo del logotipo, si el servicio está en el catálogo y tiene uno. */
+export const logoDe = (name: string) => servicioPorNombre(name)?.logo
 
 /** El monograma de la insignia: el del catálogo, o las iniciales del nombre. */
 export function monograma(name: string): string {

@@ -21,9 +21,16 @@ export const COLORES_SUB = [
   '#0A84FF', '#E50914', '#1DB954', '#FF9F0A', '#BF5AF2', '#10A37F', '#FF375F', '#8E8E93',
 ]
 
-/** Los que más se repiten, para no tener que teclearlos. */
-const SUGERIDOS = ['Netflix', 'Spotify', 'iCloud+', 'YouTube Premium', 'Disney+', 'Max',
-  'ChatGPT Plus', 'Prime Video', 'Gimnasio', 'Celular']
+/**
+ * Los que más se repiten, para no tener que teclearlos.
+ *
+ * Ordenados por probabilidad, no alfabéticamente: la tira se recorre de
+ * izquierda a derecha y lo que casi nadie tiene estorba en la primera pantalla.
+ * Los que no están se escriben a mano, que es para lo que está el campo.
+ */
+const SUGERIDOS = ['Netflix', 'Spotify', 'YouTube Premium', 'iCloud+', 'Disney+', 'Max',
+  'Prime Video', 'ChatGPT Plus', 'Claude', 'Microsoft 365', 'Google One', 'Canva',
+  'Xbox Game Pass', 'PlayStation Plus', 'Crunchyroll', 'Rappi Pro', 'Gimnasio', 'Celular']
 
 /**
  * Alta y edición de una suscripción.
