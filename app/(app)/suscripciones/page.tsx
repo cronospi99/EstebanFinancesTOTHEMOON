@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CalendarClock, CreditCard, Plus, Repeat, TriangleAlert } from 'lucide-react'
+import { Check, CreditCard, Plus, Repeat, Trash2, TriangleAlert, Wallet } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { ScrollStrip } from '@/components/ui/scroll-strip'
 import { ServiceBadge } from '@/components/subscriptions/service-badge'
@@ -11,7 +11,9 @@ import { SubscriptionSheet } from '@/components/subscriptions/subscription-sheet
 import { SubscriptionsSummary } from '@/components/subscriptions/subscriptions-summary'
 import { cuandoCobra, fechaCobro, mesEnCurso } from '@/lib/suscripciones'
 import { formatMoney } from '@/lib/format'
-import { useFinance, useSuscripciones, useSuscripcionesResumen, type SubConCobro } from '@/lib/store'
+import {
+  useCobrosPendientes, useFinance, useSuscripciones, useSuscripcionesResumen, type SubConCobro,
+} from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 import type { Subscription } from '@/lib/types'
 
@@ -46,7 +48,8 @@ const FILTROS: { value: Filtro; label: string; cumple: (s: SubConCobro) => boole
 export default function SubscriptionsPage() {
   const items = useSuscripciones()
   const resumen = useSuscripcionesResumen()
-  const { suscripcionesError, synced, registrarCobro } = useFinance()
+  const { accounts, suscripcionesError, synced, confirmarCobro, deleteTransaction } = useFinance()
+  const pendientes = useCobrosPendientes()
 
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -57,7 +60,6 @@ export default function SubscriptionsPage() {
     () => items.filter(FILTROS.find((f) => f.value === filtro)!.cumple),
     [items, filtro],
   )
-  const deHoy = useMemo(() => items.filter((i) => i.cobraHoy), [items])
   /** Los próximos cobros, para el carril del escritorio. */
   const proximos = useMemo(
     () => items.filter((i) => !i.sub.cancelled && !i.cobraHoy).slice(0, 6),
@@ -145,36 +147,54 @@ export default function SubscriptionsPage() {
             })}
           </ScrollStrip>
 
-          {/* ---- Los que cobran hoy ----------------------------------------- */}
-          {deHoy.length > 0 && (
+          {/* ---- Cobros anotados que faltan por confirmar -------------------- */}
+          {pendientes.length > 0 && (
             <Card className="mb-4 p-4">
               <p className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold text-label">
-                <CalendarClock size={15} className="text-accent-orange" />
-                {deHoy.length === 1 ? 'Hoy te cobran una' : `Hoy te cobran ${deHoy.length}`}
+                <Wallet size={15} className="text-accent-orange" />
+                {pendientes.length === 1
+                  ? 'Un cobro anotado, sin confirmar'
+                  : `${pendientes.length} cobros anotados, sin confirmar`}
               </p>
               <p className="mb-3 text-[12px] leading-relaxed text-label-secondary">
-                La app no inventa movimientos que el banco no ha hecho. Cuando
-                te llegue el mensaje, anótalo aquí y sale de su cuenta.
+                Ya salieron de su cuenta, porque el cobro pasa igual lo apunte
+                alguien o no. Confirma el que de verdad te cobraron; si alguno no
+                llegó, bórralo y el saldo vuelve.
               </p>
               <ul className="space-y-2">
-                {deHoy.map((i) => (
-                  <li key={i.sub.id} className="flex items-center gap-2.5">
-                    <ServiceBadge sub={i.sub} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-medium text-label">{i.sub.name}</span>
-                      <span className="tnum block text-[11px] text-label-tertiary">
-                        {fechaCobro(i.cobro)} · {formatMoney(i.sub.amount, i.sub.currency)}
+                {pendientes.map(({ tx, sub }) => {
+                  const cuenta = accounts.find((a) => a.id === tx.accountId)
+                  return (
+                    <li key={tx.id} className="flex items-center gap-2.5">
+                      <ServiceBadge sub={sub ?? { name: tx.description, color: '' }} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[14px] font-medium text-label">
+                          {tx.description}
+                        </span>
+                        <span className="tnum block truncate text-[11px] text-label-tertiary">
+                          {fechaCobro(tx.occurredAt.slice(0, 10))}
+                          {' · '}{formatMoney(tx.amount, tx.currency)}
+                          {cuenta && ` · ${cuenta.name}`}
+                        </span>
                       </span>
-                    </span>
-                    <button
-                      onClick={() => { haptic([14, 40, 22]); registrarCobro(i.sub.id) }}
-                      className="press shrink-0 rounded-xl border border-hairline bg-fill-1 px-3 py-1.5
-                                 text-[13px] font-medium text-accent-blue"
-                    >
-                      {i.sub.accountId ? 'Anotar' : 'Listo'}
-                    </button>
-                  </li>
-                ))}
+                      <button
+                        onClick={() => { haptic([14, 40, 22]); confirmarCobro(tx.id) }}
+                        aria-label={`Confirmar el cobro de ${tx.description}`}
+                        className="press flex shrink-0 items-center gap-1 rounded-xl border border-hairline
+                                   bg-fill-1 px-3 py-1.5 text-[13px] font-medium text-accent-green"
+                      >
+                        <Check size={14} strokeWidth={2.8} /> Sí
+                      </button>
+                      <button
+                        onClick={() => { haptic([16, 30]); deleteTransaction(tx.id) }}
+                        aria-label={`Borrar el cobro de ${tx.description}`}
+                        className="press-icon shrink-0 p-1.5 text-label-tertiary"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             </Card>
           )}
