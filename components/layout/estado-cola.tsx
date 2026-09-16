@@ -30,7 +30,7 @@ export function EstadoCola() {
           className="press fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-pill
                      border border-hairline bg-chrome px-3.5 py-2 text-[12.5px] text-label-secondary
                      shadow-lg backdrop-blur-2xl lg:left-[calc(50%+124px)]"
-          style={{ bottom: 'calc(var(--nav-h) + var(--sab) + 12px)' }}
+          style={{ bottom: 'calc(var(--nav-h) + var(--nav-pb) + 12px)' }}
         >
           <CloudOff size={13} className="shrink-0 text-accent-orange" />
           <span>

@@ -38,7 +38,14 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
         // clase, y el botón saltaría media anchura a la derecha al tocarlo.
         // Con `x` en el style, Framer compone traslación y escala en el mismo
         // transform.
-        style={{ bottom: 'calc(var(--sab) + 22px)', x: '-50%' }}
+        //
+        // La altura se mide contra la barra y no contra el inset: alto de la
+        // barra, más los 14 que el botón asoma por encima, menos sus propios
+        // 56. Así el botón sigue asomando lo mismo si la barra cambia de alto.
+        style={{
+          bottom: 'calc(var(--nav-h) + var(--nav-pb) + 14px - 56px)',
+          x: '-50%',
+        }}
       >
         <Plus size={26} strokeWidth={2.6} />
       </motion.button>
@@ -49,8 +56,13 @@ export function BottomNav({ onQuickAdd }: { onQuickAdd: () => void }) {
           se despegaba y flotaba a media pantalla durante el impulso del dedo.
           Ver el comentario del marco en `app-shell.tsx`. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-chrome backdrop-blur-2xl pb-safe"
-        style={{ height: 'calc(var(--nav-h) + var(--sab))' }}
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-chrome backdrop-blur-2xl"
+        // El hueco de abajo es `--nav-pb`, no el inset entero: ver el porqué
+        // en `globals.css`, junto a la variable.
+        style={{
+          height: 'calc(var(--nav-h) + var(--nav-pb))',
+          paddingBottom: 'var(--nav-pb)',
+        }}
       >
         <div className="mx-auto grid h-[var(--nav-h)] max-w-md grid-cols-7 items-center px-1">
           {TABS.map((tab, i) => {
