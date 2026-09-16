@@ -373,13 +373,29 @@ mensual lo calcula la app: 219.000 al año son 18.250 al mes, y esa es la cuenta
 que nadie hace. Es lo que permite comparar una anual con una mensual y con lo
 que uno gana.
 
-**No genera movimientos por su cuenta.** La app no corre en un servidor que
-pueda despertarse el día 19 a cobrar, y un movimiento inventado sin que el banco
-lo haya hecho deja el saldo mintiendo. El día que toca, la suscripción sale
-arriba con un botón para anotarlo: crea el gasto en su cuenta y adelanta el
-ciclo. Al día siguiente la fecha ya se ha corrido sola, así que la app no puede
-saber si un cobro de la semana pasada se anotó o no — y por eso no lo pregunta:
-lo que ofrece es el cobro de hoy, que es cuando llega el mensaje del banco.
+**El cobro se anota solo, y se confirma con un toque.** El día que toca, la app
+crea el gasto en la cuenta de la suscripción y lo marca como sin confirmar.
+Cuenta en el saldo desde el primer momento —el cobro pasa igual lo apunte
+alguien o no, y un saldo que ignora lo que el banco ya se llevó no sirve para
+decidir nada— y arriba de la pantalla queda esperando un «Sí» que diga que
+llegó. Si no llegó, se borra y el saldo vuelve. En la lista de movimientos lleva
+su distintivo de «sin confirmar» hasta que alguien lo diga.
+
+Corre al abrir la app y no en un servidor, porque no hay servidor: esto vive en
+el teléfono. Eso se nota —los cobros aparecen cuando uno entra, no a
+medianoche— y obliga a dos defensas contra anotar dos veces lo mismo: el ancla
+se adelanta en cuanto se anota, y antes de crear nada se comprueba que no exista
+ya un movimiento de esa suscripción ese mismo día, que es lo que salva el caso
+de dos teléfonos con la misma cuenta. Quien vuelve tras meses fuera recupera los
+cobros que se perdió, hasta un tope de doce por suscripción: anotar cincuenta y
+dos de golpe no es recuperar el historial, es llenar la pantalla de ruido.
+
+**El plan del celular pregunta por la operadora.** Es la suscripción que todo el
+mundo tiene y la única que nadie llama suscripción. La ficha de «plan de
+celular» no rellena un nombre genérico: abre la lista de operadoras —Claro,
+Movistar, Tigo, WOM, Virgin, ETB y las demás— y lo que se guarda es la marca,
+con su logotipo y su color. El recibo lo manda Claro, no «Celular», y dentro de
+un año lo que uno recuerda es de quién era la línea.
 
 **Las pruebas y las compartidas tienen su propia cuenta.** Una prueba gratis no
 suma al gasto, pero sí a «podrías ahorrar»: es lo que te quitas de encima si la
@@ -406,10 +422,11 @@ catálogo cae al monograma, sobre la misma baldosa, porque «el parqueadero» no
 a estar en ningún catálogo y un hueco vacío se leería como una imagen que no
 cargó.
 
-En el móvil se llega desde **Gastos**, arriba del todo, con un acceso que enseña
-lo que suman al mes y cuál es el próximo cobro; la barra de abajo ya va llena
-con seis destinos y el botón de captura, y un séptimo dejaría las etiquetas en
-un tamaño que no se lee. En escritorio tiene su sitio en la barra lateral.
+Se llega desde **Gastos**, arriba del todo, con un acceso que enseña lo que
+suman al mes y cuál es el próximo cobro; la barra de abajo ya va llena con seis
+destinos y el botón de captura, y un séptimo dejaría las etiquetas en un tamaño
+que no se lee. En escritorio tiene además su sitio en la barra lateral. En el
+resumen no está a propósito: es una pantalla de llegada y ya lleva bastante.
 
 Ese acceso **se enseña siempre, también sin ninguna suscripción registrada**.
 Antes se escondía cuando la lista estaba vacía, y eso dejaba la función entera

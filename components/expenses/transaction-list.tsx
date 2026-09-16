@@ -112,7 +112,18 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                     >
                       <CategoryIcon icon={cat.icon} color={cat.color} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] font-medium text-label">{tx.description}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-[15px] font-medium text-label">{tx.description}</span>
+                          {/* Lo anotó la app por una suscripción y nadie ha dicho
+                              todavía que llegara. Cuenta en el saldo igual, pero
+                              en la lista tiene que distinguirse de lo que
+                              apuntó una persona. */}
+                          {tx.pending && (
+                            <span className="shrink-0 rounded-pill bg-accent-orange/15 px-1.5 py-px text-[10px] font-semibold text-accent-orange">
+                              Sin confirmar
+                            </span>
+                          )}
+                        </div>
                         <div className="truncate text-[12px] text-label-tertiary">
                           {cat.name} · {account?.name ?? 'Cuenta'}
                         </div>

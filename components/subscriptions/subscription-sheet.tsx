@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Ban, Minus, Plus, Trash2, Undo2 } from 'lucide-react'
+import { Ban, Minus, Plus, Smartphone, Trash2, Undo2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { MoneyInput } from '@/components/ui/money-input'
 import { Segmented } from '@/components/ui/segmented'
@@ -9,7 +9,7 @@ import { ScrollStrip } from '@/components/ui/scroll-strip'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { ServiceBadge } from './service-badge'
 import {
-  CICLOS, SERVICIOS, colorDe, costeAnual, costeMensual, servicioPorNombre,
+  CICLOS, OPERADORAS, SERVICIOS, colorDe, costeAnual, costeMensual, servicioPorNombre,
 } from '@/lib/suscripciones'
 import { formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
@@ -30,7 +30,17 @@ export const COLORES_SUB = [
  */
 const SUGERIDOS = ['Netflix', 'Spotify', 'YouTube Premium', 'iCloud+', 'Disney+', 'Max',
   'Prime Video', 'ChatGPT Plus', 'Claude', 'Microsoft 365', 'Google One', 'Canva',
-  'Xbox Game Pass', 'PlayStation Plus', 'Crunchyroll', 'Rappi Pro', 'Gimnasio', 'Celular']
+  'Xbox Game Pass', 'PlayStation Plus', 'Crunchyroll', 'Rappi Pro', 'Gimnasio']
+
+/**
+ * La ficha del plan del celular, que no es un servicio sino una pregunta.
+ *
+ * El recibo del celular lo manda Claro o Movistar, no «Celular», y dentro de un
+ * año lo que uno recuerda es de quién era la línea. Así que esta ficha no
+ * rellena el nombre: abre el selector de operadoras y lo que se guarda es la
+ * marca, con su logotipo y su color.
+ */
+const CELULAR = 'Plan de celular'
 
 /**
  * Alta y edición de una suscripción.
@@ -65,6 +75,8 @@ export function SubscriptionSheet({
   const [color, setColor] = useState(COLORES_SUB[0])
   /** El color se sigue solo al elegir servicio hasta que alguien lo toca. */
   const [colorAMano, setColorAMano] = useState(false)
+  /** Si está abierto el selector de operadoras. */
+  const [eligiendoOperadora, setEligiendoOperadora] = useState(false)
   const [confirmarBorrado, setConfirmarBorrado] = useState(false)
 
   // Se recargan al abrir: la hoja se reutiliza entre suscripciones y entre
@@ -83,12 +95,16 @@ export function SubscriptionSheet({
     setNote(sub?.note ?? '')
     setColor(sub?.color ?? COLORES_SUB[indice % COLORES_SUB.length])
     setColorAMano(Boolean(sub))
+    // Al editar una línea de celular, el selector viene abierto: es el campo
+    // que se vuelve a tocar, no el nombre.
+    setEligiendoOperadora(servicioPorNombre(sub?.name ?? '')?.grupo === 'Telefonía')
     setConfirmarBorrado(false)
   }, [open, sub, indice])
 
   /** Elegir del catálogo rellena el nombre y, si nadie lo tocó, el color. */
   const elegirServicio = (nombre: string) => {
     haptic(6)
+    setEligiendoOperadora(false)
     setName(nombre)
     const conocido = servicioPorNombre(nombre)
     if (conocido && !colorAMano) setColor(conocido.color)
@@ -151,7 +167,48 @@ export function SubscriptionSheet({
               </button>
             )
           })}
+
+          {/* La última ficha no es un servicio: abre la lista de operadoras. */}
+          <button
+            onClick={() => { haptic(6); setEligiendoOperadora((v) => !v) }}
+            aria-expanded={eligiendoOperadora}
+            className={cn(
+              'press flex shrink-0 items-center gap-2 rounded-xl border py-1.5 pl-1.5 pr-3 transition-colors',
+              eligiendoOperadora ? 'border-transparent bg-fill-4' : 'border-hairline',
+            )}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#16161A] text-white ring-1 ring-white/10">
+              <Smartphone size={17} strokeWidth={2.2} />
+            </span>
+            <span className="text-[13px] font-medium text-label">{CELULAR}</span>
+          </button>
         </ScrollStrip>
+
+        {eligiendoOperadora && (
+          <div className="mb-2 rounded-xl border border-hairline bg-fill-1 p-3">
+            <p className="mb-2 px-1 text-[12px] text-label-secondary">¿Con cuál operadora?</p>
+            <div className="flex flex-wrap gap-2">
+              {OPERADORAS.map((o) => (
+                <button
+                  key={o.name}
+                  onClick={() => {
+                    haptic(6)
+                    setName(o.name)
+                    if (!colorAMano) setColor(o.color)
+                  }}
+                  className={cn(
+                    'press flex items-center gap-2 rounded-xl border py-1.5 pl-1.5 pr-3 transition-colors',
+                    name === o.name ? 'border-transparent bg-fill-4' : 'border-hairline',
+                  )}
+                >
+                  <ServiceBadge sub={{ name: o.name, color: o.color }} size="sm" />
+                  <span className="text-[13px] font-medium text-label">{o.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <input
           value={name} onChange={(e) => setName(e.target.value)}
           placeholder="O escríbelo: el gimnasio, el parqueadero…" autoFocus={!sub}
@@ -245,8 +302,8 @@ export function SubscriptionSheet({
         </ScrollStrip>
         <p className="mb-4 px-1 text-[12px] leading-relaxed text-label-tertiary">
           {cuenta
-            ? 'Al llegar el cobro podrás anotarlo de un toque y saldrá de esta cuenta.'
-            : 'Opcional. Sin cuenta la suscripción cuenta igual en los totales, pero el cobro habrá que anotarlo a mano.'}
+            ? 'El día que toque, el cobro se anota solo en esta cuenta y solo tendrás que confirmarlo.'
+            : 'Sin cuenta la suscripción cuenta igual en los totales, pero el cobro no se anota solo: no hay de dónde sacarlo.'}
         </p>
 
         {/* ---- Prueba gratis ------------------------------------------------ */}

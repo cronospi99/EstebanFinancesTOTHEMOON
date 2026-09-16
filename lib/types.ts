@@ -71,6 +71,23 @@ export interface Transaction {
   occurredAt: string
   /** Moneda en la que se registró; por defecto la de la cuenta. */
   currency?: Currency
+  /**
+   * La suscripción que lo generó, si lo generó una.
+   *
+   * Es lo que permite saber que un gasto lo puso la app y no una persona, y
+   * con ello no volver a ponerlo dos veces por el mismo cobro.
+   */
+  subscriptionId?: string
+  /**
+   * Anotado por la app y todavía sin confirmar por su dueño.
+   *
+   * Cuenta en el saldo desde el primer momento —el cobro de una suscripción va
+   * a pasar, y un saldo que ignora lo que ya está cobrado no sirve para
+   * decidir nada—, pero se marca hasta que alguien diga que sí llegó. Los dos
+   * fallos posibles son distintos: uno se arregla con un toque y el otro, no
+   * anotarlo, se arregla cuando el banco ya cobró y nadie se acuerda.
+   */
+  pending?: boolean
 }
 
 export interface Budget {

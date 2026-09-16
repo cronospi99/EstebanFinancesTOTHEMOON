@@ -209,7 +209,7 @@ export interface Servicio {
   short?: string
   /** Archivo en /public/services, sin extensión. Si falta, se pinta el monograma. */
   logo?: string
-  grupo: 'Video' | 'Música' | 'Nube y trabajo' | 'Juegos' | 'IA' | 'Otros'
+  grupo: 'Video' | 'Música' | 'Nube y trabajo' | 'Juegos' | 'IA' | 'Telefonía' | 'Otros'
 }
 
 export const SERVICIOS: Servicio[] = [
@@ -265,6 +265,34 @@ export const SERVICIOS: Servicio[] = [
   { name: 'Google Gemini', color: '#4285F4', short: 'G', logo: 'google', grupo: 'IA' },
   { name: 'Perplexity', color: '#20808D', short: 'PX', grupo: 'IA' },
 
+  /* ---- Telefonía ----------------------------------------------------------
+   * El plan del celular es la suscripción que todo el mundo tiene y la única
+   * que nadie llama suscripción. Va con la operadora por nombre y no como un
+   * «Celular» genérico: el recibo lo manda Claro o Movistar, y dentro de un
+   * año lo que uno recuerda es de quién era la línea, no que era «celular».
+   */
+  { name: 'Claro', color: '#DA291C', short: 'CL', logo: 'claro', grupo: 'Telefonía' },
+  { name: 'Movistar', color: '#019DF4', short: 'MV', logo: 'movistar', grupo: 'Telefonía' },
+  { name: 'Tigo', color: '#0033A1', short: 'TG', logo: 'tigo', grupo: 'Telefonía' },
+  { name: 'WOM', color: '#7D00BE', short: 'WM', logo: 'wom', grupo: 'Telefonía' },
+  { name: 'Virgin Mobile', color: '#E10A0A', short: 'VM', logo: 'virgin-mobile', grupo: 'Telefonía' },
+  { name: 'ETB', color: '#6D2077', short: 'ETB', logo: 'etb', grupo: 'Telefonía' },
+  { name: 'Éxito móvil', color: '#FFE000', fg: '#1C1C1E', short: 'EX', logo: 'exito-movil', grupo: 'Telefonía' },
+  { name: 'Flash Mobile', color: '#E4002B', short: 'FM', logo: 'flash-mobile', grupo: 'Telefonía' },
+  { name: 'uff móvil', color: '#00B2A9', short: 'UF', logo: 'uff', grupo: 'Telefonía' },
+  { name: 'Tuya móvil', color: '#FF6B00', fg: '#1C1C1E', short: 'TY', logo: 'tuya-movil', grupo: 'Telefonía' },
+  { name: 'Avantel', color: '#0072CE', short: 'AV', logo: 'avantel', grupo: 'Telefonía' },
+  { name: 'DIRECTV', color: '#00A0DF', short: 'DTV', logo: 'directv', grupo: 'Telefonía' },
+  { name: 'AT&T', color: '#009FDB', short: 'ATT', logo: 'att', grupo: 'Telefonía' },
+  { name: 'T-Mobile', color: '#E20074', short: 'TM', logo: 't-mobile', grupo: 'Telefonía' },
+  { name: 'Entel', color: '#0033A0', short: 'EN', logo: 'entel', grupo: 'Telefonía' },
+  { name: 'Bitel', color: '#E30613', short: 'BT', logo: 'bitel', grupo: 'Telefonía' },
+  { name: 'Personal', color: '#00A9E0', short: 'PE', logo: 'personal', grupo: 'Telefonía' },
+  { name: 'Telcel', color: '#1B3C8C', short: 'TC', logo: 'telcel', grupo: 'Telefonía' },
+  { name: 'O2', color: '#0019A5', short: 'O2', logo: 'o2', grupo: 'Telefonía' },
+  { name: 'Orange', color: '#FF7900', fg: '#1C1C1E', short: 'OR', logo: 'orange', grupo: 'Telefonía' },
+  { name: 'eSIM', color: '#48484A', short: 'SIM', logo: 'esim', grupo: 'Telefonía' },
+
   // ---- Otros ---------------------------------------------------------------
   { name: 'Amazon Prime', color: '#FF9900', fg: '#1C1C1E', short: 'AP', logo: 'amazon', grupo: 'Otros' },
   { name: 'Apple One', color: '#2A2A2E', short: 'A1', logo: 'apple', grupo: 'Otros' },
@@ -285,7 +313,6 @@ export const SERVICIOS: Servicio[] = [
   { name: 'Strava', color: '#FC4C02', short: 'ST', grupo: 'Otros' },
   { name: 'Gimnasio', color: '#FF9F0A', fg: '#1C1C1E', short: 'GYM', grupo: 'Otros' },
   { name: 'Seguro', color: '#5E5CE6', short: 'SG', grupo: 'Otros' },
-  { name: 'Celular', color: '#64D2FF', fg: '#1C1C1E', short: 'CEL', grupo: 'Otros' },
   { name: 'Internet', color: '#BF5AF2', short: 'NET', grupo: 'Otros' },
 ]
 
@@ -310,6 +337,9 @@ export function serviciosPorGrupo() {
  */
 export const colorDe = (sub: Pick<Subscription, 'name' | 'color'>) =>
   sub.color || servicioPorNombre(sub.name)?.color || '#8E8E93'
+
+/** Las operadoras, para el selector que aparece al elegir el plan del celular. */
+export const OPERADORAS = SERVICIOS.filter((s) => s.grupo === 'Telefonía')
 
 /** El archivo del logotipo, si el servicio está en el catálogo y tiene uno. */
 export const logoDe = (name: string) => servicioPorNombre(name)?.logo
