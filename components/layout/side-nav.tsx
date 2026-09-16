@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChartPie, LayoutGrid, Plus, Repeat, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
+import { Activity, ChartPie, LayoutGrid, Plus, Repeat, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
 import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +10,9 @@ const TABS = [
   { href: '/', label: 'Resumen', icon: LayoutGrid },
   { href: '/gastos', label: 'Gastos', icon: ChartPie },
   { href: '/cuentas', label: 'Cuentas', icon: Wallet },
+  // Salud comparte el motivo de las suscripciones: en escritorio sobra alto en
+  // la lateral y tiene su sitio; en el móvil se llega desde el resumen.
+  { href: '/salud', label: 'Salud', icon: Activity },
   // En escritorio sobra alto en la lateral, así que las suscripciones tienen
   // su sitio propio. En el móvil, donde la barra de abajo ya va llena, se
   // llega a ellas desde Gastos.

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import {
   DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_DEBTS, DEMO_DEBT_PAYMENTS, DEMO_GOALS,
-  DEMO_HOLDINGS, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
+  DEMO_HOLDINGS, DEMO_INGRESOS, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
 } from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
@@ -17,10 +17,18 @@ import { cargarZona, diaEn, hoyEnZona, instanteEnDia, sumarDias } from './zona'
 import { monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
+import { useTrm, type TrmState } from './use-trm'
 import { useQuotes } from './use-quotes'
+import { contar as contarCola, sincronizarCola, suscribirCola, vigilarRed } from './cola'
+import { avisosPendientes, type Aviso } from './avisos'
+import { detectarAnomalias, leerDescartadas, type Anomalia } from './anomalias'
+import { aporteMensual, calcularFire, cobradoPasivo, gastoMensualMedio, type Fire } from './fire'
+import { evaluarSalud, leerAjustes as leerGrupos, repartir, type Grupo, type Reparto, type SaludFinanciera } from './salud'
+import { proyectarLiquidez, saldoLiquido, type Horizonte, type Proyeccion } from './liquidez'
+import { avisoDe, cicloDe, deudaDe, recomendarTarjeta, type AvisoTarjeta, type Recomendacion } from './tarjetas'
 import type {
   Account, Budget, BudgetAllocation, Currency, Debt, DebtPayment, Goal, Holding, Pocket, Quote,
-  Settings, Subscription, Trade, Transaction,
+  RecurringIncome, Settings, Subscription, Trade, Transaction,
 } from './types'
 import { uid } from './utils'
 
@@ -42,8 +50,18 @@ interface State {
   debtPayments: DebtPayment[]
   /** Lo que se cobra solo: Netflix, el gimnasio, la nube. */
   subscriptions: Subscription[]
+  /** Lo que entra solo: el sueldo, el arriendo que cobras, el cliente fijo. */
+  recurringIncomes: RecurringIncome[]
   settings: Settings
 }
+
+/**
+ * Lo que puede traer un respaldo.
+ *
+ * Todo opcional: un archivo hecho antes de que existiera una tabla no la trae,
+ * y lo que falte se deja como está en vez de vaciarlo.
+ */
+export type RespaldoEntrante = Partial<State>
 
 /** Datos de ejemplo del Modo Demo. */
 const INITIAL: State = {
@@ -57,12 +75,14 @@ const INITIAL: State = {
   debts: DEMO_DEBTS,
   debtPayments: DEMO_DEBT_PAYMENTS,
   subscriptions: DEMO_SUBSCRIPTIONS,
+  recurringIncomes: DEMO_INGRESOS,
   settings: DEMO_SETTINGS,
 }
 
 const VACIO: State = {
   accounts: [], transactions: [], budgets: [], allocations: [],
-  holdings: [], goals: [], trades: [], debts: [], debtPayments: [], subscriptions: [], settings: {},
+  holdings: [], goals: [], trades: [], debts: [], debtPayments: [], subscriptions: [],
+  recurringIncomes: [], settings: {},
 }
 
 /**
@@ -258,6 +278,19 @@ interface FinanceContextValue extends State {
   /** Tasa USD→COP vigente, con su procedencia. rate 0 = no se conoce. */
   fxRate: number
   fx: FxState & { refresh: () => Promise<void>; setManual: (r: number | null) => void }
+  /**
+   * La TRM oficial del día. Convive con `fx` y no lo sustituye: una es el
+   * precio de mercado y la otra el dato con el que se declara y se cuadra con
+   * el banco. Ver `use-trm.ts`.
+   */
+  trm: TrmState & { refrescar: () => Promise<void> }
+  /**
+   * Escrituras que no han podido salir y esperan a que vuelva la red.
+   * Cero es lo normal. Ver `cola.ts`.
+   */
+  colaPendientes: number
+  /** Reintenta ahora mismo lo que quedó en la cola. */
+  sincronizarPendientes: () => Promise<void>
   /** Cotizaciones vivas de todas las posiciones, compartidas por toda la app. */
   quotes: Record<string, Quote>
   quotesLoading: boolean
@@ -307,6 +340,18 @@ interface FinanceContextValue extends State {
   deleteDebt: (id: string) => Promise<void>
   abonarDeuda: (a: Omit<DebtPayment, 'id'>) => Promise<void>
   deleteDebtPayment: (id: string) => Promise<void>
+  addIngreso: (i: Omit<RecurringIncome, 'id'>) => Promise<void>
+  updateIngreso: (id: string, patch: Partial<RecurringIncome>) => Promise<void>
+  deleteIngreso: (id: string) => Promise<void>
+  /** Preferencias de avisos. Lo que no venga en el parche se queda como está. */
+  guardarAjustes: (patch: Partial<Settings>) => Promise<void>
+  /**
+   * Vuelca un respaldo sobre la cuenta.
+   *
+   * Es lo que convierte el archivo JSON en un respaldo de verdad: sin esto
+   * sería una copia que no se puede devolver a ninguna parte.
+   */
+  restaurar: (datos: RespaldoEntrante) => Promise<{ ok: boolean; error?: string }>
   addSubscription: (sub: Omit<Subscription, 'id'>) => Promise<void>
   updateSubscription: (id: string, patch: Partial<Subscription>) => Promise<void>
   deleteSubscription: (id: string) => Promise<void>
@@ -355,6 +400,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [suscripcionesError, setSuscripcionesError] = useState<string | null>(null)
   const fx = useExchangeRate()
   const fxRate = fx.rate
+  const trm = useTrm()
+  // Cuántas escrituras esperan a que vuelva la red. Ver `cola.ts`.
+  const [colaPendientes, setColaPendientes] = useState(0)
 
   // Las cotizaciones se piden aquí y no en la pantalla de inversiones para que
   // el patrimonio del resumen use el valor de mercado real. Antes solo las
@@ -366,6 +414,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // clausura pero necesitan consultarlo (no para renderizar).
   const stateRef = useRef(state)
   stateRef.current = state
+
+  /*
+   * Espejo de la tasa, por el mismo motivo y con una consecuencia concreta:
+   * `addTransaction` tiene que poder sellar la TRM del día sin recrearse cada
+   * vez que la tasa cambie. Recrearse significaría que todo lo que la recibe
+   * como dependencia —media app— se redibujara cada diez minutos.
+   */
+  const tasaRef = useRef({ trm: 0, fx: 0 })
+  tasaRef.current = { trm: trm.valor, fx: fxRate }
 
   const vivo = useRef(true)
   const cargando = useRef(false)
@@ -408,7 +465,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           }
 
           const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
-                 debts, debtPayments, subscriptions] =
+                 debts, debtPayments, subscriptions, recurringIncomes] =
             await Promise.all([
               supabase.from('accounts').select('*').order('created_at'),
               supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
@@ -421,6 +478,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               supabase.from('debts').select('*').order('started_at'),
               supabase.from('debt_payments').select('*').order('occurred_at'),
               supabase.from('subscriptions').select('*').order('anchor_at'),
+              supabase.from('recurring_incomes').select('*').order('anchor_at'),
             ])
           if (!vivo.current) return
 
@@ -476,9 +534,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             debts: conservar(debts, () => (debts.data ?? []).map(rowToDebt), previo.debts),
             debtPayments: conservar(debtPayments, () => (debtPayments.data ?? []).map(rowToDebtPayment), previo.debtPayments),
             subscriptions: conservar(subscriptions, () => (subscriptions.data ?? []).map(rowToSub), previo.subscriptions),
-            settings: settings.error || !settings.data
-              ? {}
-              : { dailyCap: settings.data.daily_cap == null ? undefined : Number(settings.data.daily_cap) },
+            recurringIncomes: conservar(
+              recurringIncomes,
+              () => (recurringIncomes.data ?? []).map(rowToIngreso),
+              previo.recurringIncomes,
+            ),
+            settings: settings.error || !settings.data ? {} : rowToSettings(settings.data),
           }
           setDeudasError(motivoTabla(debts.error) ?? motivoTabla(debtPayments.error))
           setSuscripcionesError(motivoTabla(subscriptions.error))
@@ -560,6 +621,51 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', alVolver)
   }, [cargar])
 
+  /**
+   * El token de la sesión, para reenviar lo que quedó en la cola.
+   *
+   * Se pide en el momento del reenvío y no se guarda en ningún sitio: el que
+   * se guardó ayer ya no vale, y escribirlo en el disco del teléfono sería
+   * dejar una credencial suelta. Ver `cola.ts`.
+   */
+  const tokenActual = useCallback(async () => {
+    const { data } = (await createClient()?.auth.getSession()) ?? { data: null }
+    return data?.session?.access_token ?? null
+  }, [])
+
+  const sincronizarPendientes = useCallback(async () => {
+    const r = await sincronizarCola(tokenActual)
+    // Lo que entró en la cola mientras no había red ya está en el estado en
+    // memoria, pero pudo entrar también desde otro dispositivo. Al vaciarla se
+    // recarga para que las dos versiones acaben iguales.
+    if (r.enviadas > 0) await cargar()
+  }, [tokenActual, cargar])
+
+  /*
+   * La cuenta de pendientes se refleja en la interfaz, y la cola se vacía
+   * cuando vuelve la red. El service worker puede pedirlo también: cuando el
+   * sistema lo despierta con la app abierta, prefiere que lo haga la ventana,
+   * que es donde está la sesión.
+   */
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    const dejarDeEscuchar = suscribirCola(setColaPendientes)
+    const dejarDeVigilar = vigilarRed(tokenActual)
+
+    const delWorker = (e: MessageEvent) => {
+      if (e.data?.tipo === 'vaciar-cola') void sincronizarPendientes()
+    }
+    navigator.serviceWorker?.addEventListener('message', delWorker)
+
+    void contarCola().then(setColaPendientes)
+
+    return () => {
+      dejarDeEscuchar()
+      dejarDeVigilar()
+      navigator.serviceWorker?.removeEventListener('message', delWorker)
+    }
+  }, [tokenActual, sincronizarPendientes])
+
   const remote = useCallback(() => (synced ? createClient() : null), [synced])
 
   // ---- Transacciones -------------------------------------------------------
@@ -592,7 +698,22 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    *  poder deshacerlo si se borra el abono. */
   const addTransaction = useCallback(
     async (tx: Omit<Transaction, 'id'>) => {
-      const full: Transaction = { ...tx, id: uid() }
+      /*
+       * A un movimiento en dólares se le clava la tasa del día en que se
+       * registra.
+       *
+       * Es lo que convierte «US$ 20» en una cifra en pesos que no vuelve a
+       * moverse. Sin ella, el gasto de enero se recalculaba con la tasa de hoy
+       * y el resumen de un mes ya cerrado cambiaba solo cada vez que el dólar
+       * se movía. Manda la TRM si se conoce —es la que aplica el banco cuando
+       * llega la factura— y si no, la de mercado, que es mejor que nada.
+       *
+       * Solo si no venía puesta: una importación o un atajo pueden traer la
+       * tasa real de su día, y esa es mejor que la de hoy.
+       */
+      const { trm: trmHoy, fx: mercado } = tasaRef.current
+      const tasa = tx.fxRate ?? (tx.currency === 'USD' ? (trmHoy || mercado || undefined) : undefined)
+      const full: Transaction = { ...tx, fxRate: tasa, id: uid() }
       // `aplicarDelta` devuelve la misma referencia para las cuentas que no
       // toca, así que comparar identidades basta para saber cuáles guardar.
       let tocadas: Account[] = []
@@ -1056,6 +1177,124 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /**
+   * Guarda preferencias sueltas: cada cuántos días avisar, qué avisar, a qué
+   * correo.
+   *
+   * Un solo método para todas en vez de uno por preferencia. Son una fila —la
+   * de `settings`— y partirlas en cinco mutaciones significaría cinco
+   * escrituras contra la misma fila cada vez que alguien toca dos
+   * interruptores seguidos.
+   */
+  const guardarAjustes = useCallback(
+    async (patch: Partial<Settings>) => {
+      setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }))
+      await remote()?.from('settings').upsert(
+        { ...settingsPatchToRow(patch), updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' },
+      )
+    },
+    [remote],
+  )
+
+  /**
+   * Restaura un respaldo.
+   *
+   * Se escribe con `upsert` sobre el id y no borrando antes: si la escritura se
+   * corta a la mitad —sin señal, con la sesión caducada— borrar primero
+   * habría dejado la cuenta vacía, que es exactamente el desastre del que un
+   * respaldo debería proteger. Con `upsert`, lo que llega pisa lo que había y
+   * lo que no llega sigue donde estaba.
+   *
+   * Y por eso tampoco es una fusión: un movimiento con el mismo id que el del
+   * respaldo queda como dice el respaldo. Restaurar es «vuelve a como estaba»,
+   * no «mezcla las dos versiones y adivina».
+   *
+   * El estado en memoria se cambia primero, así que en Modo Demo —sin
+   * servidor— la restauración funciona igual y se ve al instante.
+   */
+  const restaurar = useCallback(
+    async (datos: RespaldoEntrante) => {
+      setState((s) => ({
+        ...s,
+        accounts: datos.accounts ?? s.accounts,
+        transactions: datos.transactions ?? s.transactions,
+        subscriptions: datos.subscriptions ?? s.subscriptions,
+        debts: datos.debts ?? s.debts,
+        debtPayments: datos.debtPayments ?? s.debtPayments,
+        holdings: datos.holdings ?? s.holdings,
+        trades: datos.trades ?? s.trades,
+        goals: datos.goals ?? s.goals,
+        allocations: datos.allocations ?? s.allocations,
+        recurringIncomes: datos.recurringIncomes ?? s.recurringIncomes,
+        budgets: datos.budgets ?? s.budgets,
+        settings: datos.settings ?? s.settings,
+      }))
+
+      const supabase = remote()
+      if (!supabase) return { ok: true }
+
+      /*
+       * Las cuentas primero y los movimientos después, porque un movimiento
+       * apunta a su cuenta: al revés, la clave foránea rechazaría la mitad.
+       * Dentro de cada grupo da igual el orden, así que van en paralelo.
+       */
+      const paso = async (tabla: string, filas: object[]) => {
+        if (!filas.length) return null
+        const { error } = await supabase.from(tabla).upsert(filas, { onConflict: 'id' })
+        return error ? `${tabla}: ${error.message}` : null
+      }
+
+      const fallos: (string | null)[] = []
+      fallos.push(await paso('accounts', (datos.accounts ?? []).map(accountToRow)))
+      fallos.push(...await Promise.all([
+        paso('transactions', (datos.transactions ?? []).map(txToRow)),
+        paso('subscriptions', (datos.subscriptions ?? []).map(subToRow)),
+        paso('debts', (datos.debts ?? []).map(debtToRow)),
+        paso('holdings', (datos.holdings ?? []).map(holdingToRow)),
+        paso('trades', (datos.trades ?? []).map(tradeToRow)),
+        paso('goals', (datos.goals ?? []).map(goalToRow)),
+        paso('recurring_incomes', (datos.recurringIncomes ?? []).map(ingresoToRow)),
+      ]))
+      // Los abonos cuelgan de su deuda y de su movimiento: van al final.
+      fallos.push(await paso('debt_payments', (datos.debtPayments ?? []).map(debtPaymentToRow)))
+      fallos.push(await paso('budget_allocations', (datos.allocations ?? []).map(allocationToRow)))
+
+      const error = fallos.filter(Boolean).join(' · ')
+      return error ? { ok: false, error } : { ok: true }
+    },
+    [remote],
+  )
+
+  // ---- Ingresos recurrentes ------------------------------------------------
+  const addIngreso = useCallback(
+    async (i: Omit<RecurringIncome, 'id'>) => {
+      const full: RecurringIncome = { ...i, id: uid() }
+      setState((s) => ({ ...s, recurringIncomes: [...s.recurringIncomes, full] }))
+      await remote()?.from('recurring_incomes').insert(ingresoToRow(full))
+    },
+    [remote],
+  )
+
+  const updateIngreso = useCallback(
+    async (id: string, patch: Partial<RecurringIncome>) => {
+      setState((s) => ({
+        ...s,
+        recurringIncomes: s.recurringIncomes.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+      }))
+      await remote()?.from('recurring_incomes').update(ingresoPatchToRow(patch)).eq('id', id)
+    },
+    [remote],
+  )
+
+  const deleteIngreso = useCallback(
+    async (id: string) => {
+      setState((s) => ({ ...s, recurringIncomes: s.recurringIncomes.filter((x) => x.id !== id) }))
+      await remote()?.from('recurring_incomes').delete().eq('id', id)
+    },
+    [remote],
+  )
+
   // ---- Metas de ahorro -----------------------------------------------------
   const addGoal = useCallback(
     async (g: Omit<Goal, 'id'>) => {
@@ -1369,7 +1608,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(
     () => ({
-      ...state, ready, synced, syncError, reload: cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
+      ...state, ready, synced, syncError, reload: cargar, fxRate, fx, trm,
+      colaPendientes, sincronizarPendientes,
+      quotes, quotesLoading, quotesFallos, refreshQuotes,
       addTransaction, updateTransaction, deleteTransaction,
       addAccount, updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma,
       asegurarEfectivo,
@@ -1380,8 +1621,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addGoal, updateGoal, deleteGoal, resetDemo, signOut,
       addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
       addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError,
+      addIngreso, updateIngreso, deleteIngreso, guardarAjustes, restaurar,
     }),
-    [state, ready, synced, syncError, cargar, fxRate, fx, quotes, quotesLoading, quotesFallos, refreshQuotes,
+    [state, ready, synced, syncError, cargar, fxRate, fx, trm, colaPendientes, sincronizarPendientes,
+     quotes, quotesLoading, quotesFallos, refreshQuotes,
      addTransaction, updateTransaction, deleteTransaction, addAccount,
      updateAccount, deleteAccount, aplicarMovimientosAlSaldo, asegurarPlataforma, asegurarEfectivo,
      addPocket, updatePocket, deletePocket, addHolding,
@@ -1389,7 +1632,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      setBudget, removeBudget, asignarABolsillo, quitarAsignacion, setDailyCap,
      addGoal, updateGoal, deleteGoal, resetDemo, signOut,
      addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
-     addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError],
+     addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError,
+     addIngreso, updateIngreso, deleteIngreso, guardarAjustes, restaurar],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -2139,6 +2383,300 @@ export function useBalanceSeries(range: RangeKey = '1M') {
   }, [transactions, netWorth, range])
 }
 
+/* ===========================================================================
+ *  El dólar y el patrimonio
+ * ======================================================================== */
+
+export interface ImpactoDolar {
+  /** Cuántos dólares tienes en total: cuentas más portafolio. */
+  exposicion: number
+  /** Lo que valen hoy en pesos. */
+  enPesos: number
+  /** Qué parte del patrimonio total es. En %. */
+  porcentaje: number
+  /**
+   * Cuánto cambia tu patrimonio en pesos por cada peso que se mueva el dólar.
+   *
+   * Numéricamente es la exposición en dólares, y esa coincidencia es justo lo
+   * que lo hace útil de leer: «tengo 1.570 dólares» y «cada peso que suba el
+   * dólar me suma 1.570 pesos» son la misma frase dicha dos veces, y la
+   * segunda es la que se entiende.
+   */
+  sensibilidad: number
+  /** Qué pasaría con una subida o una bajada del 5 %. */
+  siSube: number
+  siBaja: number
+  /**
+   * Diferencia en cambio ya realizada sobre lo registrado.
+   *
+   * Solo cuenta los movimientos que guardaron la tasa de su día. Compara lo
+   * que costaron entonces con lo que costarían hoy, y la resta es dinero que
+   * el dólar te dio o te quitó sin que hicieras nada.
+   */
+  diferencia: number
+  /** Cuántos movimientos entraron en esa cuenta. */
+  movimientos: number
+  /** La tasa con la que se está calculando, y si es la TRM oficial. */
+  tasa: number
+  oficial: boolean
+}
+
+/**
+ * Cómo le pega el dólar a un patrimonio en pesos.
+ *
+ * Quien tiene cuentas o inversiones en dólares carga con un riesgo que no
+ * eligió y que no aparece en ninguna parte: el patrimonio sube y baja sin que
+ * se compre ni se venda nada. Esta es la cifra de ese riesgo.
+ */
+export function useImpactoDolar(): ImpactoDolar {
+  const { accounts, holdings, transactions, quotes, fxRate, trm } = useFinance()
+  const patrimonio = useNetWorth()
+
+  return useMemo(() => {
+    // La TRM manda si se conoce: es la tasa con la que cuadra el banco.
+    const tasa = trm.valor > 0 ? trm.valor : fxRate
+
+    let exposicion = 0
+    for (const a of accounts) {
+      if (a.currency !== 'USD') continue
+      exposicion += accountTotal(a)
+    }
+    for (const h of holdings) {
+      if (h.currency !== 'USD') continue
+      exposicion += precioDe(h, quotes).precio * h.quantity
+    }
+
+    let diferencia = 0
+    let movimientos = 0
+    for (const t of transactions) {
+      if (t.currency !== 'USD' || !t.fxRate || t.fxRate <= 0 || tasa <= 0) continue
+      // El signo va respecto al bolsillo: un gasto que hoy costaría más es
+      // dinero perdido, y un ingreso que hoy valdría más es dinero ganado.
+      const delta = t.amount * (tasa - t.fxRate)
+      diferencia += t.type === 'income' ? delta : -delta
+      movimientos++
+    }
+
+    const enPesos = exposicion * tasa
+    return {
+      exposicion,
+      enPesos,
+      porcentaje: patrimonio > 0 ? (enPesos / patrimonio) * 100 : 0,
+      sensibilidad: exposicion,
+      siSube: enPesos * 0.05,
+      siBaja: -enPesos * 0.05,
+      diferencia,
+      movimientos,
+      tasa,
+      oficial: trm.oficial && trm.valor > 0,
+    }
+  }, [accounts, holdings, transactions, quotes, fxRate, trm, patrimonio])
+}
+
+/* ===========================================================================
+ *  Tarjetas de crédito
+ * ======================================================================== */
+
+/** Las tarjetas con ciclo configurado y lo que hay que hacer con cada una. */
+export function useTarjetas(): AvisoTarjeta[] {
+  const { accounts } = useFinance()
+  return useMemo(
+    () => accounts
+      .map((a) => avisoDe(a))
+      .filter((x): x is AvisoTarjeta => x !== null)
+      // Lo urgente arriba: mora, luego pago, luego corte, y al final las que
+      // no piden nada.
+      .sort((a, b) => {
+        const orden = { mora: 0, pago: 1, corte: 2, ventana: 3, nada: 4 }
+        return orden[a.urgencia] - orden[b.urgencia] || a.ciclo.faltanLimite - b.ciclo.faltanLimite
+      }),
+    [accounts],
+  )
+}
+
+/** Con qué tarjeta conviene pagar hoy. Ver `tarjetas.ts`. */
+export function useRecomendacionTarjeta(monto = 0): Recomendacion[] {
+  const { accounts } = useFinance()
+  return useMemo(() => recomendarTarjeta(accounts, monto), [accounts, monto])
+}
+
+/** Cuántas tarjetas tienen fechas puestas. Para saber si ofrecer el recomendador. */
+export function useTarjetasConCiclo(): number {
+  const { accounts } = useFinance()
+  return useMemo(
+    () => accounts.filter((a) => a.type === 'credit' && a.statementDay && a.dueDay).length,
+    [accounts],
+  )
+}
+
+/* ===========================================================================
+ *  Liquidez
+ * ======================================================================== */
+
+/**
+ * La proyección de saldo a 30, 60 o 90 días.
+ *
+ * Reúne lo que ya está repartido por la app —cuentas, ingresos recurrentes,
+ * suscripciones, cuotas de tarjeta, deudas con plazo— y lo pone en una línea
+ * de tiempo. Ver `liquidez.ts`.
+ */
+export function useLiquidez(dias: Horizonte = 30, conGastoCorriente = true): Proyeccion {
+  const { accounts, transactions, subscriptions, recurringIncomes, fxRate } = useFinance()
+  const deudas = useDeudas()
+
+  return useMemo(
+    () => proyectarLiquidez({
+      accounts, transactions, subscriptions, ingresos: recurringIncomes,
+      deudas, fxRate, dias, conGastoCorriente,
+    }),
+    [accounts, transactions, subscriptions, recurringIncomes, deudas, fxRate, dias, conGastoCorriente],
+  )
+}
+
+/** El saldo del que parte la proyección: lo líquido de hoy. */
+export function useSaldoLiquido() {
+  const { accounts, fxRate } = useFinance()
+  return useMemo(() => saldoLiquido(accounts, fxRate), [accounts, fxRate])
+}
+
+/* ===========================================================================
+ *  Salud financiera
+ * ======================================================================== */
+
+export interface Salud {
+  reparto: Reparto
+  salud: SaludFinanciera
+  /** El reparto que el usuario haya ajustado a mano. */
+  grupos: Record<string, Grupo>
+}
+
+/**
+ * La regla 50/30/20 y los cinco indicadores, sobre un período.
+ *
+ * El período por defecto son 30 días y no el mes natural: a día 2 el mes
+ * natural tiene dos días de datos, y con eso cualquier reparto sale absurdo.
+ */
+export function useSalud(dias = 30): Salud {
+  const { accounts, transactions, subscriptions, debts, debtPayments, fxRate } = useFinance()
+  const resumenSubs = useSuscripcionesResumen()
+  const { total: liquido } = useSaldoLiquido()
+
+  /*
+   * El reparto que el usuario haya ajustado a mano.
+   *
+   * Se lee en un efecto y no al construir el estado: `localStorage` no existe
+   * en el servidor, así que leerlo al construir daría `{}` en el HTML
+   * prerenderizado y el reparto de verdad en la primera pasada del navegador
+   * —una discrepancia de hidratación que React avisa y que, peor, repinta la
+   * pantalla entera—.
+   */
+  const [grupos, setGrupos] = useState<Record<string, Grupo>>({})
+  useEffect(() => { setGrupos(leerGrupos()) }, [])
+
+  return useMemo(() => {
+    const desde = sumarDias(hoyEnZona(), -dias)
+    const enRango = transactions.filter((t) => t.occurredAt.slice(0, 10) >= desde)
+    const reparto = repartir(enRango, fxRate, grupos)
+
+    /*
+     * Lo que se paga al mes por deudas: las cuotas de tarjeta más lo que se ha
+     * venido abonando a personas. Lo segundo sale del historial y no de un
+     * plan, porque entre personas casi nunca hay cuota pactada.
+     */
+    let cuotas = 0
+    for (const a of accounts) {
+      const deuda = deudaDe(a)
+      if (deuda <= 0) continue
+      const restantes = a.installments ? Math.max(1, a.installments - (a.installmentsPaid ?? 0)) : 1
+      const enCop = a.currency === 'USD' ? (fxRate > 0 ? deuda * fxRate : 0) : deuda
+      cuotas += enCop / restantes
+    }
+    const haceTresMeses = sumarDias(hoyEnZona(), -90)
+    const abonos = debtPayments.filter((p) => p.occurredAt >= haceTresMeses && p.amount > 0)
+    if (abonos.length) {
+      const total = abonos.reduce((acc, p) => {
+        const d = debts.find((x) => x.id === p.debtId)
+        if (!d || d.direction !== 'owe') return acc
+        return acc + (d.currency === 'USD' ? (fxRate > 0 ? p.amount * fxRate : 0) : p.amount)
+      }, 0)
+      cuotas += total / 3
+    }
+
+    const gastoMensual = gastoMensualMedio(transactions, fxRate)
+
+    return {
+      reparto,
+      grupos,
+      salud: evaluarSalud({
+        reparto,
+        liquido,
+        gastoMensual,
+        deuda: 0,
+        cuotasMensuales: cuotas,
+        suscripciones: resumenSubs.mensual,
+      }),
+    }
+  }, [accounts, transactions, debts, debtPayments, fxRate, dias, grupos, liquido, resumenSubs.mensual])
+}
+
+/* ===========================================================================
+ *  Anomalías
+ * ======================================================================== */
+
+/** Lo que conviene mirar, sin lo que ya se descartó. Ver `anomalias.ts`. */
+export function useAnomalias(): Anomalia[] {
+  const { transactions, subscriptions, fxRate } = useFinance()
+  const [descartadas, setDescartadas] = useState<Record<string, string>>({})
+
+  // En un efecto y no en el estado inicial: `localStorage` no existe en el
+  // servidor, y leerlo al construir el estado rompería la hidratación.
+  useEffect(() => { setDescartadas(leerDescartadas()) }, [])
+
+  return useMemo(
+    () => detectarAnomalias(transactions, subscriptions, fxRate).filter((a) => !descartadas[a.id]),
+    [transactions, subscriptions, fxRate, descartadas],
+  )
+}
+
+/* ===========================================================================
+ *  Independencia financiera
+ * ======================================================================== */
+
+/** El sueldo pasivo y lo que falta. Ver `fire.ts`. */
+export function useFire(swr?: number, rendimientoReal?: number): Fire {
+  const { transactions, fxRate } = useFinance()
+  const inv = useInvestmentsValue()
+  const { monthly: rendimientoCuentas } = useExpectedYield()
+
+  return useMemo(
+    () => calcularFire({
+      portafolio: inv.value,
+      rendimientoCuentas,
+      gastoMensual: gastoMensualMedio(transactions, fxRate),
+      aporteMensual: aporteMensual(transactions, fxRate),
+      cobradoUltimoAnio: cobradoPasivo(transactions, fxRate),
+      swr,
+      rendimientoReal,
+    }),
+    [inv.value, rendimientoCuentas, transactions, fxRate, swr, rendimientoReal],
+  )
+}
+
+/* ===========================================================================
+ *  Avisos
+ * ======================================================================== */
+
+/** Lo que vence en los próximos días, ya filtrado por las preferencias. */
+export function useAvisos(): Aviso[] {
+  const { accounts, subscriptions, debts, settings, fxRate } = useFinance()
+  const deudas = useDeudas()
+
+  return useMemo(() => {
+    const saldos = new Map(deudas.map((d) => [d.deuda.id, d.saldo]))
+    return avisosPendientes({ accounts, subscriptions, debts, saldos, settings, fxRate })
+  }, [accounts, subscriptions, debts, deudas, settings, fxRate])
+}
+
 // ---- Mapeo fila <-> dominio ------------------------------------------------
 
 type Row = Record<string, any>
@@ -2151,6 +2689,8 @@ const rowToAccount = (r: Row): Account => ({
   creditLimit: r.credit_limit != null ? Number(r.credit_limit) : undefined,
   installments: r.installments ?? undefined,
   installmentsPaid: r.installments_paid ?? undefined,
+  statementDay: r.statement_day ?? undefined,
+  dueDay: r.due_day ?? undefined,
 })
 const accountToRow = (a: Account) => ({
   id: a.id, name: a.name, institution: a.institution, type: a.type,
@@ -2158,6 +2698,7 @@ const accountToRow = (a: Account) => ({
   apy: a.apy ?? null, pockets: a.pockets ?? [],
   credit_limit: a.creditLimit ?? null,
   installments: a.installments ?? null, installments_paid: a.installmentsPaid ?? null,
+  statement_day: a.statementDay ?? null, due_day: a.dueDay ?? null,
 })
 const accountPatchToRow = (p: Partial<Account>) => {
   const r: Row = {}
@@ -2172,6 +2713,10 @@ const accountPatchToRow = (p: Partial<Account>) => {
   if (p.creditLimit !== undefined) r.credit_limit = p.creditLimit
   if (p.installments !== undefined) r.installments = p.installments
   if (p.installmentsPaid !== undefined) r.installments_paid = p.installmentsPaid
+  // Con 'in': quitarle la fecha de corte a una tarjeta es ponerla a undefined,
+  // y eso tiene que llegar al servidor como null en vez de no viajar.
+  if ('statementDay' in p) r.statement_day = p.statementDay ?? null
+  if ('dueDay' in p) r.due_day = p.dueDay ?? null
   return r
 }
 const rowToTx = (r: Row): Transaction => ({
@@ -2181,6 +2726,10 @@ const rowToTx = (r: Row): Transaction => ({
   description: r.description ?? '', occurredAt: r.occurred_at, currency: r.currency ?? undefined,
   subscriptionId: r.subscription_id ?? undefined,
   pending: r.pending ? true : undefined,
+  fxRate: r.fx_rate == null ? undefined : Number(r.fx_rate),
+  merchant: r.merchant ?? undefined,
+  source: r.source ?? undefined,
+  externalId: r.external_id ?? undefined,
 })
 const txToRow = (t: Transaction) => ({
   id: t.id, account_id: t.accountId, pocket_id: t.pocketId ?? null,
@@ -2188,6 +2737,8 @@ const txToRow = (t: Transaction) => ({
   category_id: t.categoryId, amount: t.amount, type: t.type,
   description: t.description, occurred_at: t.occurredAt, currency: t.currency ?? null,
   subscription_id: t.subscriptionId ?? null, pending: Boolean(t.pending),
+  fx_rate: t.fxRate ?? null, merchant: t.merchant ?? null,
+  source: t.source ?? 'manual', external_id: t.externalId ?? null,
 })
 const txPatchToRow = (p: Partial<Transaction>) => {
   const r: Row = {}
@@ -2207,6 +2758,10 @@ const txPatchToRow = (p: Partial<Transaction>) => {
   // Con 'in': confirmar un cobro es ponerlo a undefined, y eso tiene que
   // llegar al servidor como false en vez de no viajar.
   if ('pending' in p) r.pending = Boolean(p.pending)
+  if ('fxRate' in p) r.fx_rate = p.fxRate ?? null
+  if ('merchant' in p) r.merchant = p.merchant ?? null
+  if (p.source !== undefined) r.source = p.source
+  if ('externalId' in p) r.external_id = p.externalId ?? null
   return r
 }
 const rowToHolding = (r: Row): Holding => ({
@@ -2359,6 +2914,59 @@ const subPatchToRow = (p: Partial<Subscription>) => {
   if (p.cancelled !== undefined) r.cancelled = p.cancelled
   if ('note' in p) r.note = p.note ?? null
   if (p.color !== undefined) r.color = p.color
+  return r
+}
+
+const rowToIngreso = (r: Row): RecurringIncome => ({
+  id: r.id, name: r.name, amount: Number(r.amount),
+  currency: r.currency ?? 'COP',
+  cycle: r.cycle ?? 'mensual',
+  anchorAt: String(r.anchor_at).slice(0, 10),
+  accountId: r.account_id ?? undefined,
+  // La columna es `not null default true`, así que lo que falte es un ingreso
+  // activo: es lo que era antes de que la columna existiera.
+  active: r.active !== false,
+  note: r.note ?? undefined,
+  color: r.color ?? '#30D158',
+})
+const ingresoToRow = (i: RecurringIncome) => ({
+  id: i.id, name: i.name, amount: i.amount, currency: i.currency, cycle: i.cycle,
+  anchor_at: i.anchorAt, account_id: i.accountId ?? null,
+  active: i.active !== false, note: i.note ?? null, color: i.color,
+})
+const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
+  const r: Row = {}
+  if (p.name !== undefined) r.name = p.name
+  if (p.amount !== undefined) r.amount = p.amount
+  if (p.currency !== undefined) r.currency = p.currency
+  if (p.cycle !== undefined) r.cycle = p.cycle
+  if (p.anchorAt !== undefined) r.anchor_at = p.anchorAt
+  if ('accountId' in p) r.account_id = p.accountId ?? null
+  if (p.active !== undefined) r.active = p.active
+  if ('note' in p) r.note = p.note ?? null
+  if (p.color !== undefined) r.color = p.color
+  return r
+}
+
+const rowToSettings = (r: Row): Settings => ({
+  dailyCap: r.daily_cap == null ? undefined : Number(r.daily_cap),
+  avisoDias: r.aviso_dias == null ? undefined : Number(r.aviso_dias),
+  // Las tres columnas son `not null default true`: lo que falte es que sí.
+  avisarSuscripciones: r.avisar_suscripciones !== false,
+  avisarTarjetas: r.avisar_tarjetas !== false,
+  avisarDeudas: r.avisar_deudas !== false,
+  avisoEmail: r.aviso_email ?? undefined,
+})
+const settingsPatchToRow = (p: Partial<Settings>) => {
+  const r: Row = {}
+  if ('dailyCap' in p) r.daily_cap = p.dailyCap ?? null
+  // Con 'in' y no con !== undefined: apagar los avisos es poner `avisoDias` a
+  // undefined, y eso tiene que llegar al servidor como null.
+  if ('avisoDias' in p) r.aviso_dias = p.avisoDias ?? null
+  if (p.avisarSuscripciones !== undefined) r.avisar_suscripciones = p.avisarSuscripciones
+  if (p.avisarTarjetas !== undefined) r.avisar_tarjetas = p.avisarTarjetas
+  if (p.avisarDeudas !== undefined) r.avisar_deudas = p.avisarDeudas
+  if ('avisoEmail' in p) r.aviso_email = p.avisoEmail || null
   return r
 }
 

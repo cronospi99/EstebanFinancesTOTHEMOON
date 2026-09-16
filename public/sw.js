@@ -20,8 +20,9 @@
  * se guardan por nombre y `arq.png` sigue llamándose `arq.png`.
  *
  * v4: los logotipos pasaron a recortarse a sangre.
+ * v5: el service worker pasó a atender avisos y a vaciar la cola de escrituras.
  */
-const CACHE = 'finanzas-v4'
+const CACHE = 'finanzas-v5'
 
 /** Rutas cuyo contenido es inmutable o irrelevante para la coherencia del router. */
 const cacheable = (url) =>
@@ -118,3 +119,190 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
 })
+
+/* ===========================================================================
+ *  Avisos (Web Push)
+ * ===========================================================================
+ *  Aquí es donde el aviso de un corte de tarjeta se convierte en una
+ *  notificación del sistema. El contenido llega cifrado de extremo a extremo y
+ *  el navegador lo descifra antes de dárnoslo: lo que se lee en `event.data`
+ *  ya está en claro y nunca pasó legible por el servicio de push.
+ * ------------------------------------------------------------------------ */
+
+self.addEventListener('push', (event) => {
+  let datos = {}
+  try {
+    datos = event.data ? event.data.json() : {}
+  } catch {
+    // Un cuerpo que no es JSON no debería llegar, pero si llega es mejor
+    // enseñar un aviso genérico que tragárselo en silencio.
+    datos = { titulo: 'Finanzas', cuerpo: event.data ? event.data.text() : '' }
+  }
+
+  const titulo = datos.titulo || 'Finanzas'
+  const opciones = {
+    body: datos.cuerpo || '',
+    icon: '/icon-192.png',
+    // El badge es el icono monocromo de la barra de estado en Android.
+    badge: '/icon-192.png',
+    // Con etiqueta, un aviso del mismo hecho reemplaza al anterior en vez de
+    // apilarse. Sin ella, reintentar un envío deja dos notificaciones iguales.
+    tag: datos.etiqueta || undefined,
+    renotify: false,
+    data: { url: datos.url || '/' },
+    // Una vibración corta: lo suficiente para notarlo en el bolsillo sin que
+    // parezca una llamada.
+    vibrate: [18, 40, 18],
+  }
+
+  event.waitUntil(self.registration.showNotification(titulo, opciones))
+})
+
+/**
+ * Al tocar el aviso.
+ *
+ * Si la app ya está abierta se la trae al frente y se la lleva a la pantalla
+ * que toca, en vez de abrir una pestaña más. Abrir una segunda instancia de
+ * una PWA instalada deja al usuario con dos ventanas de la misma app y el
+ * estado repetido en las dos.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const destino = (event.notification.data && event.notification.data.url) || '/'
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientes) => {
+      for (const cliente of clientes) {
+        if ('focus' in cliente) {
+          if ('navigate' in cliente) cliente.navigate(destino).catch(() => {})
+          return cliente.focus()
+        }
+      }
+      return self.clients.openWindow(destino)
+    }),
+  )
+})
+
+/* ===========================================================================
+ *  Cola de escrituras sin señal
+ * ===========================================================================
+ *  La cola vive en IndexedDB y la llena la app (ver lib/cola.ts). Aquí solo se
+ *  atiende el evento `sync`, que el sistema dispara cuando vuelve la red
+ *  —incluso con la app cerrada, en los navegadores que lo implementan—.
+ *
+ *  Se intenta primero por el camino bueno: si hay alguna ventana abierta, se
+ *  le pide a ella que vacíe la cola, porque ahí está la sesión y todo el
+ *  código que ya sabe hacerlo. Solo si no hay ninguna se reenvían las
+ *  peticiones desde aquí, y para eso hace falta el token, que se saca de la
+ *  cookie de sesión. Donde no se pueda leer, se deja la cola como está: se
+ *  vaciará en cuanto alguien abra la app, que es lo que pasaba antes de todo
+ *  esto y sigue siendo correcto.
+ * ------------------------------------------------------------------------ */
+
+const ETIQUETA_SYNC = 'eftm-cola'
+
+self.addEventListener('sync', (event) => {
+  if (event.tag !== ETIQUETA_SYNC) return
+  event.waitUntil(vaciarCola())
+})
+
+async function vaciarCola() {
+  const clientes = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  if (clientes.length) {
+    for (const cliente of clientes) cliente.postMessage({ tipo: 'vaciar-cola' })
+    return
+  }
+  await reenviarDesdeElWorker()
+}
+
+/** Abre la misma base que usa la app. Mismo nombre y misma versión. */
+function abrirBase() {
+  return new Promise((resolve) => {
+    let req
+    try {
+      req = indexedDB.open('eftm', 1)
+    } catch {
+      resolve(null)
+      return
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => resolve(null)
+    req.onblocked = () => resolve(null)
+  })
+}
+
+/**
+ * El token de la sesión, sacado de la cookie que escribe @supabase/ssr.
+ *
+ * Un service worker no tiene `document`, así que no hay `document.cookie`: se
+ * usa `cookieStore`, que existe justamente en los navegadores que implementan
+ * Background Sync. Donde no exista, esta función devuelve null y la cola se
+ * queda esperando a que alguien abra la app.
+ *
+ * La cookie puede venir partida en varios trozos numerados cuando el token es
+ * largo, y con el prefijo `base64-` cuando el valor va codificado. Las dos
+ * cosas las hace la biblioteca, no nosotros, y hay que deshacerlas en el mismo
+ * orden.
+ */
+async function tokenDeSesion() {
+  if (typeof cookieStore === 'undefined') return null
+  try {
+    const todas = await cookieStore.getAll()
+    const trozos = todas
+      .filter((c) => /^sb-.*-auth-token(\.\d+)?$/.test(c.name))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    if (!trozos.length) return null
+
+    let crudo = trozos.map((c) => c.value).join('')
+    if (crudo.startsWith('base64-')) crudo = atob(crudo.slice(7))
+    const sesion = JSON.parse(crudo)
+    return sesion?.access_token || (Array.isArray(sesion) ? sesion[0] : null)
+  } catch {
+    return null
+  }
+}
+
+async function reenviarDesdeElWorker() {
+  const base = await abrirBase()
+  if (!base) return
+
+  const token = await tokenDeSesion()
+  if (!token) return
+
+  const entradas = await new Promise((resolve) => {
+    try {
+      const req = base.transaction('cola', 'readonly').objectStore('cola').getAll()
+      req.onsuccess = () => resolve(req.result || [])
+      req.onerror = () => resolve([])
+    } catch {
+      resolve([])
+    }
+  })
+
+  for (const entrada of entradas.sort((a, b) => a.id - b.id)) {
+    if (entrada.fallida) continue
+    let res
+    try {
+      res = await fetch(entrada.url, {
+        method: entrada.method,
+        headers: { ...entrada.headers, Authorization: `Bearer ${token}` },
+        body: entrada.body || undefined,
+      })
+    } catch {
+      // Sigue sin red. Se para aquí para no romper el orden de las escrituras.
+      break
+    }
+    // El 409 es «ya existe»: la escritura llegó y lo que se perdió fue la
+    // respuesta. Se da por buena, igual que hace la app.
+    if (!res.ok && res.status !== 409) break
+    await new Promise((resolve) => {
+      try {
+        const req = base.transaction('cola', 'readwrite').objectStore('cola').delete(entrada.id)
+        req.onsuccess = () => resolve()
+        req.onerror = () => resolve()
+      } catch {
+        resolve()
+      }
+    })
+  }
+}

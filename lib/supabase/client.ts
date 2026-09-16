@@ -2,7 +2,7 @@
 
 import { createBrowserClient } from '@supabase/ssr'
 import { normalizeSupabaseUrl } from './url'
-import { fetchConTimeout } from '../net'
+import { fetchConCola } from '../cola'
 
 export const SUPABASE_URL = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)
 export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
@@ -70,10 +70,17 @@ export function createClient() {
 
   cliente = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { lock: candadoConPlazo },
-    // Ninguna consulta puede quedarse colgada ocupando una de las seis
-    // conexiones que Safari concede por dominio.
+    /*
+     * Ninguna consulta puede quedarse colgada ocupando una de las seis
+     * conexiones que Safari concede por dominio, y ninguna escritura puede
+     * perderse por no haber señal.
+     *
+     * `fetchConCola` envuelve al de siempre: mantiene el plazo, y además, si
+     * una escritura no consigue salir, la guarda en IndexedDB y responde que
+     * fue aceptada. Se reenvía sola en cuanto vuelve la red. Ver `cola.ts`.
+     */
     global: {
-      fetch: (input: RequestInfo | URL, init?: RequestInit) => fetchConTimeout(input, init ?? {}),
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => fetchConCola(input, init ?? {}),
     },
   })
   return cliente

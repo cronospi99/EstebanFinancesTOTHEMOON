@@ -12,6 +12,12 @@ import { BUILD_REF, BUILD_SHA, esBuildLocal, fechaBuild } from '@/lib/build-info
 import { FxNote } from '@/components/ui/fx-note'
 import { useMarketStatus } from '@/lib/use-market-status'
 import { TimezoneCard } from '@/components/settings/timezone-card'
+import { AvisosCard } from '@/components/settings/avisos-card'
+import { BiometriaCard } from '@/components/settings/biometria-card'
+import { AtajosCard } from '@/components/settings/atajos-card'
+import { IngresosCard } from '@/components/settings/ingresos-card'
+import { DatosCard } from '@/components/settings/datos-card'
+import { DianCard } from '@/components/settings/dian-card'
 import { useProfileName } from '@/lib/use-profile'
 import { useTheme, type Tema } from '@/lib/use-theme'
 import { formatKeypad, parseKeypad } from '@/lib/format'
@@ -74,6 +80,21 @@ export default function SettingsPage() {
       <section>
         <CardHeader title="Zona horaria" />
         <TimezoneCard />
+      </section>
+
+      <section>
+        <CardHeader title="Recordatorios" />
+        <AvisosCard />
+      </section>
+
+      <section>
+        <CardHeader title="Seguridad" />
+        <BiometriaCard />
+      </section>
+
+      <section>
+        <CardHeader title="Ingresos recurrentes" />
+        <IngresosCard />
       </section>
 
       <section>
@@ -270,6 +291,21 @@ export default function SettingsPage() {
             </ol>
           </Card>
         )}
+      </section>
+
+      <section>
+        <CardHeader title="Exportar e importar" />
+        <DatosCard />
+      </section>
+
+      <section>
+        <CardHeader title="Declaración de renta" />
+        <DianCard />
+      </section>
+
+      <section>
+        <CardHeader title="Atajos y automatizaciones" />
+        <AtajosCard />
       </section>
 
       <section>
