@@ -1,5 +1,6 @@
 import type {
-  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, Settings, Transaction,
+  Account, Budget, BudgetAllocation, Debt, DebtPayment, Goal, Holding, Settings, Subscription,
+  Transaction,
 } from './types'
 
 const daysAgo = (n: number, hour = 12) => {
@@ -140,4 +141,49 @@ export const DEMO_DEBT_PAYMENTS: DebtPayment[] = [
   { id: 'dp3', debtId: 'd1', amount: 400_000, occurredAt: diaAtras(20) },
   { id: 'dp4', debtId: 'd2', amount: 300_000, occurredAt: diaAtras(40) },
   { id: 'dp5', debtId: 'd3', amount: 300_000, occurredAt: diaAtras(25) },
+]
+
+/**
+ * Suscripciones de ejemplo, elegidas para que se vea de qué va la pantalla:
+ * un ciclo de cada tipo, una compartida, una prueba a punto de empezar a
+ * cobrar y una en dólares. Con cinco mensuales iguales no se entendería por
+ * qué la cifra del año es la que importa.
+ */
+export const DEMO_SUBSCRIPTIONS: Subscription[] = [
+  {
+    id: 's1', name: 'Netflix', amount: 44_900, currency: 'COP', cycle: 'mensual',
+    anchorAt: diaAtras(-3), accountId: 'acc_rappicard', color: '#E50914',
+    // El plan que se reparte entre cuatro: la factura dice 44.900 y de tu
+    // bolsillo salen 11.225.
+    sharedWith: 4, note: 'Plan familiar con los primos',
+  },
+  {
+    id: 's2', name: 'Spotify', amount: 16_900, currency: 'COP', cycle: 'mensual',
+    anchorAt: diaAtras(-9), accountId: 'acc_nequi', color: '#1DB954',
+  },
+  {
+    id: 's3', name: 'iCloud+', amount: 3_900, currency: 'COP', cycle: 'mensual',
+    anchorAt: diaAtras(-16), accountId: 'acc_rappicard', color: '#3693F3',
+  },
+  {
+    // En dólares: el filtro de «Otra moneda» existe por estas.
+    id: 's4', name: 'ChatGPT Plus', amount: 20, currency: 'USD', cycle: 'mensual',
+    anchorAt: diaAtras(-21), accountId: 'acc_rappicard', color: '#10A37F',
+  },
+  {
+    // La anual: 219.000 de golpe son 18.250 al mes, y esa es la cuenta que
+    // nadie hace.
+    id: 's5', name: 'Duolingo', amount: 219_000, currency: 'COP', cycle: 'anual',
+    anchorAt: diaAtras(-99), accountId: 'acc_banco', color: '#58CC02',
+  },
+  {
+    // La prueba que todavía no cobra: lo que aparece en «Podrías ahorrar».
+    id: 's6', name: 'Max', amount: 26_900, currency: 'COP', cycle: 'mensual',
+    anchorAt: diaAtras(-11), trialEndsAt: diaAtras(-11), accountId: 'acc_rappicard',
+    color: '#002BE7', note: 'Prueba de un mes',
+  },
+  {
+    id: 's7', name: 'Gimnasio', amount: 129_000, currency: 'COP', cycle: 'trimestral',
+    anchorAt: diaAtras(-34), accountId: 'acc_banco', color: '#FF9F0A',
+  },
 ]
