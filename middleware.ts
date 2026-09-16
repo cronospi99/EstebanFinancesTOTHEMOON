@@ -10,6 +10,37 @@ const isConfigured = Boolean(URL && KEY)
 const PUBLIC_PATHS = ['/login', '/auth']
 
 /**
+ * Rutas de API que no pueden exigir sesión, y por qué cada una.
+ *
+ * La comparación es por ruta EXACTA y no por prefijo, a propósito: con
+ * `startsWith` bastaría `/api/push` para abrir de paso `/api/push`, que sí
+ * necesita sesión —es la que da de alta el dispositivo de alguien—. Un prefijo
+ * de más aquí es un agujero.
+ *
+ *  · /api/quick-add            Un atajo de iOS no tiene cookies: manda una
+ *                              petición suelta desde el teléfono. Se autoriza
+ *                              con su propio token, que comprueba una función
+ *                              de Postgres antes de escribir nada.
+ *  · /api/push/recordatorios   Lo llama el cron de Vercel a las ocho de la
+ *                              mañana, cuando no hay ninguna sesión. Se
+ *                              autoriza con CRON_SECRET, y sin esa variable la
+ *                              ruta está apagada.
+ *  · /api/trm y /api/fx        Devuelven una tasa de cambio pública, la misma
+ *                              para todo el mundo, sin tocar un solo dato de
+ *                              nadie. Además /api/trm llama a /api/fx desde el
+ *                              servidor como respaldo, y esa llamada tampoco
+ *                              lleva cookies: protegiéndolas, el respaldo se
+ *                              iba a /login y la TRM se quedaba sin él sin que
+ *                              nada lo dijera.
+ */
+const PUBLIC_API = new Set([
+  '/api/quick-add',
+  '/api/push/recordatorios',
+  '/api/trm',
+  '/api/fx',
+])
+
+/**
  * Puerta de entrada de la app.
  *
  * Hace dos trabajos distintos:
@@ -25,6 +56,17 @@ const PUBLIC_PATHS = ['/login', '/auth']
  */
 export async function middleware(request: NextRequest) {
   if (!isConfigured) return NextResponse.next()
+
+  /*
+   * Las rutas de API públicas salen antes de tocar nada.
+   *
+   * No es solo que no necesiten sesión: `getUser()` hace un viaje de ida y
+   * vuelta a Supabase para revalidar el token, y ponerlo delante de
+   * /api/quick-add le añade ese viaje a cada SMS reenviado desde el teléfono
+   * para averiguar algo que ya sabemos —que no hay cookies—. Cada una de estas
+   * rutas se autoriza por su cuenta.
+   */
+  if (PUBLIC_API.has(request.nextUrl.pathname)) return NextResponse.next()
 
   let response = NextResponse.next({ request })
 

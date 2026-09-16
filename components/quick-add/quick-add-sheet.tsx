@@ -9,6 +9,8 @@ import { Segmented } from '@/components/ui/segmented'
 import { AccountPicker } from '@/components/ui/account-picker'
 import { CategoryPicker } from '@/components/ui/category-picker'
 import { Keypad, ThousandsKey } from './keypad'
+import { FotoFactura, type LecturaFactura } from './foto-factura'
+import { RecomendadorTarjeta } from '@/components/accounts/recomendador-tarjeta'
 import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
@@ -16,6 +18,7 @@ import { useVoice } from '@/lib/use-voice'
 import { interpretarDictado } from '@/lib/voice'
 import { cn, haptic } from '@/lib/utils'
 import { hoyEnZona, instanteEnDia, sumarDias } from '@/lib/zona'
+import type { TxSource } from '@/lib/types'
 
 type Mode = 'expense' | 'income'
 
@@ -47,6 +50,16 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState(false)
   const [fecha, setFecha] = useState(hoyEnZona)
+  const [merchant, setMerchant] = useState<string | undefined>()
+  /*
+   * Quién puso lo que hay en el formulario.
+   *
+   * Se guarda con el movimiento porque no todos merecen la misma confianza:
+   * lo que leyó una foto puede estar mal y conviene poder encontrarlo después.
+   * Cambia a 'manual' en cuanto alguien toca el teclado, que es la señal de
+   * que una persona revisó la cifra.
+   */
+  const [origen, setOrigen] = useState<TxSource>('manual')
 
   const account = accounts.find((a) => a.id === accountId)
   const currency = account?.currency ?? 'COP'
@@ -69,6 +82,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
     const t = setTimeout(() => {
       setRaw(''); setNote(''); setSaved(false); setMode('expense'); setPocketId(undefined)
       setFecha(hoyEnZona())
+      setMerchant(undefined); setOrigen('manual')
     }, 350)
     return () => clearTimeout(t)
   }, [open])
@@ -84,12 +98,36 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
     if (d.categoryId) setCategoryId(d.categoryId)
     setMode(d.type)
     if (d.note) setNote(d.note)
+    setOrigen('voz')
   })
+
+  /**
+   * Lo que se leyó de la foto de una factura.
+   *
+   * Rellena y no guarda: el formulario queda listo y con el botón a un toque,
+   * pero la última palabra la tiene quien mira. Un OCR sobre papel térmico se
+   * equivoca lo suficiente como para que guardar a ciegas sea mala idea.
+   *
+   * La fecha solo se toca si la factura traía una y no es futura. Un tiquete
+   * mal leído puede dar «2062» y eso mandaría el gasto a un mes que nadie va
+   * a mirar.
+   */
+  function aplicarFactura(l: LecturaFactura) {
+    if (l.monto > 0) setRaw(String(l.monto).replace('.', ','))
+    if (l.tipo === 'income' || l.tipo === 'expense') setMode(l.tipo)
+    if (l.categoryId) setCategoryId(l.categoryId)
+    if (l.comercio) { setMerchant(l.comercio); setNote(l.comercio) }
+    else if (l.descripcion) setNote(l.descripcion)
+    if (l.dia && l.dia <= hoyEnZona()) setFecha(l.dia)
+    setOrigen('foto')
+  }
 
   const amount = parseKeypad(raw)
   const canSave = amount > 0 && Boolean(accountId)
 
   function pushDigit(d: string) {
+    // Tocar el teclado es la señal de que una persona revisó la cifra.
+    setOrigen((o) => (o === 'manual' ? o : 'manual'))
     setRaw((prev) => {
       if (d === ',') return prev.includes(',') ? prev : (prev || '0') + ','
       const [, dec] = prev.split(',')
@@ -116,7 +154,9 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
       amount,
       type: mode,
       currency,
-      description: note.trim() || categoryById(categoryId).name,
+      description: note.trim() || merchant || categoryById(categoryId).name,
+      merchant,
+      source: origen,
       occurredAt: instanteEnDia(fecha),
     }).catch(() => {
       /* El movimiento ya está en el estado en memoria. La escritura remota no
@@ -192,6 +232,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
             <span className="tnum text-[12px] text-label-tertiary">≈ {formatMoney(amount * fxRate)}</span>
           )}
           {!saved && <ThousandsKey onPress={() => setRaw((p) => (p && !p.includes(',') ? p + '000' : p))} disabled={!raw || raw.includes(',')} />}
+          {!saved && <FotoFactura onLeida={aplicarFactura} />}
           {!saved && voz.soportado && (
             <button
               onClick={() => { haptic(10); voz.estado === 'escuchando' ? voz.stop() : voz.start() }}
@@ -238,6 +279,16 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
           // ahí esconderla sería esconder justo la que hace falta.
           soloConSaldo={mode === 'expense'}
         />
+
+        {/*
+          Con cuál conviene pagar, justo donde se elige con qué se paga.
+          Compacto y solo en los gastos: en un ingreso la pregunta no existe.
+        */}
+        {mode === 'expense' && (
+          <div className="mb-3">
+            <RecomendadorTarjeta monto={amount} compacto />
+          </div>
+        )}
 
         {/* Fecha: por defecto hoy, para no estorbar el caso rápido. */}
         <label className="press mb-3 flex cursor-pointer items-center gap-2.5 rounded-xl border border-hairline
