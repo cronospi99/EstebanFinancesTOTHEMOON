@@ -397,10 +397,25 @@ abierta en el escritorio sin preguntarle a JavaScript por el ancho de la ventana
 —que es lo que provoca el parpadeo al hidratar— y deja el detalle fuera del
 recorrido del tabulador mientras está cerrado.
 
-En el móvil se llega desde **Gastos**, donde el acceso enseña lo que suman al
-mes y cuál es el próximo cobro; la barra de abajo ya va llena con seis destinos
-y el botón de captura, y un séptimo dejaría las etiquetas en un tamaño que no se
-lee. En escritorio tiene su sitio en la barra lateral.
+**Cada servicio con su logotipo.** En una lista de nueve, el logotipo es lo que
+se reconoce antes de leer, igual que en la bandeja de aplicaciones del teléfono.
+Van en `public/services` como siluetas blancas con transparencia sobre una
+baldosa oscura: cuatro kilobytes cada una, se ven igual en los dos temas y
+ninguna marca choca con el color de su propia tarjeta. Lo que no está en el
+catálogo cae al monograma, sobre la misma baldosa, porque «el parqueadero» no va
+a estar en ningún catálogo y un hueco vacío se leería como una imagen que no
+cargó.
+
+En el móvil se llega desde **Gastos**, arriba del todo, con un acceso que enseña
+lo que suman al mes y cuál es el próximo cobro; la barra de abajo ya va llena
+con seis destinos y el botón de captura, y un séptimo dejaría las etiquetas en
+un tamaño que no se lee. En escritorio tiene su sitio en la barra lateral.
+
+Ese acceso **se enseña siempre, también sin ninguna suscripción registrada**.
+Antes se escondía cuando la lista estaba vacía, y eso dejaba la función entera
+inalcanzable en el teléfono: no se puede anotar la primera si la única puerta
+aparece cuando ya hay una. El vacío es justo cuando más falta hace la puerta,
+porque es cuando nadie sabe que la pantalla existe.
 
 ---
 
