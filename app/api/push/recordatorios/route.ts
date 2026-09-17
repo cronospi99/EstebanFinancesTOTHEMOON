@@ -5,7 +5,7 @@ import { avisosPendientes, type Aviso } from '@/lib/avisos'
 import { saldoDeuda } from '@/lib/deudas'
 import { configVapid, enviarPush, type SuscripcionPush } from '@/lib/webpush'
 import { enviarCorreo, enviarSms } from '@/lib/canales'
-import type { Account, Debt, DebtPayment, Settings, Subscription } from '@/lib/types'
+import type { Account, Debt, DebtPayment, Settings, Subscription, Transaction } from '@/lib/types'
 
 /**
  * El trabajo diario que manda los recordatorios.
@@ -110,12 +110,29 @@ export async function GET(request: Request) {
   const caducados: string[] = []
 
   for (const [userId, subs] of porUsuario) {
-    const [cuentas, suscripciones, deudas, abonos, ajustes] = await Promise.all([
+    /*
+     * Los movimientos del último mes y medio entran para separar lo que la
+     * tarjeta ya facturó de lo gastado en el ciclo en curso. Sin ellos, quien
+     * cortó en cero y lleva gastando desde entonces recibía un push de «pago
+     * vencido» por una plata que el banco todavía no le ha cobrado. Ver
+     * `deudaPorCiclo`.
+     *
+     * Cuarenta y cinco días porque el ciclo más largo que se puede configurar
+     * cabe de sobra ahí, y traer el historial entero de cada usuario en un
+     * proceso que corre para todos no hace falta para esto.
+     */
+    const desdeMovimientos = new Date(Date.now() - 45 * 864e5).toISOString()
+    const [cuentas, suscripciones, deudas, abonos, ajustes, movimientos] = await Promise.all([
       supabase.from('accounts').select('*').eq('user_id', userId),
       supabase.from('subscriptions').select('*').eq('user_id', userId),
       supabase.from('debts').select('*').eq('user_id', userId),
       supabase.from('debt_payments').select('*').eq('user_id', userId),
       supabase.from('settings').select('*').eq('user_id', userId).maybeSingle(),
+      supabase
+        .from('transactions')
+        .select('id,account_id,to_account_id,category_id,amount,type,occurred_at,currency')
+        .eq('user_id', userId)
+        .gte('occurred_at', desdeMovimientos),
     ])
 
     const accounts = (cuentas.data ?? []).map((r) => ({
@@ -170,8 +187,14 @@ export async function GET(request: Request) {
      * está en dólares se ordena al final y su aviso sale igual, con la cifra
      * en su moneda, que es como hay que leerla.
      */
+    const transactions = (movimientos.data ?? []).map((r) => ({
+      id: r.id, accountId: r.account_id, toAccountId: r.to_account_id ?? undefined,
+      categoryId: r.category_id, amount: Number(r.amount), type: r.type,
+      description: '', occurredAt: r.occurred_at, currency: r.currency ?? undefined,
+    })) as Transaction[]
+
     const avisos = avisosPendientes({
-      accounts, subscriptions, debts, saldos, settings, fxRate: 0,
+      accounts, subscriptions, debts, saldos, settings, fxRate: 0, transactions,
     })
     if (!avisos.length) continue
 

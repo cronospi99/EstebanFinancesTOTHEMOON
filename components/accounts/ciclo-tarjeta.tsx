@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { CalendarClock, CalendarRange, Check, Pencil, Scissors, X } from 'lucide-react'
 import { fechaCobro } from '@/lib/suscripciones'
-import { cicloDe, corteDeInicio, deudaDe, inicioDeCorte } from '@/lib/tarjetas'
+import { cicloDe, corteDeInicio, deudaDe, deudaPorCiclo, inicioDeCorte, limiteDelCorte } from '@/lib/tarjetas'
 import { formatMoney } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { Account } from '@/lib/types'
@@ -161,13 +161,20 @@ function DiaDelMes({
  * que hace que el resto de la app pueda ayudar.
  */
 export function CicloBloque({ account }: { account: Account }) {
-  const { updateAccount } = useFinance()
+  const { updateAccount, transactions } = useFinance()
   const [editando, setEditando] = useState(false)
   const [corte, setCorte] = useState(account.statementDay ? String(account.statementDay) : '')
   const [pago, setPago] = useState(account.dueDay ? String(account.dueDay) : '')
 
   const ciclo = cicloDe(account)
   const deuda = deudaDe(account)
+  // Qué parte del saldo está facturada y qué parte es de este ciclo. Ver
+  // `deudaPorCiclo`: sin esto, lo recién comprado se presentaba como vencido.
+  const reparto = deudaPorCiclo(account, transactions)
+  // Cuándo se pagará lo de este ciclo: el límite del corte que viene.
+  const limitePróximo = ciclo && account.dueDay
+    ? limiteDelCorte(ciclo.corteProximo, account.dueDay)
+    : ''
 
   const guardar = () => {
     haptic([14, 30])
@@ -246,14 +253,14 @@ export function CicloBloque({ account }: { account: Account }) {
         />
         <Casilla
           etiqueta="Se paga"
-          valor={fechaCobro(ciclo.limiteEnCurso)}
+          valor={reparto.facturado > 0 ? fechaCobro(ciclo.limiteEnCurso) : fechaCobro(limitePróximo)}
           nota={
-            deuda <= 0 ? 'sin saldo'
+            reparto.facturado <= 0 ? 'nada facturado'
               : ciclo.faltanLimite < 0 ? `hace ${Math.abs(ciclo.faltanLimite)} días`
               : ciclo.faltanLimite === 0 ? 'hoy'
               : `en ${ciclo.faltanLimite} ${ciclo.faltanLimite === 1 ? 'día' : 'días'}`
           }
-          alerta={urgente || ciclo.faltanLimite < 0}
+          alerta={urgente || (reparto.facturado > 0 && ciclo.faltanLimite < 0)}
         />
       </div>
 
@@ -290,11 +297,40 @@ export function CicloBloque({ account }: { account: Account }) {
         </strong>.
       </p>
 
+      {/*
+        Las dos mitades de la deuda, separadas.
+
+        Una sola cifra de «pendiente» era el problema: mezclaba lo que hay que
+        pagar en diez días con lo que se acaba de comprar y no vence hasta el
+        mes siguiente. Quien cortó en cero veía su gasto del ciclo nuevo
+        presentado como una deuda vencida.
+      */}
       {deuda > 0 && (
-        <p className="mt-2 border-t border-hairline pt-2 text-[12px] text-label-tertiary">
-          Pendiente del extracto: {formatMoney(deuda, account.currency)}. Pagar el total
-          evita intereses; el mínimo, no.
-        </p>
+        <div className="mt-2 space-y-1 border-t border-hairline pt-2 text-[12px]">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-label-secondary">
+              Facturado, se paga el {fechaCobro(ciclo.limiteEnCurso)}
+            </span>
+            <span className={cn('tnum shrink-0 font-semibold', reparto.facturado > 0 ? 'text-label' : 'text-label-tertiary')}>
+              {formatMoney(reparto.facturado, account.currency)}
+            </span>
+          </div>
+          {reparto.enCurso > 0 && (
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-label-tertiary">
+                De este ciclo, se paga el {fechaCobro(limitePróximo)}
+              </span>
+              <span className="tnum shrink-0 text-label-secondary">
+                {formatMoney(reparto.enCurso, account.currency)}
+              </span>
+            </div>
+          )}
+          <p className="pt-0.5 text-[11.5px] leading-relaxed text-label-tertiary">
+            {reparto.facturado > 0
+              ? 'Pagar el total del extracto evita intereses; el mínimo, no.'
+              : 'El extracto que venció no tiene saldo: lo que debes es de este ciclo y todavía no lo han facturado.'}
+          </p>
+        </div>
       )}
     </div>
   )

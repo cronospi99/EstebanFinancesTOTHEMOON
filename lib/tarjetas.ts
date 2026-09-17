@@ -205,11 +205,81 @@ export interface AvisoTarjeta {
   detalle: string
   /** Lo que se debe, en la moneda de la tarjeta. Positivo. */
   deuda: number
+  /** El reparto entre lo facturado y lo del ciclo en curso. Ver `deudaPorCiclo`. */
+  reparto: DeudaTarjeta
 }
 
 /** Lo que se debe en una tarjeta: el saldo en negativo, en positivo. */
 export const deudaDe = (a: Pick<Account, 'balance' | 'type'>) =>
   a.type === 'credit' && a.balance < 0 ? -a.balance : 0
+
+export interface DeudaTarjeta {
+  /** Todo lo que se debe. Es el saldo, y manda: lo dice el banco. */
+  total: number
+  /**
+   * Lo que ya está en un extracto emitido. Esto es lo que hay que pagar en
+   * `limiteEnCurso`, y lo único que puede estar vencido.
+   */
+  facturado: number
+  /**
+   * Lo gastado desde el último corte. Todavía no lo han facturado: entra en el
+   * extracto que cierra en `corteProximo` y se paga un mes después.
+   */
+  enCurso: number
+  /** Si se pudo separar de verdad, o `facturado` es todo el saldo por defecto. */
+  separada: boolean
+}
+
+/**
+ * Cuánto de la deuda hay que pagar YA y cuánto todavía no.
+ *
+ * Esto no es un detalle: era un aviso falso de mora. `deudaDe` devuelve el
+ * saldo entero sin mirar cuándo se gastó, y todo lo que consume esa cifra
+ * —los avisos, la proyección, los recordatorios— daba por hecho que el saldo
+ * entero estaba en el último extracto. Para alguien que cortó el día 5, no
+ * debía nada de ese extracto y lleva gastando desde el 6, la app decía «pago
+ * vencido» el día 16 por una plata que el banco todavía no le ha facturado y
+ * que no vence hasta el mes siguiente. Un aviso de mora que no existe es peor
+ * que no avisar: enseña a ignorar los avisos.
+ *
+ * El reparto se hace al revés de lo que parece natural: se calcula lo gastado
+ * DESDE el corte con los movimientos registrados, y lo facturado es el resto
+ * del saldo. Así el total sigue siendo siempre el del banco —que es el dato
+ * bueno— y lo que se estima es solo el reparto. Si alguien no registra sus
+ * compras, `enCurso` sale 0 y todo queda como antes, que es el comportamiento
+ * correcto cuando no hay información: sin movimientos anotados, lo prudente es
+ * suponer que el saldo ya está facturado.
+ *
+ * El día del corte cuenta como facturado —la ventana empieza al día
+ * siguiente, en `inicioEnCurso`—. Es el lado conservador de la frontera: en
+ * una pregunta sobre lo que se debe hoy, equivocarse hacia «hay que pagarlo»
+ * cuesta un susto y equivocarse hacia el otro lado cuesta una mora de verdad.
+ */
+export function deudaPorCiclo(
+  cuenta: Account,
+  transacciones: Transaction[],
+  hoy: string = hoyEnZona(),
+): DeudaTarjeta {
+  const total = deudaDe(cuenta)
+  const ciclo = cicloDe(cuenta, hoy)
+  if (!ciclo || total <= 0) return { total, facturado: total, enCurso: 0, separada: false }
+
+  let enCurso = 0
+  for (const t of transacciones) {
+    const dia = t.occurredAt.slice(0, 10)
+    if (dia < ciclo.inicioEnCurso || dia > hoy) continue
+    // Comprar con la tarjeta sube la deuda; pagarla —una transferencia hacia
+    // ella— la baja. Un abono hecho en este ciclo descuenta de lo de este
+    // ciclo, que es donde lo imputaría cualquiera.
+    if (t.type === 'expense' && t.accountId === cuenta.id) enCurso += t.amount
+    else if (t.type === 'transfer' && t.toAccountId === cuenta.id) enCurso -= t.amount
+  }
+
+  // Nunca más que el saldo ni menos que cero: el reparto es una estimación y
+  // no puede inventar deuda que el banco no reconoce ni borrar la que sí.
+  const acotado = Math.max(0, Math.min(enCurso, total))
+  return { total, facturado: total - acotado, enCurso: acotado, separada: true }
+}
 
 /** Cupo que queda libre, o null si la tarjeta no tiene cupo declarado. */
 export function cupoLibre(a: Pick<Account, 'balance' | 'type' | 'creditLimit'>): number | null {
@@ -217,24 +287,36 @@ export function cupoLibre(a: Pick<Account, 'balance' | 'type' | 'creditLimit'>):
   return Math.max(0, a.creditLimit - deudaDe(a))
 }
 
-export function avisoDe(cuenta: Account, hoy: string = hoyEnZona()): AvisoTarjeta | null {
+export function avisoDe(
+  cuenta: Account,
+  hoy: string = hoyEnZona(),
+  transacciones: Transaction[] = [],
+): AvisoTarjeta | null {
   const ciclo = cicloDe(cuenta, hoy)
   if (!ciclo) return null
   const deuda = deudaDe(cuenta)
+  const reparto = deudaPorCiclo(cuenta, transacciones, hoy)
 
-  // En mora: la fecha pasó y sigue habiendo saldo. Es lo único que cuesta
-  // dinero de verdad y por eso va antes que todo lo demás.
-  if (deuda > 0 && ciclo.faltanLimite < 0) {
+  /*
+   * Lo que manda aquí es `facturado`, no el saldo.
+   *
+   * Un aviso de pago habla del extracto que ya cerró, y lo gastado después de
+   * ese corte no está en él: el banco todavía no lo ha facturado y no vence
+   * hasta el mes que viene. Mirando el saldo entero, quien cortó en cero y
+   * lleva gastando desde entonces recibía «pago vencido» por una plata que
+   * nadie le ha cobrado.
+   */
+  if (reparto.facturado > 0 && ciclo.faltanLimite < 0) {
     return {
-      cuenta, ciclo, deuda, urgencia: 'mora',
+      cuenta, ciclo, deuda, reparto, urgencia: 'mora',
       titulo: 'Pago vencido',
       detalle: `El límite era hace ${Math.abs(ciclo.faltanLimite)} ${Math.abs(ciclo.faltanLimite) === 1 ? 'día' : 'días'}.`,
     }
   }
 
-  if (deuda > 0 && ciclo.faltanLimite <= 5) {
+  if (reparto.facturado > 0 && ciclo.faltanLimite <= 5) {
     return {
-      cuenta, ciclo, deuda, urgencia: 'pago',
+      cuenta, ciclo, deuda, reparto, urgencia: 'pago',
       titulo: ciclo.faltanLimite === 0 ? 'Hoy vence el pago' : `Paga en ${ciclo.faltanLimite} ${ciclo.faltanLimite === 1 ? 'día' : 'días'}`,
       detalle: 'Pagar el total evita intereses; el mínimo, no.',
     }
@@ -242,7 +324,7 @@ export function avisoDe(cuenta: Account, hoy: string = hoyEnZona()): AvisoTarjet
 
   if (ciclo.faltanCorte <= 2) {
     return {
-      cuenta, ciclo, deuda, urgencia: 'corte',
+      cuenta, ciclo, deuda, reparto, urgencia: 'corte',
       titulo: ciclo.faltanCorte === 0 ? 'Corta hoy' : `Corta en ${ciclo.faltanCorte} ${ciclo.faltanCorte === 1 ? 'día' : 'días'}`,
       detalle: ciclo.faltanCorte === 0
         ? 'Lo que compres desde hoy ya entra en el extracto siguiente.'
@@ -255,13 +337,13 @@ export function avisoDe(cuenta: Account, hoy: string = hoyEnZona()): AvisoTarjet
   // mientras dure.
   if (ciclo.reciénCortada) {
     return {
-      cuenta, ciclo, deuda, urgencia: 'ventana',
+      cuenta, ciclo, deuda, reparto, urgencia: 'ventana',
       titulo: `${ciclo.diasDeFinanciacion} días sin intereses`,
       detalle: 'Acaba de cortar: lo que compres hoy se paga hasta el próximo extracto.',
     }
   }
 
-  return { cuenta, ciclo, deuda, urgencia: 'nada', titulo: '', detalle: '' }
+  return { cuenta, ciclo, deuda, reparto, urgencia: 'nada', titulo: '', detalle: '' }
 }
 
 export interface Recomendacion {

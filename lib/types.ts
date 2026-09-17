@@ -427,6 +427,30 @@ export interface RecurringIncome {
   active?: boolean
   note?: string
   color: string
+
+  /*
+   * ---- Nómina --------------------------------------------------------------
+   * Opcional: un arriendo que cobras o un cliente fijo no tienen nada de esto.
+   * Cuando está, `amount` deja de ser un dato suelto y pasa a ser el resultado
+   * del cálculo —lo que llega a la cuenta— mientras que `salarioBase` es lo
+   * que dice el contrato. El cálculo va de bruto a neto y nunca al revés. Ver
+   * `lib/nomina.ts`.
+   */
+
+  /** Sueldo mensual pactado, sin recargos ni descuentos. */
+  salarioBase?: number
+  /** Recibe auxilio de transporte. No cotiza, pero sí entra en la prima. */
+  auxilioTransporte?: boolean
+  /**
+   * Cotiza a salud y pensión como empleado.
+   *
+   * Falso en una prestación de servicios, donde el aporte lo hace el
+   * contratista sobre el 40 % del ingreso y con otras reglas: calcularlo como
+   * nómina daría una cifra equivocada, y no calcular nada es mejor que eso.
+   */
+  cotiza?: boolean
+  /** Los turnos de la semana, para los recargos. Ver `Turno` en `nomina.ts`. */
+  turnos?: { dia: number; desde: number; hasta: number }[]
 }
 
 export interface Holding {

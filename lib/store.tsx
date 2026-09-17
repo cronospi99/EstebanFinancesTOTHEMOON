@@ -2483,10 +2483,12 @@ export function useImpactoDolar(): ImpactoDolar {
 
 /** Las tarjetas con ciclo configurado y lo que hay que hacer con cada una. */
 export function useTarjetas(): AvisoTarjeta[] {
-  const { accounts } = useFinance()
+  // Los movimientos entran porque sin ellos no se puede saber qué parte del
+  // saldo está facturada y cuál es de este ciclo. Ver `deudaPorCiclo`.
+  const { accounts, transactions } = useFinance()
   return useMemo(
     () => accounts
-      .map((a) => avisoDe(a))
+      .map((a) => avisoDe(a, hoyEnZona(), transactions))
       .filter((x): x is AvisoTarjeta => x !== null)
       // Lo urgente arriba: mora, luego pago, luego corte, y al final las que
       // no piden nada.
@@ -2494,7 +2496,7 @@ export function useTarjetas(): AvisoTarjeta[] {
         const orden = { mora: 0, pago: 1, corte: 2, ventana: 3, nada: 4 }
         return orden[a.urgencia] - orden[b.urgencia] || a.ciclo.faltanLimite - b.ciclo.faltanLimite
       }),
-    [accounts],
+    [accounts, transactions],
   )
 }
 
@@ -2728,13 +2730,13 @@ export function useFire(swr?: number, rendimientoReal?: number): Fire {
 
 /** Lo que vence en los próximos días, ya filtrado por las preferencias. */
 export function useAvisos(): Aviso[] {
-  const { accounts, subscriptions, debts, settings, fxRate } = useFinance()
+  const { accounts, subscriptions, debts, settings, fxRate, transactions } = useFinance()
   const deudas = useDeudas()
 
   return useMemo(() => {
     const saldos = new Map(deudas.map((d) => [d.deuda.id, d.saldo]))
-    return avisosPendientes({ accounts, subscriptions, debts, saldos, settings, fxRate })
-  }, [accounts, subscriptions, debts, deudas, settings, fxRate])
+    return avisosPendientes({ accounts, subscriptions, debts, saldos, settings, fxRate, transactions })
+  }, [accounts, subscriptions, debts, deudas, settings, fxRate, transactions])
 }
 
 // ---- Mapeo fila <-> dominio ------------------------------------------------
@@ -2988,11 +2990,22 @@ const rowToIngreso = (r: Row): RecurringIncome => ({
   active: r.active !== false,
   note: r.note ?? undefined,
   color: r.color ?? '#30D158',
+  // Nómina. Null en todo lo que no es un sueldo, que es la mayoría.
+  salarioBase: r.salario_base == null ? undefined : Number(r.salario_base),
+  auxilioTransporte: r.auxilio_transporte ? true : undefined,
+  // La columna es `not null default true`: lo que falte cotiza, que es el caso
+  // normal y lo que se suponía antes de que la columna existiera.
+  cotiza: r.cotiza === false ? false : undefined,
+  turnos: Array.isArray(r.turnos) && r.turnos.length ? r.turnos : undefined,
 })
 const ingresoToRow = (i: RecurringIncome) => ({
   id: i.id, name: i.name, amount: i.amount, currency: i.currency, cycle: i.cycle,
   anchor_at: i.anchorAt, account_id: i.accountId ?? null,
   active: i.active !== false, note: i.note ?? null, color: i.color,
+  salario_base: i.salarioBase ?? null,
+  auxilio_transporte: Boolean(i.auxilioTransporte),
+  cotiza: i.cotiza !== false,
+  turnos: i.turnos?.length ? i.turnos : null,
 })
 const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
   const r: Row = {}
@@ -3005,6 +3018,16 @@ const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
   if (p.active !== undefined) r.active = p.active
   if ('note' in p) r.note = p.note ?? null
   if (p.color !== undefined) r.color = p.color
+  // Nómina. Con `in` y no `!== undefined`: quitarle la nómina a un ingreso
+  // —dejar de ser sueldo y pasar a ser una cifra suelta— es poner null a
+  // propósito, y con `!== undefined` ese borrado nunca llegaría a la fila.
+  if ('salarioBase' in p) r.salario_base = p.salarioBase ?? null
+  if ('auxilioTransporte' in p) r.auxilio_transporte = Boolean(p.auxilioTransporte)
+  if ('cotiza' in p) r.cotiza = p.cotiza !== false
+  // El valor se lee antes del `in`: el operador estrecha el tipo de `p` y deja
+  // `p.turnos` como `{}`, sin `length`.
+  const turnos = p.turnos
+  if ('turnos' in p) r.turnos = turnos?.length ? turnos : null
   return r
 }
 
