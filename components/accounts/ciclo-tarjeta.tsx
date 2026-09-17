@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { CalendarClock, CalendarRange, Check, Pencil, Scissors, X } from 'lucide-react'
 import { diasEntre, fechaCobro } from '@/lib/suscripciones'
 import { cicloDe, corteDeInicio, deudaDe, deudaPorCiclo, inicioDeCorte } from '@/lib/tarjetas'
-import { formatMoney } from '@/lib/format'
+import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { Account } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -244,7 +244,10 @@ export function CicloBloque({ account }: { account: Account }) {
     )
   }
 
-  const urgente = deuda > 0 && ciclo.faltanLimite <= 3
+  // Lo que enciende la alarma es lo FACTURADO, no el saldo. Con el saldo
+  // entero, una tarjeta que no debe nada del extracto y lleva gastando en el
+  // ciclo nuevo pintaba su «nada facturado» en rojo de vencido.
+  const urgente = reparto.facturado > 0 && ciclo.faltanLimite <= 3
   // Lo andado del período sobre lo que dura de verdad. Antes se dividía entre
   // 30 fijos, y en un período de 32 días la barra llegaba al final dos días
   // antes de que el período terminara.
@@ -279,7 +282,7 @@ export function CicloBloque({ account }: { account: Account }) {
               : ciclo.faltanLimite === 0 ? 'hoy'
               : `en ${ciclo.faltanLimite} ${ciclo.faltanLimite === 1 ? 'día' : 'días'}`
           }
-          alerta={urgente || (reparto.facturado > 0 && ciclo.faltanLimite < 0)}
+          alerta={urgente}
         />
       </div>
 
@@ -325,32 +328,159 @@ export function CicloBloque({ account }: { account: Account }) {
         presentado como una deuda vencida.
       */}
       {deuda > 0 && (
-        <div className="mt-2 space-y-1 border-t border-hairline pt-2 text-[12px]">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-label-secondary">
-              Facturado, se paga el {fechaCobro(ciclo.limiteEnCurso)}
-            </span>
-            <span className={cn('tnum shrink-0 font-semibold', reparto.facturado > 0 ? 'text-label' : 'text-label-tertiary')}>
-              {formatMoney(reparto.facturado, account.currency)}
-            </span>
-          </div>
-          {reparto.enCurso > 0 && (
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-label-tertiary">
-                De este ciclo, se paga el {fechaCobro(limitePróximo)}
-              </span>
-              <span className="tnum shrink-0 text-label-secondary">
-                {formatMoney(reparto.enCurso, account.currency)}
-              </span>
-            </div>
+        <RepartoDeuda account={account} ciclo={ciclo} reparto={reparto} limitePróximo={limitePróximo} />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Las dos mitades de la deuda, y el botón para corregirlas.
+ *
+ * Una sola cifra de «pendiente» era el problema de partida: mezclaba lo que
+ * hay que pagar en diez días con lo que se acaba de comprar y no vence hasta
+ * el mes siguiente. Separarlas mirando los movimientos registrados arregló el
+ * caso de quien anota sus compras, pero dejó fuera a quien lleva solo el saldo
+ * de la tarjeta: sin movimientos que mirar, el saldo entero se da por
+ * facturado y aparece un «pago vencido» por plata del ciclo nuevo.
+ *
+ * De ahí este control. El reparto deducido es una estimación y cualquier
+ * estimación necesita una manera de decirle que se equivocó; además, el dato
+ * bueno lo tiene él delante, impreso en el extracto. Lo que escriba vale para
+ * ese extracto y solo para ese: cuando el banco emita el siguiente, la app
+ * vuelve a deducir sola.
+ */
+function RepartoDeuda({
+  account, ciclo, reparto, limitePróximo,
+}: {
+  account: Account
+  ciclo: NonNullable<ReturnType<typeof cicloDe>>
+  reparto: ReturnType<typeof deudaPorCiclo>
+  limitePróximo: string
+}) {
+  const { updateAccount } = useFinance()
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState('')
+
+  const declarar = (monto: number | undefined) => {
+    haptic([14, 30])
+    updateAccount(account.id, {
+      statementBalance: monto,
+      // La fecha del corte al que se refiere. Sin ella la declaración no
+      // caducaría y callaría también los avisos de los meses siguientes.
+      statementBalanceAt: monto === undefined ? undefined : ciclo.corteAnterior,
+    })
+    setEditando(false)
+  }
+
+  if (editando) {
+    return (
+      <div className="mt-2 border-t border-hairline pt-2">
+        <p className="text-[12.5px] leading-snug text-label">
+          ¿Cuánto de los {formatMoney(reparto.total, account.currency)} ya te facturaron?
+        </p>
+        <p className="mt-0.5 text-[11.5px] leading-snug text-label-tertiary">
+          Es el total del extracto que cerró el {fechaCobro(ciclo.corteAnterior)} y vence el{' '}
+          {fechaCobro(ciclo.limiteEnCurso)}. El resto es de este ciclo y se paga el{' '}
+          {fechaCobro(limitePróximo)}.
+        </p>
+
+        <div className="mt-2 flex gap-1.5">
+          <button
+            onClick={() => declarar(0)}
+            className="press flex-1 rounded-lg border border-hairline py-1.5 text-[12px] text-label-secondary"
+          >
+            Nada, todo es de este ciclo
+          </button>
+          <button
+            onClick={() => declarar(reparto.total)}
+            className="press shrink-0 rounded-lg border border-hairline px-3 py-1.5 text-[12px] text-label-secondary"
+          >
+            Todo
+          </button>
+        </div>
+
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-hairline bg-fill-2 px-2.5 py-2">
+          <span className="text-[13px] text-label-secondary">$</span>
+          <input
+            value={valor ? formatKeypad(valor) : ''}
+            inputMode="numeric"
+            autoFocus
+            aria-label="Importe facturado"
+            placeholder="o escribe el importe"
+            onChange={(e) => setValor(e.target.value.replace(/[^\d,]/g, ''))}
+            className="tnum w-full bg-transparent text-[15px] font-semibold text-label
+                       placeholder:text-[12.5px] placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
+          />
+        </div>
+
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => { setEditando(false); setValor('') }}
+            className="press flex-1 rounded-lg border border-hairline py-1.5 text-[12px] text-label-secondary"
+          >
+            Cancelar
+          </button>
+          {reparto.declarada && (
+            <button
+              onClick={() => declarar(undefined)}
+              className="press flex-1 rounded-lg border border-hairline py-1.5 text-[12px] text-label-secondary"
+            >
+              Deducirlo solo
+            </button>
           )}
-          <p className="pt-0.5 text-[11.5px] leading-relaxed text-label-tertiary">
-            {reparto.facturado > 0
-              ? 'Pagar el total del extracto evita intereses; el mínimo, no.'
-              : 'El extracto que venció no tiene saldo: lo que debes es de este ciclo y todavía no lo han facturado.'}
-          </p>
+          <button
+            onClick={() => declarar(parseKeypad(valor))}
+            disabled={!valor}
+            className="press flex-1 rounded-lg bg-accent-blue py-1.5 text-[12px] font-semibold text-white disabled:opacity-40"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-2 space-y-1 border-t border-hairline pt-2 text-[12px]">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-label-secondary">
+          Facturado, se paga el {fechaCobro(ciclo.limiteEnCurso)}
+        </span>
+        <span className={cn('tnum shrink-0 font-semibold', reparto.facturado > 0 ? 'text-label' : 'text-label-tertiary')}>
+          {formatMoney(reparto.facturado, account.currency)}
+        </span>
+      </div>
+      {reparto.enCurso > 0 && (
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-label-tertiary">
+            De este ciclo, se paga el {fechaCobro(limitePróximo)}
+          </span>
+          <span className="tnum shrink-0 text-label-secondary">
+            {formatMoney(reparto.enCurso, account.currency)}
+          </span>
         </div>
       )}
+
+      <div className="flex items-start justify-between gap-2 pt-0.5">
+        <p className="text-[11.5px] leading-relaxed text-label-tertiary">
+          {reparto.declarada
+            ? `Lo dijiste tú, para el extracto del ${fechaCobro(ciclo.corteAnterior)}.`
+            : reparto.facturado > 0
+              ? 'Pagar el total del extracto evita intereses; el mínimo, no.'
+              : 'El extracto que venció no tiene saldo: lo que debes es de este ciclo y todavía no lo han facturado.'}
+        </p>
+        <button
+          onClick={() => {
+            haptic(6)
+            setValor(reparto.facturado ? String(reparto.facturado) : '')
+            setEditando(true)
+          }}
+          className="press shrink-0 text-[11.5px] text-accent-blue"
+        >
+          No cuadra
+        </button>
+      </div>
     </div>
   )
 }

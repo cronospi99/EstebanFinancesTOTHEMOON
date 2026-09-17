@@ -57,6 +57,22 @@ export function AvisosTarjetas({ titulo = 'Tus tarjetas' }: { titulo?: string })
                 <p className="mt-0.5 text-[11.5px] text-label-tertiary">
                   Corta el {fechaCobro(t.ciclo.corteProximo)} · se paga el {fechaCobro(t.ciclo.limiteEnCurso)}
                 </p>
+                {/*
+                  Cuando el reparto es una suposición, se dice.
+
+                  `enCurso` a cero sin haberlo declarado significa que no había
+                  ni un movimiento del ciclo que mirar, así que la app dio el
+                  saldo entero por facturado por prudencia. Es lo correcto sin
+                  información, pero produce un aviso de mora que puede no
+                  existir, y quien lo lee necesita saber que hay un botón para
+                  desmentirlo en vez de aprender a ignorar los avisos.
+                */}
+                {(t.urgencia === 'mora' || t.urgencia === 'pago')
+                  && !t.reparto.declarada && t.reparto.enCurso === 0 && (
+                  <p className="mt-1 text-[11.5px] leading-snug text-label-tertiary">
+                    ¿Ya lo pagaste o es de este ciclo? Ábrela y dilo en «no cuadra».
+                  </p>
+                )}
               </div>
 
               {t.deuda > 0 && (

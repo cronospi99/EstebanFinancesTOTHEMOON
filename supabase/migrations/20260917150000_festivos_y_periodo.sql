@@ -33,3 +33,22 @@ comment on column public.recurring_incomes.trabaja_festivos is
   'Si los turnos que caen en festivo se trabajan. Decide el signo del recargo festivo.';
 comment on column public.recurring_incomes.paga_extras is
   'Si las horas sobre la jornada se pagan como extra. Falso por defecto: no suponerlo.';
+
+-- El reparto de la deuda de una tarjeta, dicho a mano.
+--
+-- La app deduce qué parte del saldo ya está facturada mirando los movimientos
+-- registrados, pero quien lleva solo el saldo de la tarjeta no tiene
+-- movimientos que mirar: ahí el saldo entero se da por facturado y sale un
+-- «pago vencido» por plata que es del ciclo nuevo. `statement_balance` es la
+-- salida, y `statement_balance_at` —la fecha del corte al que se refiere— hace
+-- que caduque cuando el banco emita el siguiente extracto, en vez de callar
+-- los avisos para siempre.
+
+alter table public.accounts
+  add column if not exists statement_balance numeric,
+  add column if not exists statement_balance_at date;
+
+comment on column public.accounts.statement_balance is
+  'Parte del saldo ya facturada, declarada por el usuario. Nulo = se deduce de los movimientos.';
+comment on column public.accounts.statement_balance_at is
+  'Fecha del corte al que se refiere statement_balance. Fuera de ese ciclo, la declaración caduca.';

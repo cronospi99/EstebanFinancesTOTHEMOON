@@ -287,6 +287,8 @@ export interface DeudaTarjeta {
   enCurso: number
   /** Si se pudo separar de verdad, o `facturado` es todo el saldo por defecto. */
   separada: boolean
+  /** Si el reparto lo dijo el usuario en vez de deducirse de los movimientos. */
+  declarada: boolean
 }
 
 /**
@@ -323,7 +325,25 @@ export function deudaPorCiclo(
 ): DeudaTarjeta {
   const total = deudaDe(cuenta)
   const ciclo = cicloDe(cuenta, hoy)
-  if (!ciclo || total <= 0) return { total, facturado: total, enCurso: 0, separada: false }
+  if (!ciclo || total <= 0) return { total, facturado: total, enCurso: 0, separada: false, declarada: false }
+
+  /*
+   * Lo que diga el dueño de la tarjeta manda sobre lo deducido.
+   *
+   * Deducir el reparto de los movimientos solo funciona si están todos
+   * anotados. Quien lleva el saldo a mano se quedaba sin reparto y con el
+   * saldo entero dado por facturado, que es prudente pero produce un «pago
+   * vencido» falso justo en el caso más común: cortar en cero y seguir
+   * gastando.
+   *
+   * La declaración vale para UN extracto, el que cerró en `corteAnterior`. En
+   * cuanto el banco emite el siguiente deja de aplicar y se vuelve a deducir.
+   * Es la diferencia entre callar un aviso falso y callar los avisos.
+   */
+  if (cuenta.statementBalance != null && cuenta.statementBalanceAt === ciclo.corteAnterior) {
+    const facturado = Math.max(0, Math.min(cuenta.statementBalance, total))
+    return { total, facturado, enCurso: total - facturado, separada: true, declarada: true }
+  }
 
   let enCurso = 0
   for (const t of transacciones) {
@@ -339,7 +359,7 @@ export function deudaPorCiclo(
   // Nunca más que el saldo ni menos que cero: el reparto es una estimación y
   // no puede inventar deuda que el banco no reconoce ni borrar la que sí.
   const acotado = Math.max(0, Math.min(enCurso, total))
-  return { total, facturado: total - acotado, enCurso: acotado, separada: true }
+  return { total, facturado: total - acotado, enCurso: acotado, separada: true, declarada: false }
 }
 
 /** Cupo que queda libre, o null si la tarjeta no tiene cupo declarado. */
