@@ -34,7 +34,7 @@
  * fuera: mejor una cifra incompleta y avisada que una inventada.
  */
 import type { Account, Debt, IncomeCycle, RecurringIncome, Subscription, Transaction } from './types'
-import { cicloDe, deudaDe, fechaDelMes, limiteDelCorte, proximoDiaDelMes } from './tarjetas'
+import { cicloDe, deudaDe, deudaPorCiclo, fechaDelMes, limiteDelCorte, proximoDiaDelMes } from './tarjetas'
 import { diasEntre, proximoCobro, sumarMeses } from './suscripciones'
 import { anioMes, hoyEnZona, sumarDias } from './zona'
 import type { DeudaConSaldo } from './store'
@@ -325,7 +325,36 @@ export function proyectarLiquidez(e: EntradaProyeccion): Proyeccion {
     const deuda = deudaDe(cuenta)
     if (!ciclo || deuda <= 0) continue
 
-    const deudaCOP = enPesos(deuda, cuenta.currency)
+    /*
+     * Solo lo ya facturado vence en `limiteEnCurso`.
+     *
+     * Lo gastado desde el corte todavía no está en ningún extracto: entra en
+     * el que cierra en `corteProximo` y se paga un mes después. Metiéndolo
+     * todo en la primera fecha, la línea se hundía de golpe por una plata que
+     * el banco aún no ha cobrado, y justo a quien acaba de cortar en cero y
+     * lleva gastando desde entonces —el caso más común— le salía el peor mes
+     * del año. Ver `deudaPorCiclo`.
+     */
+    const reparto = deudaPorCiclo(cuenta, e.transactions, hoy)
+    if (reparto.enCurso > 0) {
+      const enCursoCOP = enPesos(reparto.enCurso, cuenta.currency)
+      if (enCursoCOP === null) sinConvertir++
+      else {
+        const dia = limiteDelCorte(ciclo.corteProximo, cuenta.dueDay!)
+        if (dia > hoy && dia <= hasta) {
+          eventos.push({
+            dia,
+            tipo: 'tarjeta',
+            concepto: `${cuenta.name} · lo de este ciclo`,
+            monto: -enCursoCOP,
+            color: COLOR_EVENTO.tarjeta,
+          })
+        }
+      }
+    }
+
+    if (reparto.facturado <= 0) continue
+    const deudaCOP = enPesos(reparto.facturado, cuenta.currency)
     if (deudaCOP === null) { sinConvertir++; continue }
 
     /*

@@ -2483,10 +2483,12 @@ export function useImpactoDolar(): ImpactoDolar {
 
 /** Las tarjetas con ciclo configurado y lo que hay que hacer con cada una. */
 export function useTarjetas(): AvisoTarjeta[] {
-  const { accounts } = useFinance()
+  // Los movimientos entran porque sin ellos no se puede saber qué parte del
+  // saldo está facturada y cuál es de este ciclo. Ver `deudaPorCiclo`.
+  const { accounts, transactions } = useFinance()
   return useMemo(
     () => accounts
-      .map((a) => avisoDe(a))
+      .map((a) => avisoDe(a, hoyEnZona(), transactions))
       .filter((x): x is AvisoTarjeta => x !== null)
       // Lo urgente arriba: mora, luego pago, luego corte, y al final las que
       // no piden nada.
@@ -2494,7 +2496,7 @@ export function useTarjetas(): AvisoTarjeta[] {
         const orden = { mora: 0, pago: 1, corte: 2, ventana: 3, nada: 4 }
         return orden[a.urgencia] - orden[b.urgencia] || a.ciclo.faltanLimite - b.ciclo.faltanLimite
       }),
-    [accounts],
+    [accounts, transactions],
   )
 }
 
@@ -2728,13 +2730,13 @@ export function useFire(swr?: number, rendimientoReal?: number): Fire {
 
 /** Lo que vence en los próximos días, ya filtrado por las preferencias. */
 export function useAvisos(): Aviso[] {
-  const { accounts, subscriptions, debts, settings, fxRate } = useFinance()
+  const { accounts, subscriptions, debts, settings, fxRate, transactions } = useFinance()
   const deudas = useDeudas()
 
   return useMemo(() => {
     const saldos = new Map(deudas.map((d) => [d.deuda.id, d.saldo]))
-    return avisosPendientes({ accounts, subscriptions, debts, saldos, settings, fxRate })
-  }, [accounts, subscriptions, debts, deudas, settings, fxRate])
+    return avisosPendientes({ accounts, subscriptions, debts, saldos, settings, fxRate, transactions })
+  }, [accounts, subscriptions, debts, deudas, settings, fxRate, transactions])
 }
 
 // ---- Mapeo fila <-> dominio ------------------------------------------------
