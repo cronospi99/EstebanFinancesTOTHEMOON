@@ -142,6 +142,10 @@ export async function GET(request: Request) {
       installments: r.installments ?? undefined,
       installmentsPaid: r.installments_paid ?? undefined,
       statementDay: r.statement_day ?? undefined,
+      // Sin esto, los avisos del servidor deducen el inicio del período del
+      // corte y se desfasan un par de días en las tarjetas que lo imprimen
+      // aparte — que es justo donde el aviso de mora salía falso.
+      periodStartDay: r.period_start_day ?? undefined,
       dueDay: r.due_day ?? undefined,
     })) as Account[]
 
