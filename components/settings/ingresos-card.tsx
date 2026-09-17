@@ -147,6 +147,7 @@ function Formulario({
     ? resumirNomina({
         base: nomina.salarioBase, auxilio: nomina.auxilioTransporte,
         cotiza: nomina.cotiza, turnos: nomina.turnos,
+        trabajaFestivos: nomina.trabajaFestivos, pagaExtras: nomina.pagaExtras,
       }, hoyEnZona())
     : null
   const importe = resumen ? resumen.mensual : parseKeypad(monto)
@@ -258,6 +259,8 @@ function Formulario({
                 auxilioTransporte: nomina.auxilioTransporte,
                 cotiza: nomina.cotiza,
                 turnos: nomina.turnos,
+                trabajaFestivos: nomina.trabajaFestivos,
+                pagaExtras: nomina.pagaExtras,
               } : {}),
             })
           }}

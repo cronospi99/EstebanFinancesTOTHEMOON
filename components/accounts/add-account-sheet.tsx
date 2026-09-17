@@ -8,6 +8,7 @@ import { InstitutionPicker } from '@/components/ui/institution-picker'
 import { CO_INSTITUTIONS, institutionsByGroup } from '@/lib/categories'
 import { formatKeypad, parseKeypad } from '@/lib/format'
 import { CicloEditor } from './ciclo-tarjeta'
+import { inicioDeCorte } from '@/lib/tarjetas'
 import { useFinance } from '@/lib/store'
 import type { AccountType, Currency } from '@/lib/types'
 import { cn, haptic } from '@/lib/utils'
@@ -58,8 +59,9 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
   const [amount, setAmount] = useState('')
   const [apy, setApy] = useState('')
   const [installments, setInstallments] = useState('')
-  // Las dos fechas del ciclo, como día del mes. Ver `ciclo-tarjeta.tsx`.
+  // Las tres fechas del ciclo, como día del mes. Ver `ciclo-tarjeta.tsx`.
   const [corte, setCorte] = useState('')
+  const [inicio, setInicio] = useState('')
   const [pago, setPago] = useState('')
   const [cupo, setCupo] = useState('')
   const [negative, setNegative] = useState(false)
@@ -87,9 +89,14 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
       installmentsPaid: isCredit && installments ? 0 : undefined,
       statementDay: isCredit && corte ? Number(corte) : undefined,
       dueDay: isCredit && pago ? Number(pago) : undefined,
+      // Solo si no es el que se deduciría del corte: ver `guardar` en `CicloBloque`.
+      periodStartDay: isCredit && inicio && corte && Number(inicio) !== inicioDeCorte(Number(corte))
+        ? Number(inicio)
+        : undefined,
     })
 
     setName(''); setAmount(''); setApy(''); setInstallments(''); setCupo(''); setNegative(false)
+    setCorte(''); setInicio(''); setPago('')
     setSaving(false)
     onClose()
   }
@@ -185,8 +192,13 @@ export function AddAccountSheet({ open, onClose }: { open: boolean; onClose: () 
             <Label>Ciclo de facturación</Label>
             <CicloEditor
               statementDay={corte}
+              periodStartDay={inicio}
               dueDay={pago}
-              onChange={(campo, v) => (campo === 'corte' ? setCorte(v) : setPago(v))}
+              onChange={(campo, v) => {
+                if (campo === 'corte') setCorte(v)
+                else if (campo === 'inicio') setInicio(v)
+                else setPago(v)
+              }}
             />
           </div>
         )}

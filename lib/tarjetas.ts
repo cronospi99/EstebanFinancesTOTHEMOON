@@ -27,7 +27,7 @@
  * tasa detrás y eso ya no es dinero gratis.
  */
 import type { Account, Transaction } from './types'
-import { diasEntre, sumarMeses } from './suscripciones'
+import { diasEntre } from './suscripciones'
 import { anioMes, hoyEnZona, sumarDias } from './zona'
 
 /** Cuántos días trae un mes, contando los febreros bisiestos. */
@@ -76,36 +76,39 @@ export function limiteDelCorte(corte: string, dueDay: number): string {
 }
 
 export interface CicloTarjeta {
-  /** El corte que ya pasó: desde el día siguiente corre el extracto abierto. */
-  corteAnterior: string
   /**
    * El primer día del período en el que cae lo que compres hoy.
    *
-   * Va emparejado con `limiteDeHoy` y con el corte que lo cierra
-   * (`corteDeHoy`), no con `corteProximo`. La diferencia solo se nota el día
-   * del corte, y ahí es la diferencia entre decir la verdad y decir un
-   * disparate: ese día el extracto ya se emitió, así que el período abierto es
-   * el que empieza mañana. Emparejarlo con `corteProximo` —que ese día es
-   * hoy— daba períodos que terminaban antes de empezar.
-   *
-   * No se guarda en ninguna parte a propósito: el inicio y el corte son un
-   * solo hecho dicho de dos maneras, y guardar los dos significa que alguien
-   * edite uno y la tarjeta diga dos cosas distintas del mismo ciclo.
-   *
-   * Se calcula sumando un día a la FECHA y no al número del mes: el 31 de
-   * enero más un día es el 1 de febrero sin ningún caso especial, mientras que
-   * «día 31 + 1» no significa nada en un mes de treinta.
+   * Es la frontera que decide todo: una compra de este día entra en el
+   * extracto siguiente y se paga un mes más tarde que una compra de la
+   * víspera.
    */
   inicioEnCurso: string
-  /** El próximo corte. Lo que compres hasta ese día entra en ese extracto. */
-  corteProximo: string
-  /** Cuándo hay que pagar el extracto que ya cerró. Lo urgente. */
-  limiteEnCurso: string
-  /** El corte que cerrará lo que compres hoy. Cierra el período de `inicioEnCurso`. */
+  /** El último día de ese período. La víspera del siguiente inicio. */
+  finEnCurso: string
+  /** El día en que el banco emite el extracto de ese período. Ver `emisionDelPeriodo`. */
   corteDeHoy: string
   /** Cuándo se pagará lo que compres hoy. Lo que decide la jugada. */
   limiteDeHoy: string
-  /** Días que faltan para el corte. 0 = corta hoy. */
+  /**
+   * El extracto anterior: el día en que se emitió.
+   *
+   * Puede caer en el futuro durante los días que el banco tarda en emitirlo:
+   * un período que cerró el 3 con extracto el 5 deja el día 4 en esa tierra de
+   * nadie. Lo que importa ahí es `limiteEnCurso`, que ya está fijado.
+   */
+  corteAnterior: string
+  /** Cuándo hay que pagar el extracto anterior. Lo urgente. */
+  limiteEnCurso: string
+  /** El próximo corte que verá el calendario: el primero que no ha pasado. */
+  corteProximo: string
+  /**
+   * Días que faltan para que cierre el período abierto. 0 = cierra hoy.
+   *
+   * Cuenta hasta `finEnCurso` y no hasta el corte impreso, que son la misma
+   * fecha salvo que el banco tarde unos días en emitir. Lo que decide en qué
+   * extracto cae una compra es el cierre del período, no el papel.
+   */
   faltanCorte: number
   /** Días que faltan para pagar el extracto ya cerrado. Negativo = en mora. */
   faltanLimite: number
@@ -116,18 +119,25 @@ export interface CicloTarjeta {
    * dentro del ciclo.
    */
   diasDeFinanciacion: number
-  /** Acaba de cortar: estamos en los primeros días del extracto nuevo. */
+  /** Acaba de empezar el período: estamos en los primeros días del extracto nuevo. */
   reciénCortada: boolean
+  /**
+   * Días entre que el período cierra y el banco emite el extracto.
+   *
+   * Cero en la mayoría de las tarjetas. Cuando no lo es, la app tiene tres
+   * fechas que enseñar en vez de dos y conviene decirlo.
+   */
+  retardoEmision: number
 }
 
 /*
- * Corte e inicio son el mismo dato dicho al revés.
+ * Corte e inicio: casi siempre el mismo dato dicho al revés.
  *
  * Muchos bancos no imprimen «día de corte» sino «el período va del 26 al 25»,
  * y obligar a restar uno mentalmente es justo el tipo de cuenta que alguien
- * hace mal una vez y deja la tarjeta mal configurada para siempre. Se puede
- * escribir cualquiera de los dos y la app guarda solo el corte, que es el que
- * usa todo lo demás.
+ * hace mal una vez y deja la tarjeta mal configurada para siempre. Estas dos
+ * funciones convierten de uno al otro y sirven para rellenar el campo que
+ * falta cuando solo se sabe el otro.
  *
  * El caso raro es el 1 y el 31. Un período que empieza el 1 corta el último
  * día del mes, y ese día es 31, 30 o 28 según el mes; se guarda 31 y
@@ -136,6 +146,43 @@ export interface CicloTarjeta {
  */
 export const inicioDeCorte = (corte: number): number => (corte >= 31 ? 1 : corte + 1)
 export const corteDeInicio = (inicio: number): number => (inicio <= 1 ? 31 : inicio - 1)
+
+/**
+ * Lo que el banco tarda como mucho en emitir el extracto, en días.
+ *
+ * No es una regla del negocio sino una defensa contra los números absurdos.
+ * Si alguien pone un inicio de período y un corte que no pueden ser del mismo
+ * ciclo —inicio el 10, corte el 8, veintinueve días de retardo— lo más
+ * probable es que haya confundido los campos, y en ese caso vale más ignorar
+ * el corte y cerrar el período en su propio fin que calcular un ciclo
+ * imposible y presentarlo con toda seriedad.
+ */
+export const RETARDO_MAXIMO = 10
+
+/**
+ * El día en que se emite el extracto de un período que cierra en `fin`.
+ *
+ * En la mayoría de las tarjetas es el mismo día: el período cierra y el
+ * extracto sale. Pero hay bancos que imprimen tres fechas —«inicio del
+ * período: 4 de septiembre, fecha de corte: 5 de octubre, fecha de pago: 15 de
+ * octubre»— donde el corte NO es el fin del período sino el día en que emiten
+ * el papel, un par de días después de que el período cerrara. El siguiente
+ * período ya empezó el día 4; lo del 4 y el 5 de octubre ya es del ciclo
+ * nuevo aunque el extracto del anterior salga el 5.
+ *
+ * Tomar el corte impreso por el fin del período es exactamente el error que
+ * hacía que las compras de esos días salieran como vencidas un mes antes de
+ * tiempo.
+ */
+export function emisionDelPeriodo(fin: string, corteDia: number): string {
+  const emision = proximoDiaDelMes(corteDia, fin)
+  return diasEntre(fin, emision) > RETARDO_MAXIMO ? fin : emision
+}
+
+/** El día en que empieza el período de una tarjeta, se haya escrito o se deduzca del corte. */
+export const inicioDelPeriodo = (
+  a: Pick<Account, 'statementDay' | 'periodStartDay'>,
+): number => a.periodStartDay ?? inicioDeCorte(a.statementDay!)
 
 /** Una tarjeta con las dos fechas puestas. Sin ellas no hay ciclo que calcular. */
 export const tieneCiclo = (a: Pick<Account, 'type' | 'statementDay' | 'dueDay'>): boolean =>
@@ -150,40 +197,52 @@ export const tieneCiclo = (a: Pick<Account, 'type' | 'statementDay' | 'dueDay'>)
  * no lo dice.
  */
 export function cicloDe(
-  cuenta: Pick<Account, 'type' | 'statementDay' | 'dueDay'>,
+  cuenta: Pick<Account, 'type' | 'statementDay' | 'dueDay' | 'periodStartDay'>,
   hoy: string = hoyEnZona(),
 ): CicloTarjeta | null {
   if (!tieneCiclo(cuenta)) return null
   const corteDia = cuenta.statementDay!
   const pagoDia = cuenta.dueDay!
-
-  const corteProximo = proximoDiaDelMes(corteDia, hoy)
-  const corteAnterior = corteProximo === hoy ? hoy : anteriorDiaDelMes(corteDia, hoy)
+  const inicioDia = inicioDelPeriodo(cuenta)
 
   /*
-   * Lo que se compra HOY entra en el extracto que cierra en `corteProximo`
-   * —hoy todavía no ha cerrado— salvo que hoy sea justo el día del corte. Ese
-   * día el extracto ya se emitió, así que la compra de hoy cae en el
-   * siguiente. Es el detalle que convierte el día del corte en el mejor día
-   * del mes para comprar, y darlo por el peor sería invertir el consejo.
+   * Todo se cuelga del INICIO del período, no del corte.
+   *
+   * Es el cambio que arregla las tarjetas de tres fechas. El período va de un
+   * día `inicioDia` al `inicioDia` siguiente sin solaparse, y de ahí salen sus
+   * dos extremos sin ninguna cuenta rara; el corte es después, y es un dato
+   * del papel, no de la frontera.
+   *
+   * El día siguiente se busca sobre la FECHA y no sobre el número del mes: el
+   * 31 de enero más un día es el 1 de febrero sin casos especiales, mientras
+   * que «día 31 + 1» no significa nada en un mes de treinta.
    */
-  const corteDeHoy = hoy === corteProximo ? sumarMeses(corteProximo, 1) : corteProximo
+  const inicioEnCurso = anteriorDiaDelMes(inicioDia, hoy)
+  const finEnCurso = sumarDias(proximoDiaDelMes(inicioDia, sumarDias(hoy, 1)), -1)
+
+  const corteDeHoy = emisionDelPeriodo(finEnCurso, corteDia)
   const limiteDeHoy = limiteDelCorte(corteDeHoy, pagoDia)
+
+  const corteAnterior = emisionDelPeriodo(sumarDias(inicioEnCurso, -1), corteDia)
   const limiteEnCurso = limiteDelCorte(corteAnterior, pagoDia)
 
   return {
-    corteAnterior,
-    inicioEnCurso: sumarDias(corteAnterior, 1),
-    corteProximo,
+    inicioEnCurso,
+    finEnCurso,
     corteDeHoy,
-    limiteEnCurso,
     limiteDeHoy,
-    faltanCorte: diasEntre(hoy, corteProximo),
+    corteAnterior,
+    limiteEnCurso,
+    // Durante el retardo de emisión el corte «anterior» todavía no ha salido,
+    // y entonces el próximo corte del calendario es ese y no el de este ciclo.
+    corteProximo: corteAnterior >= hoy ? corteAnterior : corteDeHoy,
+    faltanCorte: diasEntre(hoy, finEnCurso),
     faltanLimite: diasEntre(hoy, limiteEnCurso),
     diasDeFinanciacion: diasEntre(hoy, limiteDeHoy),
     // Tres días: lo que dura la ventaja de verdad. Al cuarto ya hay tarjetas
     // mejores y decirle a alguien que esta «acaba de cortar» sería engañarlo.
-    reciénCortada: diasEntre(corteAnterior, hoy) <= 3,
+    reciénCortada: diasEntre(inicioEnCurso, hoy) <= 3,
+    retardoEmision: diasEntre(finEnCurso, corteDeHoy),
   }
 }
 
@@ -250,10 +309,12 @@ export interface DeudaTarjeta {
  * correcto cuando no hay información: sin movimientos anotados, lo prudente es
  * suponer que el saldo ya está facturado.
  *
- * El día del corte cuenta como facturado —la ventana empieza al día
- * siguiente, en `inicioEnCurso`—. Es el lado conservador de la frontera: en
- * una pregunta sobre lo que se debe hoy, equivocarse hacia «hay que pagarlo»
- * cuesta un susto y equivocarse hacia el otro lado cuesta una mora de verdad.
+ * La frontera es `inicioEnCurso`, inclusive: lo de ese día ya es del ciclo
+ * nuevo y lo de la víspera es del extracto que cerró. Es la misma frontera que
+ * usa `diasDeFinanciacion` para decir cuántos días sin intereses da una
+ * compra, y que las dos coincidan no es un detalle: si el consejo dice que hoy
+ * la compra se paga dentro de mes y medio, la deuda no puede estar diciendo
+ * que esa compra ya está facturada.
  */
 export function deudaPorCiclo(
   cuenta: Account,
@@ -327,7 +388,7 @@ export function avisoDe(
       cuenta, ciclo, deuda, reparto, urgencia: 'corte',
       titulo: ciclo.faltanCorte === 0 ? 'Corta hoy' : `Corta en ${ciclo.faltanCorte} ${ciclo.faltanCorte === 1 ? 'día' : 'días'}`,
       detalle: ciclo.faltanCorte === 0
-        ? 'Lo que compres desde hoy ya entra en el extracto siguiente.'
+        ? 'Lo de hoy entra todavía en este extracto; lo de mañana, en el siguiente.'
         : 'Lo que compres hasta ese día se paga en el extracto que cierra.',
     }
   }
@@ -433,13 +494,11 @@ export function gastoDelCiclo(
 ): number {
   const ciclo = cicloDe(cuenta, hoy)
   if (!ciclo) return 0
-  // Desde el día siguiente al corte: lo del propio día del corte ya se facturó.
-  const desde = ciclo.corteAnterior
   let total = 0
   for (const t of transactions) {
     if (t.accountId !== cuenta.id || t.type !== 'expense') continue
     const dia = t.occurredAt.slice(0, 10)
-    if (dia > desde && dia <= hoy) total += t.amount
+    if (dia >= ciclo.inicioEnCurso && dia <= hoy) total += t.amount
   }
   return total
 }

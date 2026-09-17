@@ -2752,6 +2752,7 @@ const rowToAccount = (r: Row): Account => ({
   installments: r.installments ?? undefined,
   installmentsPaid: r.installments_paid ?? undefined,
   statementDay: r.statement_day ?? undefined,
+  periodStartDay: r.period_start_day ?? undefined,
   dueDay: r.due_day ?? undefined,
 })
 const accountToRow = (a: Account) => ({
@@ -2761,6 +2762,7 @@ const accountToRow = (a: Account) => ({
   credit_limit: a.creditLimit ?? null,
   installments: a.installments ?? null, installments_paid: a.installmentsPaid ?? null,
   statement_day: a.statementDay ?? null, due_day: a.dueDay ?? null,
+  period_start_day: a.periodStartDay ?? null,
 })
 const accountPatchToRow = (p: Partial<Account>) => {
   const r: Row = {}
@@ -2778,6 +2780,7 @@ const accountPatchToRow = (p: Partial<Account>) => {
   // Con 'in': quitarle la fecha de corte a una tarjeta es ponerla a undefined,
   // y eso tiene que llegar al servidor como null en vez de no viajar.
   if ('statementDay' in p) r.statement_day = p.statementDay ?? null
+  if ('periodStartDay' in p) r.period_start_day = p.periodStartDay ?? null
   if ('dueDay' in p) r.due_day = p.dueDay ?? null
   return r
 }
@@ -2997,6 +3000,10 @@ const rowToIngreso = (r: Row): RecurringIncome => ({
   // normal y lo que se suponía antes de que la columna existiera.
   cotiza: r.cotiza === false ? false : undefined,
   turnos: Array.isArray(r.turnos) && r.turnos.length ? r.turnos : undefined,
+  // Estas dos son `not null default false`: lo que falte NO trabaja festivos y
+  // NO cobra extras, que es el lado prudente y el que no inventa ingreso.
+  trabajaFestivos: r.trabaja_festivos ? true : undefined,
+  pagaExtras: r.paga_extras ? true : undefined,
 })
 const ingresoToRow = (i: RecurringIncome) => ({
   id: i.id, name: i.name, amount: i.amount, currency: i.currency, cycle: i.cycle,
@@ -3006,6 +3013,8 @@ const ingresoToRow = (i: RecurringIncome) => ({
   auxilio_transporte: Boolean(i.auxilioTransporte),
   cotiza: i.cotiza !== false,
   turnos: i.turnos?.length ? i.turnos : null,
+  trabaja_festivos: Boolean(i.trabajaFestivos),
+  paga_extras: Boolean(i.pagaExtras),
 })
 const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
   const r: Row = {}
@@ -3028,6 +3037,8 @@ const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
   // `p.turnos` como `{}`, sin `length`.
   const turnos = p.turnos
   if ('turnos' in p) r.turnos = turnos?.length ? turnos : null
+  if ('trabajaFestivos' in p) r.trabaja_festivos = Boolean(p.trabajaFestivos)
+  if ('pagaExtras' in p) r.paga_extras = Boolean(p.pagaExtras)
   return r
 }
 

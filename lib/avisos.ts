@@ -152,9 +152,12 @@ export function avisosPendientes(e: EntradaAvisos): Aviso[] {
        */
       if (ciclo.faltanCorte >= 0 && ciclo.faltanCorte <= Math.min(1, margen)) {
         salida.push({
-          id: `corte:${cuenta.id}:${ciclo.corteProximo}`,
+          // La frontera del período, no la emisión del extracto: es la que
+          // decide en qué extracto cae la compra, y en las tarjetas que
+          // imprimen las dos fechas no son el mismo día.
+          id: `corte:${cuenta.id}:${ciclo.finEnCurso}`,
           tipo: 'corte',
-          dia: ciclo.corteProximo,
+          dia: ciclo.finEnCurso,
           faltan: ciclo.faltanCorte,
           titulo: `${cuenta.name} corta ${ciclo.faltanCorte === 0 ? 'hoy' : 'mañana'}`,
           cuerpo: ciclo.faltanCorte === 0
