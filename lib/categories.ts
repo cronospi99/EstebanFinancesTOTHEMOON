@@ -110,6 +110,11 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'rent-income', name: 'Arriendos', icon: 'Building2', color: '#40C8E0', kind: 'income', group: 'Inversión' },
   { id: 'refund', name: 'Reembolso', icon: 'Undo2', color: '#64D2FF', kind: 'income', group: 'Otros' },
   { id: 'gift-income', name: 'Regalo', icon: 'Gift', color: '#FF375F', kind: 'income', group: 'Otros' },
+  // Loterías, apuestas, rifas. Categoría propia y no «Otros ingresos» porque
+  // es lo único que no se puede proyectar de ninguna manera: sin separarlo, un
+  // golpe de suerte se promedia con el sueldo y la proyección del año entero
+  // se apoya en que vuelva a tocar. Ver `lib/ingresos.ts`.
+  { id: 'gambling', name: 'Juegos y azar', icon: 'Dices', color: '#FFD60A', kind: 'income', group: 'Otros' },
   { id: 'loan-income', name: 'Préstamo recibido', icon: 'Banknote', color: '#FF9F0A', kind: 'income', group: 'Otros' },
   // Lo contrario: te devolvieron lo que prestaste. No es un ingreso nuevo,
   // es plata tuya que vuelve, y por eso tiene su propia categoría.

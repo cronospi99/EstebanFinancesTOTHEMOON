@@ -33,7 +33,7 @@ const CICLOS: { valor: IncomeCycle; etiqueta: string }[] = [
  * cobro que la app dio por hecho y no ocurrió se arregla con un toque, pero un
  * sueldo dado por recibido que no llegó deja el saldo mintiendo hacia arriba.
  */
-export function IngresosCard() {
+export function IngresosRecurrentesCard() {
   const { recurringIncomes, accounts, addIngreso, updateIngreso, deleteIngreso } = useFinance()
   const [creando, setCreando] = useState(false)
 

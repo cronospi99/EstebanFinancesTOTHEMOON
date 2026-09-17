@@ -25,6 +25,10 @@ import { detectarAnomalias, leerDescartadas, type Anomalia } from './anomalias'
 import { aporteMensual, calcularFire, cobradoPasivo, gastoMensualMedio, type Fire } from './fire'
 import { evaluarSalud, leerAjustes as leerGrupos, repartir, type Grupo, type Reparto, type SaludFinanciera } from './salud'
 import { proyectarLiquidez, saldoLiquido, type Horizonte, type Proyeccion } from './liquidez'
+import {
+  desglosarIngresos, leerOrigenes, type DesgloseIngresos, type OrigenIngreso,
+} from './ingresos'
+import { proyectarMeses, type ProyeccionMeses } from './proyeccion'
 import { avisoDe, cicloDe, deudaDe, recomendarTarjeta, type AvisoTarjeta, type Recomendacion } from './tarjetas'
 import type {
   Account, Budget, BudgetAllocation, Currency, Debt, DebtPayment, Goal, Holding, Pocket, Quote,
@@ -2540,6 +2544,53 @@ export function useSaldoLiquido() {
 }
 
 /* ===========================================================================
+ *  Ingresos: de dónde viene lo que entra
+ * ======================================================================== */
+
+/**
+ * El desglose de lo que entra por nivel —fijo, variable, extraordinario— sobre
+ * los últimos meses completos. Ver `lib/ingresos.ts`.
+ *
+ * Los ajustes del usuario se leen en un efecto y no al construir el estado,
+ * por lo mismo que en `useSalud`: `localStorage` no existe en el servidor y
+ * leerlo al construir rompería la hidratación.
+ */
+export function useIngresos(meses = 6): DesgloseIngresos {
+  const { transactions, fxRate } = useFinance()
+  const [origenes, setOrigenes] = useState<Record<string, OrigenIngreso>>({})
+  useEffect(() => { setOrigenes(leerOrigenes()) }, [])
+
+  return useMemo(
+    () => desglosarIngresos(transactions, fxRate, meses, hoyEnZona(), origenes),
+    [transactions, fxRate, meses, origenes],
+  )
+}
+
+/* ===========================================================================
+ *  Proyección mensual
+ * ======================================================================== */
+
+/**
+ * Los próximos doce meses, uno por uno. Ver `lib/proyeccion.ts`.
+ *
+ * Corre sobre el mismo motor que la liquidez diaria y le añade la estimación
+ * de lo variable, que sale del desglose de ingresos.
+ */
+export function useProyeccionMeses(meses = 12): ProyeccionMeses {
+  const { accounts, transactions, subscriptions, recurringIncomes, fxRate } = useFinance()
+  const deudas = useDeudas()
+  const ingresos = useIngresos()
+
+  return useMemo(
+    () => proyectarMeses({
+      accounts, transactions, subscriptions, ingresos: recurringIncomes,
+      deudas, fxRate, meses, variableEstimado: ingresos.variableEstimado,
+    }),
+    [accounts, transactions, subscriptions, recurringIncomes, deudas, fxRate, meses, ingresos.variableEstimado],
+  )
+}
+
+/* ===========================================================================
  *  Salud financiera
  * ======================================================================== */
 
@@ -2560,6 +2611,10 @@ export function useSalud(dias = 30): Salud {
   const { accounts, transactions, subscriptions, debts, debtPayments, fxRate } = useFinance()
   const resumenSubs = useSuscripcionesResumen()
   const { total: liquido } = useSaldoLiquido()
+  // De qué se compone el ingreso: entra al puntaje como un indicador más.
+  // Mira meses completos, así que al principio viene vacío y el indicador se
+  // queda neutro en vez de castigar por falta de historial.
+  const ingresos = useIngresos()
 
   /*
    * El reparto que el usuario haya ajustado a mano.
@@ -2614,9 +2669,14 @@ export function useSalud(dias = 30): Salud {
         deuda: 0,
         cuotasMensuales: cuotas,
         suscripciones: resumenSubs.mensual,
+        // Sin tres meses de historial no se juzga: ver `suficiente`.
+        estabilidadIngreso: ingresos.suficiente ? ingresos.estabilidad : undefined,
       }),
     }
-  }, [accounts, transactions, debts, debtPayments, fxRate, dias, grupos, liquido, resumenSubs.mensual])
+  }, [
+    accounts, transactions, debts, debtPayments, fxRate, dias, grupos, liquido,
+    resumenSubs.mensual, ingresos.suficiente, ingresos.estabilidad,
+  ])
 }
 
 /* ===========================================================================
