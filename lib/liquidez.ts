@@ -34,9 +34,10 @@
  * fuera: mejor una cifra incompleta y avisada que una inventada.
  */
 import type { Account, Debt, IncomeCycle, RecurringIncome, Subscription, Transaction } from './types'
-import { cicloDe, deudaDe, fechaDelMes, limiteDelCorte, proximoDiaDelMes } from './tarjetas'
+import { cicloDe, deudaDe, deudaPorCiclo, fechaDelMes, limiteDelCorte, proximoDiaDelMes } from './tarjetas'
 import { diasEntre, proximoCobro, sumarMeses } from './suscripciones'
 import { anioMes, hoyEnZona, sumarDias } from './zona'
+import { calcularRecargos, fechasPrima, primaSemestral } from './nomina'
 import type { DeudaConSaldo } from './store'
 
 /** Qué mueve el dinero en un día concreto de la proyección. */
@@ -297,6 +298,42 @@ export function proyectarLiquidez(e: EntradaProyeccion): Proyeccion {
     for (const dia of ocurrencias(ing.anchorAt, ing.cycle, sumarDias(hoy, 1), hasta)) {
       eventos.push({ dia, tipo: 'ingreso', concepto: ing.name, monto, color: COLOR_EVENTO.ingreso })
     }
+
+    /*
+     * La prima, para quien tiene nómina.
+     *
+     * Son dos ingresos al año que nadie apunta como recurrentes porque no
+     * caen todos los meses, y sin embargo son lo más previsible que existe:
+     * la ley dice cuánto y antes de qué día. Dejarla fuera hacía que junio y
+     * diciembre salieran como meses normales cuando son justo los dos en los
+     * que se puede hacer algo —adelantar una deuda cara, cerrar una meta—, y
+     * a doce meses la proyección se quedaba un mes de sueldo corta.
+     *
+     * Se emite en la fecha límite legal y no antes: el 30 de junio y el 20 de
+     * diciembre son lo último que puede tardar el empleador, así que la
+     * proyección no promete el dinero antes de que sea seguro tenerlo.
+     */
+    if (ing.salarioBase && ing.currency === 'COP') {
+      const variableMensual = ing.turnos?.length
+        ? calcularRecargos(ing.salarioBase, ing.turnos, hoy).total
+        : 0
+      const prima = primaSemestral(ing.salarioBase, {
+        auxilio: ing.auxilioTransporte,
+        variableMensual,
+      })
+      if (prima > 0) {
+        const anios = [Number(hoy.slice(0, 4)), Number(hasta.slice(0, 4))]
+        for (const anio of [...new Set(anios)]) {
+          for (const dia of fechasPrima(anio)) {
+            if (dia <= hoy || dia > hasta) continue
+            eventos.push({
+              dia, tipo: 'ingreso', concepto: `${ing.name} · prima`,
+              monto: prima, color: COLOR_EVENTO.ingreso,
+            })
+          }
+        }
+      }
+    }
   }
 
   // ---- Lo que sale solo: suscripciones ------------------------------------
@@ -325,7 +362,36 @@ export function proyectarLiquidez(e: EntradaProyeccion): Proyeccion {
     const deuda = deudaDe(cuenta)
     if (!ciclo || deuda <= 0) continue
 
-    const deudaCOP = enPesos(deuda, cuenta.currency)
+    /*
+     * Solo lo ya facturado vence en `limiteEnCurso`.
+     *
+     * Lo gastado desde el corte todavía no está en ningún extracto: entra en
+     * el que cierra en `corteProximo` y se paga un mes después. Metiéndolo
+     * todo en la primera fecha, la línea se hundía de golpe por una plata que
+     * el banco aún no ha cobrado, y justo a quien acaba de cortar en cero y
+     * lleva gastando desde entonces —el caso más común— le salía el peor mes
+     * del año. Ver `deudaPorCiclo`.
+     */
+    const reparto = deudaPorCiclo(cuenta, e.transactions, hoy)
+    if (reparto.enCurso > 0) {
+      const enCursoCOP = enPesos(reparto.enCurso, cuenta.currency)
+      if (enCursoCOP === null) sinConvertir++
+      else {
+        const dia = limiteDelCorte(ciclo.corteProximo, cuenta.dueDay!)
+        if (dia > hoy && dia <= hasta) {
+          eventos.push({
+            dia,
+            tipo: 'tarjeta',
+            concepto: `${cuenta.name} · lo de este ciclo`,
+            monto: -enCursoCOP,
+            color: COLOR_EVENTO.tarjeta,
+          })
+        }
+      }
+    }
+
+    if (reparto.facturado <= 0) continue
+    const deudaCOP = enPesos(reparto.facturado, cuenta.currency)
     if (deudaCOP === null) { sinConvertir++; continue }
 
     /*

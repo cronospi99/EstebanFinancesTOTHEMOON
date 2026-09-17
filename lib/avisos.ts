@@ -13,10 +13,10 @@
  * nada, así que no se avisa. Una app que manda notificaciones que no llevan a
  * ninguna acción se silencia entera, y con ella las que sí importaban.
  */
-import { avisoDe, cicloDe, deudaDe } from './tarjetas'
+import { avisoDe, cicloDe, deudaPorCiclo } from './tarjetas'
 import { cobraDeVerdad, diasEntre, proximoCobro } from './suscripciones'
 import { formatMoney } from './format'
-import type { Account, Debt, Settings, Subscription } from './types'
+import type { Account, Debt, Settings, Subscription, Transaction } from './types'
 import { hoyEnZona } from './zona'
 
 export type TipoAviso = 'suscripcion' | 'corte' | 'pago' | 'deuda' | 'prueba'
@@ -45,6 +45,15 @@ export interface EntradaAvisos {
   saldos: Map<string, number>
   settings: Settings
   fxRate: number
+  /**
+   * Los movimientos, para separar lo que la tarjeta ya facturó de lo gastado
+   * en el ciclo en curso. Ver `deudaPorCiclo`.
+   *
+   * Opcional porque quien no los tenga a mano —un proceso que solo cargue
+   * cuentas— sigue recibiendo el aviso: sin movimientos, el reparto da todo
+   * por facturado, que es lo prudente cuando no hay información.
+   */
+  transactions?: Transaction[]
   hoy?: string
 }
 
@@ -114,11 +123,13 @@ export function avisosPendientes(e: EntradaAvisos): Aviso[] {
     for (const cuenta of e.accounts) {
       const ciclo = cicloDe(cuenta, hoy)
       if (!ciclo) continue
-      const deuda = deudaDe(cuenta)
+      // Lo facturado, no el saldo: lo gastado desde el corte no está en el
+      // extracto que vence y avisarlo sería un cobro que nadie ha hecho.
+      const { facturado: deuda } = deudaPorCiclo(cuenta, e.transactions ?? [], hoy)
 
       // El pago: solo si hay algo que pagar.
       if (deuda > 0 && ciclo.faltanLimite >= 0 && ciclo.faltanLimite <= Math.max(2, margen)) {
-        const aviso = avisoDe(cuenta, hoy)
+        const aviso = avisoDe(cuenta, hoy, e.transactions ?? [])
         salida.push({
           id: `pago:${cuenta.id}:${ciclo.limiteEnCurso}`,
           tipo: 'pago',
