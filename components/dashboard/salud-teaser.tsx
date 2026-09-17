@@ -9,12 +9,13 @@ import { useAnomalias, useLiquidez, useSalud } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 /**
- * La puerta a Salud desde el resumen.
+ * La puerta a Salud. Se usa en dos sitios: el resumen y Metas.
  *
  * Igual que las suscripciones, y por el mismo motivo: en el móvil la barra de
  * abajo va llena con seis destinos y el botón de captura, así que un séptimo
  * dejaría las etiquetas ilegibles. La pantalla se alcanza desde donde se
- * necesita.
+ * necesita: desde el resumen cuando uno va a mirar cómo va el mes, y desde
+ * Metas cuando va a poner un tope y necesita saber qué le va a quedar.
  *
  * Lo que se enseña aquí es el mínimo proyectado y no el puntaje de salud. El
  * puntaje es un resumen que se mira una vez al mes; el mínimo de los próximos
