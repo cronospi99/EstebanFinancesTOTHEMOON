@@ -167,11 +167,11 @@ export function cuentasACsv(datos: DatosExport, fxRate: number): string {
     return [
       a.name, a.institution, a.type, total, a.currency,
       a.currency === 'USD' ? (fxRate > 0 ? Math.round(total * fxRate) : null) : total,
-      a.apy ?? '', a.creditLimit ?? '', a.statementDay ?? '', a.dueDay ?? '',
+      a.apy ?? '', a.creditLimit ?? '', a.periodStartDay ?? '', a.statementDay ?? '', a.dueDay ?? '',
     ]
   })
   return aCsv(
-    ['Cuenta', 'Entidad', 'Tipo', 'Saldo', 'Moneda', 'Saldo en COP', 'E.A. %', 'Cupo', 'Día de corte', 'Día de pago'],
+    ['Cuenta', 'Entidad', 'Tipo', 'Saldo', 'Moneda', 'Saldo en COP', 'E.A. %', 'Cupo', 'Inicio del período', 'Día de corte', 'Día de pago'],
     filas,
   )
 }

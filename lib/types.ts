@@ -41,6 +41,20 @@ export interface Account {
    */
   statementDay?: number
   /**
+   * Solo tarjetas de crédito: día del mes en que empieza el período, cuando el
+   * banco lo imprime y no es el día siguiente al corte.
+   *
+   * En casi todas las tarjetas sobra: el período cierra el día del corte y
+   * empieza el siguiente, así que se deduce. Pero hay bancos que imprimen tres
+   * fechas —«inicio del período: 4 de septiembre, fecha de corte: 5 de
+   * octubre, fecha de pago: 15 de octubre»— porque el corte no es el fin del
+   * período sino el día en que emiten el extracto, un par de días más tarde.
+   * Ahí deducir el inicio del corte se equivoca en dos días, y esos dos días
+   * son un mes de diferencia en cuándo hay que pagar lo que se compró en
+   * ellos. Vacío = se deduce. Ver `tarjetas.ts`.
+   */
+  periodStartDay?: number
+  /**
    * Solo tarjetas de crédito: día del mes en que vence el pago del extracto.
    *
    * Va aparte del corte porque son dos fechas distintas y confundirlas cuesta
@@ -451,6 +465,25 @@ export interface RecurringIncome {
   cotiza?: boolean
   /** Los turnos de la semana, para los recargos. Ver `Turno` en `nomina.ts`. */
   turnos?: { dia: number; desde: number; hasta: number }[]
+  /**
+   * Si le toca trabajar los festivos.
+   *
+   * No es un detalle en Colombia: son dieciocho al año y once caen en lunes.
+   * Para quien trabaja los lunes, la respuesta vale casi un turno festivo al
+   * mes pagado al noventa por ciento —o un turno menos, si libra—, y no hay
+   * manera de adivinarla mirando el horario. Ver `calcularRecargos`.
+   */
+  trabajaFestivos?: boolean
+  /**
+   * Si las horas que pasan de la jornada se pagan como extra.
+   *
+   * Falso por defecto, y es deliberado. Darlas por pagadas al 125 % daba por
+   * hecho que el empleador liquida extras todas las semanas, y con un sueldo
+   * mensual y un horario largo eso casi nunca es verdad: o hay descansos que
+   * no se estaban restando, o sencillamente no se pagan. Suponerlo inventaba
+   * ingreso, que es el error que hace daño.
+   */
+  pagaExtras?: boolean
 }
 
 export interface Holding {

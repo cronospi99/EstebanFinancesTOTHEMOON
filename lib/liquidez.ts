@@ -315,7 +315,10 @@ export function proyectarLiquidez(e: EntradaProyeccion): Proyeccion {
      */
     if (ing.salarioBase && ing.currency === 'COP') {
       const variableMensual = ing.turnos?.length
-        ? calcularRecargos(ing.salarioBase, ing.turnos, hoy).total
+        ? calcularRecargos(ing.salarioBase, ing.turnos, hoy, {
+          trabajaFestivos: ing.trabajaFestivos,
+          pagaExtras: ing.pagaExtras,
+        }).total
         : 0
       const prima = primaSemestral(ing.salarioBase, {
         auxilio: ing.auxilioTransporte,
@@ -377,7 +380,10 @@ export function proyectarLiquidez(e: EntradaProyeccion): Proyeccion {
       const enCursoCOP = enPesos(reparto.enCurso, cuenta.currency)
       if (enCursoCOP === null) sinConvertir++
       else {
-        const dia = limiteDelCorte(ciclo.corteProximo, cuenta.dueDay!)
+        // `limiteDeHoy` y no el límite del próximo corte: durante los días que
+        // el banco tarda en emitir, el «próximo corte» es el del ciclo
+        // anterior y este gasto vencería un mes antes de tiempo.
+        const dia = ciclo.limiteDeHoy
         if (dia > hoy && dia <= hasta) {
           eventos.push({
             dia,
