@@ -55,6 +55,31 @@ export interface Account {
    */
   periodStartDay?: number
   /**
+   * Solo tarjetas de crédito: cuánto del saldo ya venía facturado, dicho por ti.
+   *
+   * La app sabe repartir el saldo entre lo facturado y lo del ciclo en curso
+   * mirando los movimientos registrados, pero eso solo funciona si están todos
+   * registrados. Quien anota el saldo de la tarjeta a mano y no cada compra se
+   * queda sin ese reparto, y entonces el saldo entero se da por facturado —el
+   * lado prudente— y sale un «pago vencido» por plata que en realidad es del
+   * ciclo nuevo. Este campo es la salida: decirlo y punto.
+   *
+   * Va emparejado con `statementBalanceAt` y no vale por sí solo. Ver
+   * `deudaPorCiclo`.
+   */
+  statementBalance?: number
+  /**
+   * A qué extracto se refiere `statementBalance`: la fecha de ese corte.
+   *
+   * Es lo que hace que la declaración caduque sola. «No debo nada» es cierto
+   * del extracto del 5 de septiembre, no de todos los que vengan: cuando el
+   * banco emita el siguiente, esta fecha deja de coincidir con el corte
+   * anterior y la app vuelve a deducir el reparto. Sin esto, un «no debo nada»
+   * dicho una vez callaría los avisos para siempre, que es peor que el aviso
+   * falso que vino a arreglar.
+   */
+  statementBalanceAt?: string
+  /**
    * Solo tarjetas de crédito: día del mes en que vence el pago del extracto.
    *
    * Va aparte del corte porque son dos fechas distintas y confundirlas cuesta
