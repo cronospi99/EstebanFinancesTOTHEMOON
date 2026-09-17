@@ -146,6 +146,10 @@ export async function GET(request: Request) {
       // corte y se desfasan un par de días en las tarjetas que lo imprimen
       // aparte — que es justo donde el aviso de mora salía falso.
       periodStartDay: r.period_start_day ?? undefined,
+      // El reparto declarado a mano. Sin esto el servidor manda un push de
+      // «pago vencido» que la pantalla ya no enseña, que es la peor mezcla.
+      statementBalance: r.statement_balance == null ? undefined : Number(r.statement_balance),
+      statementBalanceAt: r.statement_balance_at ?? undefined,
       dueDay: r.due_day ?? undefined,
     })) as Account[]
 

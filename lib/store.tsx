@@ -2753,6 +2753,8 @@ const rowToAccount = (r: Row): Account => ({
   installmentsPaid: r.installments_paid ?? undefined,
   statementDay: r.statement_day ?? undefined,
   periodStartDay: r.period_start_day ?? undefined,
+  statementBalance: r.statement_balance == null ? undefined : Number(r.statement_balance),
+  statementBalanceAt: r.statement_balance_at ?? undefined,
   dueDay: r.due_day ?? undefined,
 })
 const accountToRow = (a: Account) => ({
@@ -2763,6 +2765,8 @@ const accountToRow = (a: Account) => ({
   installments: a.installments ?? null, installments_paid: a.installmentsPaid ?? null,
   statement_day: a.statementDay ?? null, due_day: a.dueDay ?? null,
   period_start_day: a.periodStartDay ?? null,
+  statement_balance: a.statementBalance ?? null,
+  statement_balance_at: a.statementBalanceAt ?? null,
 })
 const accountPatchToRow = (p: Partial<Account>) => {
   const r: Row = {}
@@ -2781,6 +2785,10 @@ const accountPatchToRow = (p: Partial<Account>) => {
   // y eso tiene que llegar al servidor como null en vez de no viajar.
   if ('statementDay' in p) r.statement_day = p.statementDay ?? null
   if ('periodStartDay' in p) r.period_start_day = p.periodStartDay ?? null
+  // Con 'in': «deducirlo solo» es poner los dos a undefined, y eso tiene que
+  // llegar como null en vez de no viajar.
+  if ('statementBalance' in p) r.statement_balance = p.statementBalance ?? null
+  if ('statementBalanceAt' in p) r.statement_balance_at = p.statementBalanceAt ?? null
   if ('dueDay' in p) r.due_day = p.dueDay ?? null
   return r
 }
