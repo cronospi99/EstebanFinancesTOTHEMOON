@@ -11,7 +11,8 @@ const TABS = [
   { href: '/gastos', label: 'Gastos', icon: ChartPie },
   { href: '/cuentas', label: 'Cuentas', icon: Wallet },
   // Salud comparte el motivo de las suscripciones: en escritorio sobra alto en
-  // la lateral y tiene su sitio; en el móvil se llega desde el resumen.
+  // la lateral y tiene su sitio; en el móvil se llega desde el resumen y desde
+  // Metas, con la tarjeta de `salud-teaser.tsx`.
   { href: '/salud', label: 'Salud', icon: Activity },
   // En escritorio sobra alto en la lateral, así que las suscripciones tienen
   // su sitio propio. En el móvil, donde la barra de abajo ya va llena, se

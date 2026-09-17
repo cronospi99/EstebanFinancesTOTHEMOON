@@ -276,10 +276,19 @@ export interface EntradaSalud {
   cuotasMensuales: number
   /** Coste mensual de las suscripciones, en pesos. */
   suscripciones: number
+  /**
+   * Qué parte del ingreso se puede dar por hecho, de 0 a 100.
+   *
+   * Sale de `lib/ingresos.ts`: los fijos enteros más la mediana de lo
+   * variable, sobre el total que entró. `undefined` cuando no hay historial
+   * suficiente, y entonces el indicador se queda neutro en vez de castigar a
+   * quien acaba de empezar a usar la app.
+   */
+  estabilidadIngreso?: number
 }
 
 /**
- * Cinco indicadores y un puntaje.
+ * Seis indicadores y un puntaje.
  *
  * Cada uno responde a una pregunta distinta y por eso se enseñan por separado
  * además de en el total: un puntaje de 62 no dice qué arreglar, y «tienes mes
@@ -293,6 +302,7 @@ export interface EntradaSalud {
 export function evaluarSalud(e: EntradaSalud): SaludFinanciera {
   const { reparto, liquido, gastoMensual, deuda, cuotasMensuales, suscripciones } = e
   const ingresos = reparto.ingresos
+  const estabilidad = e.estabilidadIngreso
 
   const mesesDeColchon = gastoMensual > 0 ? liquido / gastoMensual : liquido > 0 ? 6 : 0
   const tasaAhorro = ingresos > 0 ? (reparto.partes.ahorro.monto / ingresos) * 100 : 0
@@ -350,6 +360,38 @@ export function evaluarSalud(e: EntradaSalud): SaludFinanciera {
       consejo: excesoDeseos > 40 ? 'Mirar las tres categorías de arriba del grupo suele bastar: ahí está casi todo.' : undefined,
     },
     {
+      id: 'estabilidad',
+      nombre: 'Estabilidad del ingreso',
+      /*
+       * Qué parte de lo que entra se puede dar por hecho.
+       *
+       * Dos personas con el mismo ingreso anual no están igual de bien: la que
+       * lo cobra en doce sueldos puede comprometerse a un arriendo y la que lo
+       * juntó con tres golpes de suerte, no. Eso no lo dice ninguno de los
+       * otros cuatro indicadores, y es lo que decide si un presupuesto se
+       * puede sostener.
+       *
+       * La escala empieza en 40 y no en 0 porque por debajo de esa proporción
+       * el mes no se puede planear de ninguna manera; y llega a 95 y no a 100
+       * porque a nadie le entra absolutamente todo con fecha.
+       *
+       * Sin historial se queda neutro: quien lleva dos semanas con la app no
+       * tiene un ingreso inestable, tiene pocos datos, y son cosas distintas.
+       */
+      puntos: estabilidad === undefined ? 50 : escala(estabilidad, 40, 95),
+      valor: estabilidad ?? 0,
+      lectura: estabilidad === undefined
+        ? 'Aún no hay meses completos suficientes para medirlo.'
+        : estabilidad >= 90
+          ? 'Casi todo lo que entra es previsible: el mes se puede planear.'
+          : estabilidad >= 65
+            ? `Puedes contar con el ${estabilidad.toFixed(0)} % de lo que entra; el resto va y viene.`
+            : `Solo el ${estabilidad.toFixed(0)} % de lo que entra es previsible. El resto no se puede presupuestar.`,
+      consejo: estabilidad !== undefined && estabilidad < 65
+        ? 'Presupuesta con lo previsible y trata lo demás como extra: lo que llegue de más, al colchón.'
+        : undefined,
+    },
+    {
       id: 'suscripciones',
       nombre: 'Peso de lo recurrente',
       // Por encima del 10 % de lo que entra, lo que se cobra solo manda sobre
@@ -363,8 +405,14 @@ export function evaluarSalud(e: EntradaSalud): SaludFinanciera {
     },
   ]
 
+  /*
+   * La estabilidad entra pesando 0,16 y el resto se recorta a prorrata para
+   * que sigan sumando uno. Pesa menos que el colchón y el ahorro —que son los
+   * que te sacan de un apuro— y más que la regla 50/30/20, que es una guía: de
+   * qué se compone tu ingreso decide si el reparto se puede sostener.
+   */
   const pesos: Record<string, number> = {
-    colchon: 0.3, ahorro: 0.3, deuda: 0.2, deseos: 0.12, suscripciones: 0.08,
+    colchon: 0.26, ahorro: 0.26, deuda: 0.18, estabilidad: 0.16, deseos: 0.09, suscripciones: 0.05,
   }
   const puntaje = Math.round(
     indicadores.reduce((s, i) => s + i.puntos * (pesos[i.id] ?? 0), 0),
