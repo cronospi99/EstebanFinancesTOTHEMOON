@@ -37,6 +37,7 @@ import type { Account, Debt, IncomeCycle, RecurringIncome, Subscription, Transac
 import { cicloDe, deudaDe, deudaPorCiclo, fechaDelMes, limiteDelCorte, proximoDiaDelMes } from './tarjetas'
 import { diasEntre, proximoCobro, sumarMeses } from './suscripciones'
 import { anioMes, hoyEnZona, sumarDias } from './zona'
+import { calcularRecargos, fechasPrima, primaSemestral } from './nomina'
 import type { DeudaConSaldo } from './store'
 
 /** Qué mueve el dinero en un día concreto de la proyección. */
@@ -296,6 +297,42 @@ export function proyectarLiquidez(e: EntradaProyeccion): Proyeccion {
     // todavía no hay forma de saberlo. Contarlo sería sumar dos veces.
     for (const dia of ocurrencias(ing.anchorAt, ing.cycle, sumarDias(hoy, 1), hasta)) {
       eventos.push({ dia, tipo: 'ingreso', concepto: ing.name, monto, color: COLOR_EVENTO.ingreso })
+    }
+
+    /*
+     * La prima, para quien tiene nómina.
+     *
+     * Son dos ingresos al año que nadie apunta como recurrentes porque no
+     * caen todos los meses, y sin embargo son lo más previsible que existe:
+     * la ley dice cuánto y antes de qué día. Dejarla fuera hacía que junio y
+     * diciembre salieran como meses normales cuando son justo los dos en los
+     * que se puede hacer algo —adelantar una deuda cara, cerrar una meta—, y
+     * a doce meses la proyección se quedaba un mes de sueldo corta.
+     *
+     * Se emite en la fecha límite legal y no antes: el 30 de junio y el 20 de
+     * diciembre son lo último que puede tardar el empleador, así que la
+     * proyección no promete el dinero antes de que sea seguro tenerlo.
+     */
+    if (ing.salarioBase && ing.currency === 'COP') {
+      const variableMensual = ing.turnos?.length
+        ? calcularRecargos(ing.salarioBase, ing.turnos, hoy).total
+        : 0
+      const prima = primaSemestral(ing.salarioBase, {
+        auxilio: ing.auxilioTransporte,
+        variableMensual,
+      })
+      if (prima > 0) {
+        const anios = [Number(hoy.slice(0, 4)), Number(hasta.slice(0, 4))]
+        for (const anio of [...new Set(anios)]) {
+          for (const dia of fechasPrima(anio)) {
+            if (dia <= hoy || dia > hasta) continue
+            eventos.push({
+              dia, tipo: 'ingreso', concepto: `${ing.name} · prima`,
+              monto: prima, color: COLOR_EVENTO.ingreso,
+            })
+          }
+        }
+      }
     }
   }
 

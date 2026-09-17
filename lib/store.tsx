@@ -2990,11 +2990,22 @@ const rowToIngreso = (r: Row): RecurringIncome => ({
   active: r.active !== false,
   note: r.note ?? undefined,
   color: r.color ?? '#30D158',
+  // Nómina. Null en todo lo que no es un sueldo, que es la mayoría.
+  salarioBase: r.salario_base == null ? undefined : Number(r.salario_base),
+  auxilioTransporte: r.auxilio_transporte ? true : undefined,
+  // La columna es `not null default true`: lo que falte cotiza, que es el caso
+  // normal y lo que se suponía antes de que la columna existiera.
+  cotiza: r.cotiza === false ? false : undefined,
+  turnos: Array.isArray(r.turnos) && r.turnos.length ? r.turnos : undefined,
 })
 const ingresoToRow = (i: RecurringIncome) => ({
   id: i.id, name: i.name, amount: i.amount, currency: i.currency, cycle: i.cycle,
   anchor_at: i.anchorAt, account_id: i.accountId ?? null,
   active: i.active !== false, note: i.note ?? null, color: i.color,
+  salario_base: i.salarioBase ?? null,
+  auxilio_transporte: Boolean(i.auxilioTransporte),
+  cotiza: i.cotiza !== false,
+  turnos: i.turnos?.length ? i.turnos : null,
 })
 const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
   const r: Row = {}
@@ -3007,6 +3018,16 @@ const ingresoPatchToRow = (p: Partial<RecurringIncome>) => {
   if (p.active !== undefined) r.active = p.active
   if ('note' in p) r.note = p.note ?? null
   if (p.color !== undefined) r.color = p.color
+  // Nómina. Con `in` y no `!== undefined`: quitarle la nómina a un ingreso
+  // —dejar de ser sueldo y pasar a ser una cifra suelta— es poner null a
+  // propósito, y con `!== undefined` ese borrado nunca llegaría a la fila.
+  if ('salarioBase' in p) r.salario_base = p.salarioBase ?? null
+  if ('auxilioTransporte' in p) r.auxilio_transporte = Boolean(p.auxilioTransporte)
+  if ('cotiza' in p) r.cotiza = p.cotiza !== false
+  // El valor se lee antes del `in`: el operador estrecha el tipo de `p` y deja
+  // `p.turnos` como `{}`, sin `length`.
+  const turnos = p.turnos
+  if ('turnos' in p) r.turnos = turnos?.length ? turnos : null
   return r
 }
 

@@ -1,15 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Plus, Trash2, TrendingUp, X } from 'lucide-react'
+import { BadgeCheck, Check, Plus, Trash2, TrendingUp, X } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { AccountPicker } from '@/components/ui/account-picker'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { fechaCobro } from '@/lib/suscripciones'
+import { resumirNomina } from '@/lib/nomina'
+import { NominaForm, type DatosNomina } from './nomina-form'
 import { ocurrencias } from '@/lib/liquidez'
 import { useFinance } from '@/lib/store'
-import type { IncomeCycle } from '@/lib/types'
-import { hoyEnZona, sumarDias } from '@/lib/zona'
+import type { IncomeCycle, RecurringIncome, Transaction } from '@/lib/types'
+import { hoyEnZona, instanteEnDia, sumarDias } from '@/lib/zona'
 import { cn, haptic } from '@/lib/utils'
 
 const CICLOS: { valor: IncomeCycle; etiqueta: string }[] = [
@@ -34,7 +36,7 @@ const CICLOS: { valor: IncomeCycle; etiqueta: string }[] = [
  * sueldo dado por recibido que no llegó deja el saldo mintiendo hacia arriba.
  */
 export function IngresosRecurrentesCard() {
-  const { recurringIncomes, accounts, addIngreso, updateIngreso, deleteIngreso } = useFinance()
+  const { recurringIncomes, accounts, transactions, addIngreso, addTransaction, updateIngreso, deleteIngreso } = useFinance()
   const [creando, setCreando] = useState(false)
 
   return (
@@ -72,6 +74,9 @@ export function IngresosRecurrentesCard() {
                 <span className="tnum shrink-0 text-[14px] font-semibold text-accent-green">
                   {formatMoney(i.amount, i.currency)}
                 </span>
+                {i.active !== false && (
+                  <BotonYaMePagaron ingreso={i} transactions={transactions} onRegistrar={addTransaction} />
+                )}
                 <button
                   onClick={() => { haptic(6); updateIngreso(i.id, { active: i.active === false }) }}
                   aria-label={i.active === false ? 'Reactivar' : 'Apagar'}
@@ -128,8 +133,25 @@ function Formulario({
   const [ciclo, setCiclo] = useState<IncomeCycle>('quincenal')
   const [cuenta, setCuenta] = useState('')
   const [dia, setDia] = useState(hoyEnZona)
+  /*
+   * Modo nómina: en vez de teclear lo que llega, se teclea el sueldo pactado y
+   * la app deriva lo que llega. Son dos cifras distintas y pedir solo una
+   * obligaba a elegir cuál mentira preferías: con el bruto la proyección iba
+   * inflada un 8 %, y con el neto no se podía estimar la prima.
+   */
+  const [esNomina, setEsNomina] = useState(false)
+  const [nomina, setNomina] = useState<DatosNomina>({})
 
-  const valido = nombre.trim().length > 0 && parseKeypad(monto) > 0
+  // Lo que de verdad va a `amount`: en nómina es el resultado del cálculo.
+  const resumen = esNomina && nomina.salarioBase
+    ? resumirNomina({
+        base: nomina.salarioBase, auxilio: nomina.auxilioTransporte,
+        cotiza: nomina.cotiza, turnos: nomina.turnos,
+      }, hoyEnZona())
+    : null
+  const importe = resumen ? resumen.mensual : parseKeypad(monto)
+
+  const valido = nombre.trim().length > 0 && importe > 0
 
   return (
     <div className="rounded-2xl border border-hairline bg-fill-1 p-3">
@@ -142,17 +164,40 @@ function Formulario({
                    text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
       />
 
-      <div className="mb-2 flex items-center gap-1.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5">
-        <span className="text-[16px] text-label-secondary">$</span>
-        <input
-          value={monto ? formatKeypad(monto) : ''}
-          inputMode="numeric"
-          onChange={(e) => setMonto(e.target.value.replace(/[^\d,]/g, ''))}
-          placeholder="2.400.000"
-          className="tnum w-full bg-transparent text-[18px] font-semibold text-label
-                     placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
-        />
+      <div className="mb-2 flex gap-1.5">
+        {([false, true] as const).map((v) => (
+          <button
+            key={String(v)}
+            type="button"
+            onClick={() => { haptic(6); setEsNomina(v) }}
+            aria-pressed={esNomina === v}
+            className={cn(
+              'press flex-1 rounded-pill px-2.5 py-1 text-[12.5px] transition-colors',
+              esNomina === v ? 'bg-fill-4 font-medium text-label' : 'border border-hairline text-label-secondary',
+            )}
+          >
+            {v ? 'Es un sueldo' : 'Importe fijo'}
+          </button>
+        ))}
       </div>
+
+      {esNomina ? (
+        <div className="mb-2">
+          <NominaForm datos={nomina} onChange={setNomina} />
+        </div>
+      ) : (
+        <div className="mb-2 flex items-center gap-1.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2.5">
+          <span className="text-[16px] text-label-secondary">$</span>
+          <input
+            value={monto ? formatKeypad(monto) : ''}
+            inputMode="numeric"
+            onChange={(e) => setMonto(e.target.value.replace(/[^\d,]/g, ''))}
+            placeholder="2.400.000"
+            className="tnum w-full bg-transparent text-[18px] font-semibold text-label
+                       placeholder:font-normal placeholder:text-label-tertiary focus:outline-none"
+          />
+        </div>
+      )}
 
       <div className="mb-2 flex flex-wrap gap-1.5">
         {CICLOS.map((c) => (
@@ -199,13 +244,21 @@ function Formulario({
             haptic([14, 30])
             onGuardar({
               name: nombre.trim(),
-              amount: parseKeypad(monto),
+              // En nómina, `amount` es lo que llega: el cálculo manda. Lo
+              // pactado se guarda aparte, en `salarioBase`.
+              amount: importe,
               currency: 'COP',
               cycle: ciclo,
               anchorAt: dia,
               accountId: cuenta || undefined,
               active: true,
               color: '#30D158',
+              ...(esNomina ? {
+                salarioBase: nomina.salarioBase,
+                auxilioTransporte: nomina.auxilioTransporte,
+                cotiza: nomina.cotiza,
+                turnos: nomina.turnos,
+              } : {}),
             })
           }}
           disabled={!valido}
@@ -215,5 +268,78 @@ function Formulario({
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * «Ya me pagaron»: anota el ingreso con la fecha de hoy.
+ *
+ * Un ingreso recurrente NO se anota solo, y esa decisión sigue siendo la
+ * correcta: un sueldo dado por recibido que no llegó deja el saldo mintiendo
+ * hacia arriba. Pero el otro extremo tampoco servía: quien cobraba tenía que
+ * ir a la captura rápida, elegir categoría, importe y cuenta, y teclear a mano
+ * lo que la app ya sabía. Con un toque se anota, y desde ahí cuenta para el
+ * saldo, para el reparto 50/30/20 y para el puntaje de salud.
+ *
+ * El doble toque es el error que hay que impedir: anotar dos veces la quincena
+ * infla el mes entero. Si ya hay un ingreso del mismo importe en la misma
+ * cuenta en los últimos días, el botón lo dice en vez de volver a anotarlo.
+ */
+function BotonYaMePagaron({
+  ingreso, transactions, onRegistrar,
+}: {
+  ingreso: RecurringIncome
+  transactions: Transaction[]
+  onRegistrar: (t: Omit<Transaction, 'id'>) => void
+}) {
+  const hoy = hoyEnZona()
+  // Cuánto atrás se mira para no repetir: la mitad del ciclo, acotada. En un
+  // sueldo quincenal, mirar treinta días atrás bloquearía la segunda quincena.
+  const ventana = { semanal: 3, quincenal: 6, mensual: 12 }[ingreso.cycle as string] ?? 20
+  const desde = sumarDias(hoy, -ventana)
+
+  const yaEsta = transactions.some((t) =>
+    t.type === 'income'
+    && t.occurredAt.slice(0, 10) >= desde
+    && Math.abs(t.amount - ingreso.amount) < 1
+    && (!ingreso.accountId || t.accountId === ingreso.accountId))
+
+  if (yaEsta) {
+    return (
+      <span className="flex shrink-0 items-center gap-1 px-2 text-[11.5px] text-accent-green">
+        <BadgeCheck size={13} /> Anotado
+      </span>
+    )
+  }
+
+  const cuenta = ingreso.accountId ?? ''
+  if (!cuenta) {
+    return (
+      <span className="shrink-0 px-2 text-[11px] text-label-tertiary" title="Elige una cuenta para poder anotarlo">
+        sin cuenta
+      </span>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => {
+        haptic([14, 30])
+        onRegistrar({
+          accountId: cuenta,
+          // El sueldo es salario; lo demás, un ingreso sin más. La categoría
+          // decide si cuenta como fijo en el desglose de `lib/ingresos.ts`.
+          categoryId: ingreso.salarioBase ? 'salary' : 'other-income',
+          amount: ingreso.amount,
+          type: 'income',
+          description: ingreso.name,
+          occurredAt: instanteEnDia(hoy),
+          currency: ingreso.currency,
+        })
+      }}
+      className="press shrink-0 rounded-lg px-2 py-1 text-[11.5px] font-medium text-accent-blue"
+    >
+      Ya me pagaron
+    </button>
   )
 }
