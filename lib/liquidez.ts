@@ -139,10 +139,17 @@ export function ocurrencias(
     const d = Number(ancla.slice(8, 10))
     const otro = d <= 15 ? d + 15 : d - 15
     const salida: string[] = []
+    // Tantos meses como abarque el rango, no un número fijo. Con el tope de
+    // seis que había, una proyección a un año se quedaba sin sueldo a partir
+    // del séptimo mes: la línea se hundía sola y el año terminaba en rojo
+    // aunque no hubiera ningún problema. Con 30/60/90 días nunca se notó
+    // porque ninguno llegaba a los seis meses.
+    const [ad, md] = anioMes(desde)
+    const [ah, mh] = anioMes(hasta)
+    const mesesRango = (ah - ad) * 12 + (mh - md)
     for (const dia of [d, otro]) {
-      const [a, m] = anioMes(desde)
-      for (let k = 0; k <= 5; k++) {
-        const f = fechaDelMes(a, m + k, dia)
+      for (let k = 0; k <= mesesRango + 1; k++) {
+        const f = fechaDelMes(ad, md + k, dia)
         if (f > hasta) break
         if (f >= desde && f >= ancla) salida.push(f)
       }
@@ -251,7 +258,12 @@ export interface EntradaProyeccion {
   /** Las deudas con su saldo ya calculado: el interés depende de las fechas. */
   deudas: DeudaConSaldo[]
   fxRate: number
-  dias: Horizonte
+  /**
+   * Cuántos días hacia adelante. Los de la gráfica son `HORIZONTES`, pero la
+   * proyección mensual pide un año entero sobre este mismo motor, así que aquí
+   * es un número y no uno de los tres de siempre.
+   */
+  dias: number
   hoy?: string
   /** Aplicar el gasto corriente estimado. Ver la nota de arriba. */
   conGastoCorriente?: boolean

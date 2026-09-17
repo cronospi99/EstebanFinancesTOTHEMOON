@@ -15,7 +15,7 @@ import { TimezoneCard } from '@/components/settings/timezone-card'
 import { AvisosCard } from '@/components/settings/avisos-card'
 import { BiometriaCard } from '@/components/settings/biometria-card'
 import { AtajosCard } from '@/components/settings/atajos-card'
-import { IngresosCard } from '@/components/settings/ingresos-card'
+import { IngresosRecurrentesCard } from '@/components/settings/ingresos-card'
 import { DatosCard } from '@/components/settings/datos-card'
 import { DianCard } from '@/components/settings/dian-card'
 import { useProfileName } from '@/lib/use-profile'
@@ -94,7 +94,7 @@ export default function SettingsPage() {
 
       <section>
         <CardHeader title="Ingresos recurrentes" />
-        <IngresosCard />
+        <IngresosRecurrentesCard />
       </section>
 
       <section>

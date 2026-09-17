@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CalendarClock, Check, Pencil, Scissors, X } from 'lucide-react'
+import { CalendarClock, CalendarRange, Check, Pencil, Scissors, X } from 'lucide-react'
 import { fechaCobro } from '@/lib/suscripciones'
-import { cicloDe, deudaDe } from '@/lib/tarjetas'
+import { cicloDe, corteDeInicio, deudaDe, inicioDeCorte } from '@/lib/tarjetas'
 import { formatMoney } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import type { Account } from '@/lib/types'
@@ -16,9 +16,18 @@ import { cn, haptic } from '@/lib/utils'
  * El campo pide un día del mes y no una fecha, porque el ciclo se repite: una
  * fecha concreta caduca al mes siguiente y obligaría a volver a escribirla.
  *
- * Debajo se enseña siempre lo que sale de los dos números —el próximo corte,
- * el próximo pago y cuántos días de financiación da una compra de hoy—. Es lo
- * que convierte dos casillas de formulario en algo comprobable: si alguien se
+ * El primer campo se puede rellenar de dos maneras, y esa es la razón de que
+ * tenga un conmutador encima. Unos bancos imprimen «día de corte» y otros no
+ * dicen más que «el período va del 26 al 25»; con un solo campo, la mitad de
+ * la gente tenía que restar uno mentalmente, y esa es la clase de cuenta que
+ * se hace mal una vez y deja la tarjeta mal configurada para siempre. Se
+ * escriba el que se escriba, se guarda el corte: el inicio del período es el
+ * día siguiente y se deduce, porque dos datos para un solo hecho acaban
+ * contradiciéndose.
+ *
+ * Debajo se enseña siempre lo que sale de los números —el período completo, el
+ * próximo pago y cuántos días de financiación da una compra de hoy—. Es lo que
+ * convierte dos casillas de formulario en algo comprobable: si alguien se
  * equivoca y escribe el pago antes del corte, la vista previa lo enseña en el
  * momento en vez de esperar a que llegue un aviso equivocado dentro de un mes.
  */
@@ -29,6 +38,10 @@ export function CicloEditor({
   dueDay: string
   onChange: (campo: 'corte' | 'pago', valor: string) => void
 }) {
+  // Cómo prefiere escribirlo quien está mirando. No se guarda: es la misma
+  // fecha dicha de dos maneras, y al recargar da igual cuál se usó.
+  const [modo, setModo] = useState<'corte' | 'inicio'>('corte')
+
   const previa = useMemo(() => {
     const corte = Number(statementDay)
     const pago = Number(dueDay)
@@ -36,14 +49,40 @@ export function CicloEditor({
     return cicloDe({ type: 'credit', statementDay: corte, dueDay: pago })
   }, [statementDay, dueDay])
 
+  const valorPrimero = statementDay
+    ? String(modo === 'corte' ? Number(statementDay) : inicioDeCorte(Number(statementDay)))
+    : ''
+
   return (
     <div>
+      <div className="mb-2 flex items-center gap-1.5">
+        {(['corte', 'inicio'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => { haptic(6); setModo(m) }}
+            aria-pressed={modo === m}
+            className={cn(
+              'press rounded-pill px-2.5 py-1 text-[12px] transition-colors',
+              modo === m ? 'bg-fill-4 font-medium text-label' : 'border border-hairline text-label-secondary',
+            )}
+          >
+            {m === 'corte' ? 'Sé el día de corte' : 'Sé cuándo empieza'}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <DiaDelMes
-          etiqueta="Día de corte"
-          icono={<Scissors size={13} />}
-          valor={statementDay}
-          onChange={(v) => onChange('corte', v)}
+          etiqueta={modo === 'corte' ? 'Día de corte' : 'Inicio del período'}
+          icono={modo === 'corte' ? <Scissors size={13} /> : <CalendarRange size={13} />}
+          valor={valorPrimero}
+          onChange={(v) => {
+            // Se escriba lo que se escriba, sale el corte: es lo único que se
+            // guarda y lo que usa el resto de la app.
+            if (!v) { onChange('corte', ''); return }
+            onChange('corte', String(modo === 'corte' ? Number(v) : corteDeInicio(Number(v))))
+          }}
         />
         <DiaDelMes
           etiqueta="Día límite de pago"
@@ -56,8 +95,10 @@ export function CicloEditor({
       {previa ? (
         <div className="mt-2 rounded-xl border border-hairline bg-fill-1 p-3">
           <p className="text-[12.5px] leading-relaxed text-label-secondary">
-            Corta el <strong className="font-semibold text-label">{fechaCobro(previa.corteProximo)}</strong> y
-            ese extracto se paga el{' '}
+            Lo que compres hoy entra en el período que va del{' '}
+            <strong className="font-semibold text-label">{fechaCobro(previa.inicioEnCurso)}</strong> al{' '}
+            <strong className="font-semibold text-label">{fechaCobro(previa.corteDeHoy)}</strong>. El
+            extracto que ya cerró se paga el{' '}
             <strong className="font-semibold text-label">{fechaCobro(previa.limiteEnCurso)}</strong>.
           </p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-label-secondary">
@@ -69,9 +110,9 @@ export function CicloEditor({
         </div>
       ) : (
         <p className="mt-1.5 px-1 text-[12px] leading-snug text-label-tertiary">
-          Están en el extracto. El corte es cuando cierra el período y el límite es
-          cuando hay que pagarlo, entre quince y veinte días después. Con las dos, la
-          app avisa a tiempo y sabe con cuál conviene pagar.
+          Están en el extracto. El período empieza el día después del corte y el límite
+          es cuando hay que pagarlo, entre quince y veinte días más tarde. Da igual si
+          apuntas el corte o el día en que empieza: es la misma fecha corrida un día.
         </p>
       )}
     </div>
@@ -225,6 +266,22 @@ export function CicloBloque({ account }: { account: Account }) {
           transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
           className="h-full rounded-pill bg-accent-blue/70"
         />
+      </div>
+      {/* Los dos extremos de la barra, con fecha. Sin esto la barra dice que
+          el ciclo va por la mitad, pero no de qué mitad de qué.
+
+          El día del corte no se enseña el rango: ese día el período que
+          termina y el que empieza comparten fecha, y cualquier «del X al Y»
+          sale al revés. Se dice lo único que importa ese día. */}
+      <div className="mb-1.5 text-[11px] text-label-tertiary">
+        {ciclo.faltanCorte === 0 ? (
+          <span>Corta hoy · el período nuevo empieza el {fechaCobro(ciclo.inicioEnCurso)}</span>
+        ) : (
+          <span className="flex items-baseline justify-between">
+            <span>Empezó el {fechaCobro(ciclo.inicioEnCurso)}</span>
+            <span>Corta el {fechaCobro(ciclo.corteProximo)}</span>
+          </span>
+        )}
       </div>
       <p className="text-[12px] leading-snug text-label-secondary">
         Una compra hecha hoy se paga el {fechaCobro(ciclo.limiteDeHoy)}:{' '}
