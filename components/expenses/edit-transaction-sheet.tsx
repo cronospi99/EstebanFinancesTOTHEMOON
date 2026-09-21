@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CalendarDays, Trash2 } from 'lucide-react'
+import { ArrowRight, CalendarDays, Trash2 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { AccountPicker } from '@/components/ui/account-picker'
@@ -11,7 +11,7 @@ import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
-import type { Transaction } from '@/lib/types'
+import type { Account, Transaction } from '@/lib/types'
 
 /** El día de un ISO, en hora local. `slice(0,10)` daría el día en UTC. */
 function diaLocal(iso: string) {
@@ -45,6 +45,13 @@ function etiquetaFecha(dia: string) {
     .format(new Date(a, m - 1, d))
 }
 
+/** Cómo se llama un lado de un traspaso: la cuenta y, si lo hay, su bolsillo. */
+function nombreLado(a: Account | undefined, pocketId?: string) {
+  if (!a) return 'Cuenta borrada'
+  const p = pocketId ? (a.pockets ?? []).find((q) => q.id === pocketId) : undefined
+  return p ? `${a.name} · ${p.name}` : a.name
+}
+
 /**
  * Edición de un movimiento ya registrado.
  *
@@ -62,8 +69,6 @@ export function EditTransactionSheet({
   const { accounts, updateTransaction, deleteTransaction, fxRate } = useFinance()
 
   const [raw, setRaw] = useState('')
-  // 'transfer' existe en el esquema pero la app no lo genera; al editar uno
-  // se trata como gasto, que es como ya se contabilizaba.
   const [mode, setMode] = useState<'expense' | 'income'>('expense')
   const [categoryId, setCategoryId] = useState('food')
   const [accountId, setAccountId] = useState('')
@@ -89,6 +94,20 @@ export function EditTransactionSheet({
   const currency = cuenta?.currency ?? 'COP'
   const amount = parseKeypad(raw)
 
+  /*
+   * Un traspaso se edita a medias, y a propósito.
+   *
+   * Tiene dos puntas y una de ellas no cabe en este formulario, que solo sabe
+   * de una cuenta. Ofrecer «Gasto / Ingreso» sobre uno lo convertía en gasto
+   * al guardar: el importe se restaba de la cuenta de origen, la punta de
+   * destino se quedaba con el dinero que ya había recibido, y el patrimonio
+   * subía o bajaba solo por haber abierto la ficha. Aquí se corrige lo que se
+   * teclea mal —cuánto, cuándo, qué nota— y las dos puntas se quedan como
+   * están; para cambiarlas se borra y se vuelve a hacer el traspaso.
+   */
+  const esTraspaso = transaction?.type === 'transfer'
+  const destinoCuenta = accounts.find((a) => a.id === transaction?.toAccountId)
+
   const categorias = useMemo(() => DEFAULT_CATEGORIES.filter((c) => c.kind === mode), [mode])
 
   // Gasto e ingreso no comparten categorías.
@@ -104,13 +123,11 @@ export function EditTransactionSheet({
 
     updateTransaction(transaction.id, {
       amount,
-      type: mode,
-      categoryId,
-      accountId,
-      pocketId,
       currency,
-      description: note.trim() || categoryById(categoryId).name,
+      description: note.trim() || (esTraspaso ? 'Transferencia' : categoryById(categoryId).name),
       occurredAt: conNuevoDia(transaction.occurredAt, dia),
+      // El tipo, la categoría y las dos puntas de un traspaso no se tocan.
+      ...(esTraspaso ? null : { type: mode, categoryId, accountId, pocketId }),
     }).catch(() => {
       /* El cambio ya está en el estado en memoria — ver "cola de escrituras". */
     })
@@ -128,13 +145,17 @@ export function EditTransactionSheet({
   return (
     <Sheet open={Boolean(transaction)} onClose={onClose}>
       <div className="px-5 pb-8 pt-1">
-        <h2 className="mb-4 text-center text-[17px] font-semibold">Editar movimiento</h2>
+        <h2 className="mb-4 text-center text-[17px] font-semibold">
+          {esTraspaso ? 'Editar traspaso' : 'Editar movimiento'}
+        </h2>
 
-        <Segmented
-          id="editar-tipo" className="mx-auto mb-5 max-w-[220px]"
-          value={mode} onChange={(v) => setMode(v)}
-          options={[{ value: 'expense' as const, label: 'Gasto' }, { value: 'income' as const, label: 'Ingreso' }]}
-        />
+        {!esTraspaso && (
+          <Segmented
+            id="editar-tipo" className="mx-auto mb-5 max-w-[220px]"
+            value={mode} onChange={(v) => setMode(v)}
+            options={[{ value: 'expense' as const, label: 'Gasto' }, { value: 'income' as const, label: 'Ingreso' }]}
+          />
+        )}
 
         {/* Valor */}
         <Etiqueta>Valor</Etiqueta>
@@ -175,28 +196,47 @@ export function EditTransactionSheet({
           />
         </label>
 
-        {/* Medio de pago */}
-        <Etiqueta>Medio de pago</Etiqueta>
-        <AccountPicker
-          accountId={accountId}
-          pocketId={pocketId}
-          onChange={(c, b) => { setAccountId(c); setPocketId(b) }}
-        />
+        {esTraspaso ? (
+          /* Las dos puntas, solo para leerlas: son lo que hace que el dinero
+             cuadre, y este formulario no puede mover las dos a la vez. */
+          <>
+            <Etiqueta>De dónde a dónde</Etiqueta>
+            <div className="mb-5 flex items-center gap-2 rounded-xl border border-hairline bg-fill-2 px-4 py-3">
+              <span className="min-w-0 flex-1 truncate text-[15px] text-label">
+                {nombreLado(cuenta, transaction?.pocketId)}
+              </span>
+              <ArrowRight size={15} className="shrink-0 text-label-tertiary" />
+              <span className="min-w-0 flex-1 truncate text-right text-[15px] text-label">
+                {nombreLado(destinoCuenta, transaction?.toPocketId)}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Medio de pago */}
+            <Etiqueta>Medio de pago</Etiqueta>
+            <AccountPicker
+              accountId={accountId}
+              pocketId={pocketId}
+              onChange={(c, b) => { setAccountId(c); setPocketId(b) }}
+            />
 
-        {/* Categoría */}
-        <div className="mt-3">
-          <Etiqueta>Categoría</Etiqueta>
-        </div>
-        <div className="mb-5">
-          <CategoryPicker mode={mode} value={categoryId} onChange={setCategoryId} />
-        </div>
+            {/* Categoría */}
+            <div className="mt-3">
+              <Etiqueta>Categoría</Etiqueta>
+            </div>
+            <div className="mb-5">
+              <CategoryPicker mode={mode} value={categoryId} onChange={setCategoryId} />
+            </div>
+          </>
+        )}
 
         {/* Nota */}
         <Etiqueta>Descripción</Etiqueta>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder={categoryById(categoryId).name}
+          placeholder={esTraspaso ? 'Transferencia' : categoryById(categoryId).name}
           className="mb-6 w-full rounded-xl border border-hairline bg-fill-2 px-4 py-3
                      text-[16px] text-label placeholder:text-label-tertiary
                      focus:border-accent-blue/50 focus:outline-none"

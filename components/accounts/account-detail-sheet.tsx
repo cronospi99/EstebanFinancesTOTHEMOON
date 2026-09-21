@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { BadgePercent, Calculator, Check, CreditCard, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
+import { ArrowLeftRight, BadgePercent, Calculator, Check, CreditCard, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { InstitutionBadge } from '@/components/ui/institution-badge'
 import { institutionCanonicalName } from '@/lib/categories'
@@ -15,10 +15,19 @@ import { cn, haptic } from '@/lib/utils'
 const POCKET_COLORS = ['#0A84FF', '#30D158', '#BF5AF2', '#FF9F0A', '#FF375F', '#40C8E0']
 
 export function AccountDetailSheet({
-  account: seleccionada, onClose,
+  account: seleccionada, onClose, onMover,
 }: {
   account: Account | null
   onClose: () => void
+  /**
+   * Abrir la hoja de transferir con esta cuenta a los dos lados.
+   *
+   * La acción vive aquí porque es aquí donde se ven los bolsillos y sus
+   * saldos: es mirando esa lista cuando se decide que hay que pasar algo de
+   * uno a otro. La hoja la abre la página, no esta ficha, para que no queden
+   * dos hojas apiladas sobre la misma pantalla.
+   */
+  onMover?: (account: Account) => void
 }) {
   const {
     accounts, addPocket, updatePocket, deletePocket, deleteAccount, updateAccount,
@@ -463,11 +472,26 @@ export function AccountDetailSheet({
         {/* Bolsillos */}
         <div className="mb-2 flex items-baseline justify-between px-1">
           <h3 className="text-[13px] font-semibold uppercase tracking-wider text-label-tertiary">Bolsillos</h3>
-          {!adding && (
-            <button onClick={() => { haptic(6); setAdding(true) }} className="flex items-center gap-1 text-[13px] font-medium text-accent-blue">
-              <Plus size={14} /> Añadir
-            </button>
-          )}
+          <div className="flex items-baseline gap-4">
+            {/*
+              Solo con bolsillos creados: mover dinero entre un sitio y ninguno
+              no significa nada, y un botón que no puede hacer nada estorba más
+              de lo que enseña.
+            */}
+            {onMover && pockets.length > 0 && (
+              <button
+                onClick={() => { haptic(6); onMover(account) }}
+                className="flex items-center gap-1 text-[13px] font-medium text-accent-blue"
+              >
+                <ArrowLeftRight size={14} /> Mover
+              </button>
+            )}
+            {!adding && (
+              <button onClick={() => { haptic(6); setAdding(true) }} className="flex items-center gap-1 text-[13px] font-medium text-accent-blue">
+                <Plus size={14} /> Añadir
+              </button>
+            )}
+          </div>
         </div>
 
         {pockets.length === 0 && !adding && (

@@ -2364,8 +2364,17 @@ export function useBalanceSeries(range: RangeKey = '1M') {
     const puntos = Math.min(days, 60)
     const paso = days / puntos
 
-    // Movimientos ordenados de más reciente a más antiguo, con su marca de tiempo.
+    /*
+     * Movimientos ordenados de más reciente a más antiguo, con su marca de
+     * tiempo. Las transferencias se quedan fuera: no cambian el patrimonio
+     * —el dinero sale de un sitio y entra en otro, y las dos puntas son
+     * tuyas— y se estaban restando como si fueran gasto, así que cada
+     * traspaso abría un escalón hacia abajo en la gráfica que no existía en
+     * ninguna cuenta. Con los traspasos entre bolsillos de una misma cuenta
+     * eso habría pasado a ser el pan de cada día.
+     */
     const movs = transactions
+      .filter((t) => t.type !== 'transfer')
       .map((t) => ({ at: new Date(t.occurredAt).getTime(), delta: t.type === 'income' ? t.amount : -t.amount }))
       .sort((a, b) => b.at - a.at)
 

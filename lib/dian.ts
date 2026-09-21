@@ -409,8 +409,16 @@ export function cifrasDelAnio(e: EntradaCifras): CifrasAnio & { patrimonioEsHoy:
        * que más gente sorprende: quien mueve su sueldo del banco a la
        * fiduciaria y de vuelta cada mes puede superar las 1.400 UVT sin haber
        * ganado un peso de más.
+       *
+       * Repartir el saldo entre los bolsillos de una misma cuenta no consigna
+       * nada: el dinero no sale del banco ni entra en él, y el extracto no
+       * enseña ningún abono. Contarlo habría inflado el tope justo a quien usa
+       * los bolsillos para ordenarse, que es lo contrario de lo que la DIAN
+       * mira.
        */
-      if (t.toAccountId && !esEfectivo.has(t.toAccountId)) consignaciones += v
+      if (t.toAccountId && t.toAccountId !== t.accountId && !esEfectivo.has(t.toAccountId)) {
+        consignaciones += v
+      }
       continue
     }
 

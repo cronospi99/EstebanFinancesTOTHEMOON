@@ -460,6 +460,56 @@ porque es cuando nadie sabe que la pantalla existe.
 
 ---
 
+## Mover dinero entre bolsillos
+
+Un bolsillo de Nequi o de Lulo no es una etiqueta: es dinero apartado de
+verdad, con su saldo y muchas veces con su propio rendimiento. La app ya sabía
+enseñarlos y ya se podía gastar desde uno, pero **no había forma de pasar plata
+de uno a otro**: había que abrir la cuenta y editar a mano los dos saldos, uno
+arriba y otro abajo. Eso no deja rastro de nada —al mes siguiente nadie sabe de
+dónde salió— y descuadra la cuenta en cuanto se olvida el segundo, que es lo que
+pasa siempre.
+
+Ahora es un traspaso de verdad, en **Cuentas → Transferir**, o desde la ficha de
+la cuenta con **Mover**, que es donde se está mirando la lista de bolsillos
+cuando uno decide repartir. Se elige el sitio de salida y el de llegada en las
+dos tiras: el saldo general y cada bolsillo, cada uno con lo que tiene.
+
+Por dentro es el mismo movimiento de dos puntas que una transferencia entre
+cuentas, con las dos puntas en la misma cuenta. Eso es lo que hace que salga
+bien lo que antes se hacía a mano: se aplica entero o no se aplica, editar el
+importe recalcula las dos puntas, y borrarlo devuelve el dinero a su bolsillo.
+El total de la cuenta no cambia nunca, y esa es la comprobación que lo resume.
+
+Tres cosas que sí había que cambiar para que el traspaso no mienta en el resto
+de la app:
+
+- **La restricción de la base de datos** exigía un destino distinto del origen,
+  porque cuando se escribió el único destino posible era una cuenta. Ahora
+  admite la misma cuenta si el bolsillo es otro, y sigue rechazando el
+  movimiento que no mueve nada —mismo sitio a los dos lados—. El saldo general
+  se guarda como bolsillo vacío, así que la comparación va con `is distinct
+  from`: con `<>` a secas, un lado nulo daba `null` y la restricción dejaba
+  pasar la fila.
+- **La DIAN no ve un reparto interno.** Pasar plata de una cuenta propia a otra
+  sí consigna —es el tope que más gente sorprende— pero repartir el saldo entre
+  los bolsillos de la misma cuenta no sale en ningún extracto. Contarlo habría
+  inflado las consignaciones justo a quien usa los bolsillos para ordenarse.
+- **Un traspaso no es un gasto**, y se estaba contando como tal en dos sitios: la
+  gráfica del patrimonio abría un escalón hacia abajo con cada transferencia, y
+  en la lista de movimientos salía con un «−» y restando del total del día.
+  Ahora va sin signo y en gris, y el total del día lo ignora.
+
+Y un movimiento de este tipo **ya no se puede convertir en gasto sin querer**. La
+ficha de edición solo sabía de una cuenta, así que al guardar un traspaso lo
+pasaba a «Gasto»: el importe se restaba del origen, la punta de destino se
+quedaba con el dinero que ya había recibido, y el patrimonio cambiaba solo por
+haber abierto la ficha. Ahora se edita lo que se teclea mal —cuánto, cuándo, qué
+nota—, las dos puntas se enseñan para leerlas, y para cambiarlas se borra el
+traspaso y se vuelve a hacer.
+
+---
+
 ## Transferir a efectivo
 
 Sacar plata del cajero es de lo más corriente que hay, y sin una cuenta de
@@ -1051,10 +1101,13 @@ Lo que falta, en orden de lo que más duele.
       sea, en iPhone y en escritorio—. Sin ninguna, el botón de la cámara lo
       dice en vez de fallar.
 - [ ] **Aplicar las migraciones nuevas.** `supabase db push` con las cinco de
-      `20260917*`: la TRM y el origen de cada movimiento, el ciclo de las
-      tarjetas, los ingresos recurrentes, la ingesta rápida y los avisos. Sin
-      ellas la app arranca igual pero cada pantalla nueva avisa de que su tabla
-      no existe.
+      `20260917*` —la TRM y el origen de cada movimiento, el ciclo de las
+      tarjetas, los ingresos recurrentes, la ingesta rápida y los avisos— y con
+      `20260921120000_bolsillos_misma_cuenta`. Sin las primeras la app arranca
+      igual pero cada pantalla nueva avisa de que su tabla no existe; sin la
+      última, mover dinero entre bolsillos de una misma cuenta se ve en el
+      teléfono pero el servidor rechaza la fila por la restricción vieja, y el
+      traspaso no llega al resto de los dispositivos.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.
