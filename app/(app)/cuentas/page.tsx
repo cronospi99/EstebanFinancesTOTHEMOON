@@ -34,6 +34,8 @@ export default function AccountsPage() {
   const saldos = useAccountsAvailable()
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
+  // Con qué cuenta abrir la hoja de transferir, cuando se entra desde una.
+  const [transferCuenta, setTransferCuenta] = useState<string | undefined>()
   const [pagarOpen, setPagarOpen] = useState(false)
   const [detail, setDetail] = useState<Account | null>(null)
 
@@ -41,6 +43,13 @@ export default function AccountsPage() {
   // disponible del día a día.
   const delDia = accounts.filter((a) => a.type !== 'investment')
   const hayTarjetas = accounts.some((a) => a.type === 'credit')
+  /*
+   * Hay algo que transferir con dos cuentas... o con una sola que tenga
+   * bolsillos: ahí el dinero se mueve dentro de la cuenta, del bolsillo de las
+   * vacaciones al saldo general. Antes el botón se quedaba apagado y la única
+   * forma de repartir era editar los dos saldos a mano.
+   */
+  const puedeTransferir = delDia.length >= 2 || accounts.some((a) => (a.pockets?.length ?? 0) > 0)
 
   return (
     <div className="space-y-5 px-5">
@@ -110,8 +119,8 @@ export default function AccountsPage() {
 
       <div className="grid grid-cols-2 gap-3">
         <button
-          onClick={() => { haptic(6); setTransferOpen(true) }}
-          disabled={delDia.length < 2}
+          onClick={() => { haptic(6); setTransferCuenta(undefined); setTransferOpen(true) }}
+          disabled={!puedeTransferir}
           className="press flex items-center justify-center gap-2 rounded-2xl border border-hairline
                      bg-fill-1 py-3.5 text-[15px] font-medium text-accent-blue
                      disabled:text-label-tertiary"
@@ -163,9 +172,19 @@ export default function AccountsPage() {
       </section>
 
       <AddAccountSheet open={addAccountOpen} onClose={() => setAddAccountOpen(false)} />
-      <TransferSheet open={transferOpen} onClose={() => setTransferOpen(false)} />
+      <TransferSheet
+        open={transferOpen} cuentaInicial={transferCuenta}
+        onClose={() => setTransferOpen(false)}
+      />
       <PayCardSheet open={pagarOpen} onClose={() => setPagarOpen(false)} />
-      <AccountDetailSheet account={detail} onClose={() => setDetail(null)} />
+      <AccountDetailSheet
+        account={detail}
+        onClose={() => setDetail(null)}
+        /* Se cierra el detalle antes de abrir la transferencia: dos hojas
+           apiladas dejan el fondo con dos velos y cerrar la de arriba
+           descubre una ficha que ya no tiene nada que ver con lo que se hizo. */
+        onMover={(acc) => { setDetail(null); setTransferCuenta(acc.id); setTransferOpen(true) }}
+      />
     </div>
   )
 }

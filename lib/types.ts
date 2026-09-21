@@ -119,6 +119,17 @@ export interface Transaction {
    * que aparezca dinero de la nada.
    */
   toAccountId?: string
+  /**
+   * Bolsillo de destino, dentro de la cuenta a la que llega.
+   *
+   * Cuando `toAccountId` es la misma cuenta que `accountId`, el movimiento es
+   * un reparto interno: de un bolsillo a otro, o entre un bolsillo y el saldo
+   * general. El total de la cuenta no cambia y aun así se movió dinero —un
+   * bolsillo tiene su propio saldo, y a veces su propio rendimiento—, que es
+   * lo que antes había que hacer editando los dos saldos a mano.
+   *
+   * Vacío significa el saldo general de la cuenta, no «ninguno».
+   */
   toPocketId?: string
   categoryId: string
   amount: number

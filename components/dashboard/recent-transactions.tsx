@@ -50,6 +50,9 @@ export function RecentTransactions({ limit = 6 }: { limit?: number }) {
           const cat = categoryById(tx.categoryId)
           const account = accounts.find((a) => a.id === tx.accountId)
           const income = tx.type === 'income'
+          // Un traspaso no entró ni salió: sin signo y en gris, como en la
+          // lista de Gastos. Con el «−» pasaba por gasto.
+          const traspaso = tx.type === 'transfer'
           return (
             <motion.button
               key={tx.id}
@@ -67,8 +70,11 @@ export function RecentTransactions({ limit = 6 }: { limit?: number }) {
                   {account?.name ?? 'Cuenta'} · {formatDate(tx.occurredAt)}
                 </div>
               </div>
-              <div className={cn('tnum shrink-0 text-[15px] font-semibold', income ? 'text-accent-green' : 'text-label')}>
-                {income ? '+' : '−'}
+              <div className={cn(
+                'tnum shrink-0 text-[15px] font-semibold',
+                income ? 'text-accent-green' : traspaso ? 'text-label-secondary' : 'text-label',
+              )}>
+                {traspaso ? '' : income ? '+' : '−'}
                 {formatMoney(tx.amount).replace('$', '').trim()}
               </div>
             </motion.button>

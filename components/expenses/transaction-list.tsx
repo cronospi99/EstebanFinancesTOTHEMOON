@@ -43,7 +43,18 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
   return (
     <div className="space-y-5">
       {groupByDay(transactions).map(([day, txs]) => {
-        const dayTotal = txs.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0)
+        /*
+         * Lo que el día dejó: ingresos menos gastos.
+         *
+         * Las transferencias no suman ni restan. El dinero cambió de sitio y
+         * las dos puntas son tuyas, así que contarlas en negativo —como se
+         * hacía— daba un día en rojo por haber pasado plata de una cuenta a
+         * otra, o de un bolsillo al saldo general.
+         */
+        const dayTotal = txs.reduce(
+          (s, t) => (t.type === 'transfer' ? s : s + (t.type === 'income' ? t.amount : -t.amount)),
+          0,
+        )
         return (
           <div key={day}>
             <div className="mb-2 flex items-baseline justify-between px-1">
@@ -61,6 +72,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                 const cat = categoryById(tx.categoryId)
                 const account = accounts.find((a) => a.id === tx.accountId)
                 const income = tx.type === 'income'
+                const traspaso = tx.type === 'transfer'
                 return (
                   <div
                     key={tx.id}
@@ -128,8 +140,13 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                           {cat.name} · {account?.name ?? 'Cuenta'}
                         </div>
                       </div>
-                      <div className={cn('tnum shrink-0 text-[15px] font-semibold', income ? 'text-accent-green' : 'text-label')}>
-                        {income ? '+' : '−'}
+                      {/* Un traspaso va sin signo y en gris: ni entró ni salió,
+                          y el «−» lo hacía pasar por gasto en la lista. */}
+                      <div className={cn(
+                        'tnum shrink-0 text-[15px] font-semibold',
+                        income ? 'text-accent-green' : traspaso ? 'text-label-secondary' : 'text-label',
+                      )}>
+                        {traspaso ? '' : income ? '+' : '−'}
                         {formatMoney(tx.amount).replace('$', '').trim()}
                       </div>
                     </button>
