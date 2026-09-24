@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import {
   DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_DEBTS, DEMO_DEBT_PAYMENTS, DEMO_GOALS,
-  DEMO_HOLDINGS, DEMO_INGRESOS, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
+  DEMO_HOLDINGS, DEMO_INGRESOS, DEMO_NEGOCIO, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
 } from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
@@ -14,7 +14,7 @@ import {
   parteAjena, proximoCobro, tuParte,
 } from './suscripciones'
 import { cargarZona, diaEn, hoyEnZona, instanteEnDia, sumarDias } from './zona'
-import { monthKey, monthlyFromApy } from './format'
+import { formatMoney, monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useTrm, type TrmState } from './use-trm'
@@ -35,6 +35,7 @@ import type {
   RecurringIncome, Settings, Subscription, Trade, Transaction,
 } from './types'
 import { uid } from './utils'
+import { columnaEspacio, espacioActual, faltaColumnaEspacio, marcarServidorSinEspacios, servidorConEspacios, cambiarEspacio, type Espacio } from './espacio'
 
 const STORAGE_KEY = 'eftm.state.v2'
 
@@ -83,6 +84,28 @@ const INITIAL: State = {
   settings: DEMO_SETTINGS,
 }
 
+/**
+ * Datos de ejemplo del Modo Demo en el espacio del negocio. Los de siempre son
+ * los de una persona: enseñárselos a quien abre «Empresa / Negocio» sería
+ * enseñarle un mercado y un Netflix donde espera ventas y nómina.
+ */
+const INITIAL_NEGOCIO: State = {
+  accounts: DEMO_NEGOCIO.accounts,
+  transactions: DEMO_NEGOCIO.transactions,
+  budgets: DEMO_NEGOCIO.budgets,
+  allocations: [],
+  holdings: [],
+  goals: DEMO_NEGOCIO.goals,
+  trades: [],
+  debts: [],
+  debtPayments: [],
+  subscriptions: DEMO_NEGOCIO.subscriptions,
+  recurringIncomes: [],
+  settings: DEMO_SETTINGS,
+}
+
+const inicialDemo = () => (espacioActual() === 'negocio' ? INITIAL_NEGOCIO : INITIAL)
+
 const VACIO: State = {
   accounts: [], transactions: [], budgets: [], allocations: [],
   holdings: [], goals: [], trades: [], debts: [], debtPayments: [], subscriptions: [],
@@ -114,7 +137,12 @@ function motivoTabla(error: unknown): string | null {
   return e.message?.slice(0, 90) || 'el servidor rechazó la consulta'
 }
 
-const claveEstado = (userId?: string | null) => (userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY)
+const claveEstado = (userId?: string | null, espacio: Espacio = espacioActual()) => {
+  const base = userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY
+  // Lo personal conserva la clave de siempre: lo que ya estaba guardado en el
+  // teléfono sigue apareciendo tras actualizar la app.
+  return espacio === 'negocio' ? `${base}:negocio` : base
+}
 
 function leerEstado(clave: string, base: State): State | null {
   try {
@@ -157,6 +185,18 @@ function aplicarDelta(
     }
     return { ...a, balance: a.balance + delta }
   })
+}
+
+/**
+ * Pasa un importe de una moneda a otra con una tasa en pesos por dólar.
+ *
+ * Redondea a lo que admite la moneda de llegada —pesos enteros, centavos de
+ * dólar—: un cobro de «80.209,875 pesos» no lo emite ningún banco, y los
+ * decimales sueltos se acumulan en el saldo mes tras mes.
+ */
+function convertir(importe: number, de: Currency, a: Currency, tasa: number): number {
+  if (de === a) return importe
+  return a === 'COP' ? Math.round(importe * tasa) : Math.round((importe / tasa) * 100) / 100
 }
 
 /** Lo que un movimiento le suma al saldo de su cuenta de origen. */
@@ -468,22 +508,60 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             if (cache) setState(cache)
           }
 
-          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
-                 debts, debtPayments, subscriptions, recurringIncomes] =
-            await Promise.all([
-              supabase.from('accounts').select('*').order('created_at'),
-              supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
-              supabase.from('holdings').select('*'),
-              supabase.from('budgets').select('*'),
-              supabase.from('goals').select('*'),
-              supabase.from('trades').select('*').order('occurred_at', { ascending: false }),
-              supabase.from('budget_allocations').select('*').order('created_at'),
+          /*
+           * Solo el espacio abierto. Los ajustes no se filtran: son de la
+           * persona, no de un espacio. Ver `lib/espacio.ts`.
+           */
+          const espacio = espacioActual()
+          const consultar = (conEspacio: boolean) => {
+            const de = (tabla: string) => {
+              const q = supabase.from(tabla).select('*')
+              return conEspacio ? q.eq('espacio', espacio) : q
+            }
+            return Promise.all([
+              de('accounts').order('created_at'),
+              de('transactions').order('occurred_at', { ascending: false }),
+              de('holdings'),
+              de('budgets'),
+              de('goals'),
+              de('trades').order('occurred_at', { ascending: false }),
+              de('budget_allocations').order('created_at'),
               supabase.from('settings').select('*').maybeSingle(),
-              supabase.from('debts').select('*').order('started_at'),
-              supabase.from('debt_payments').select('*').order('occurred_at'),
-              supabase.from('subscriptions').select('*').order('anchor_at'),
-              supabase.from('recurring_incomes').select('*').order('anchor_at'),
+              de('debts').order('started_at'),
+              de('debt_payments').order('occurred_at'),
+              de('subscriptions').order('anchor_at'),
+              de('recurring_incomes').order('anchor_at'),
             ])
+          }
+
+          /*
+           * Sin la columna, todo lo que hay es personal: enseñarlo bajo
+           * «Negocio» sería enseñar el dinero de la persona con otra etiqueta.
+           * Se vuelve a lo personal, y la app sigue como antes de los espacios.
+           */
+          let resultados
+          if (servidorConEspacios()) {
+            resultados = await consultar(true)
+            if (faltaColumnaEspacio(resultados[0].error)) {
+              marcarServidorSinEspacios(true)
+              if (espacio === 'negocio') { cambiarEspacio('personal'); return }
+              resultados = await consultar(false)
+            }
+          } else {
+            if (espacio === 'negocio') { cambiarEspacio('personal'); return }
+            // Ya se sabe que faltaba: se carga sin el filtro, y aparte se
+            // pregunta con una consulta mínima si ya se aplicó la migración.
+            // Así la app se entera sola, sin repetir en cada apertura once
+            // consultas que van a fallar.
+            const [r, prueba] = await Promise.all([
+              consultar(false),
+              supabase.from('accounts').select('id').eq('espacio', 'personal').limit(1),
+            ])
+            resultados = r
+            if (!prueba.error) marcarServidorSinEspacios(false)
+          }
+          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
+                 debts, debtPayments, subscriptions, recurringIncomes] = resultados
           if (!vivo.current) return
 
           if (accounts.error) {
@@ -575,7 +653,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
       // Modo Demo: sin llaves de Supabase, o sin sesión desde el principio.
       setUserId(null)
-      if (pintarCache) setState(leerEstado(STORAGE_KEY, INITIAL) ?? INITIAL)
+      if (pintarCache) setState(leerEstado(claveEstado(null), inicialDemo()) ?? inicialDemo())
       setSynced(false)
       setSyncError(false)
       setReady(true)
@@ -698,6 +776,42 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /*
+   * Qué cuentas cambiaron de saldo en memoria y falta escribir en el servidor.
+   *
+   * Antes cada mutación sacaba la lista de dentro del actualizador de
+   * `setState` —`let tocadas; setState((s) => { tocadas = … })`— y la
+   * guardaba en la línea siguiente. Eso da por hecho que React ejecuta el
+   * actualizador en el acto, y no siempre lo hace: si el proveedor ya tiene
+   * otra actualización pendiente, lo aplaza al siguiente render, y la lista
+   * llegaba vacía. El movimiento se guardaba y el saldo no. Pasaba sobre todo
+   * con los cobros de suscripción, que se anotan en el arranque, justo cuando
+   * el proveedor está lleno de actualizaciones: el cobro aparecía en Gastos
+   * y la tarjeta, al volver a abrir la app, seguía sin él. En los bolsillos
+   * era peor: la lista vacía se guardaba tal cual y se llevaba por delante
+   * todos los bolsillos de la cuenta en el servidor.
+   *
+   * Ahora el actualizador solo apunta qué cuentas tocó, y lo que se guarda es
+   * el estado ya confirmado, en un efecto que corre después del render. Da
+   * igual cuándo ejecute React el actualizador: cuando el efecto corre, ya lo
+   * hizo.
+   */
+  const saldosPorGuardar = useRef(new Set<string>())
+
+  /** Se llama DENTRO del actualizador: apunta las cuentas que cambiaron. */
+  const marcarCambiadas = useCallback((antes: Account[], despues: Account[]) => {
+    // `aplicarDelta` y los `map` de bolsillos devuelven la misma referencia
+    // para las cuentas que no tocan: comparar identidades basta.
+    despues.forEach((a, i) => { if (a !== antes[i]) saldosPorGuardar.current.add(a.id) })
+  }, [])
+
+  useEffect(() => {
+    if (!saldosPorGuardar.current.size) return
+    const ids = saldosPorGuardar.current
+    saldosPorGuardar.current = new Set()
+    void persistirSaldos(state.accounts.filter((a) => ids.has(a.id)))
+  }, [state.accounts, persistirSaldos])
+
   /** Devuelve el id del movimiento creado: un abono a una deuda lo guarda para
    *  poder deshacerlo si se borra el abono. */
   const addTransaction = useCallback(
@@ -718,23 +832,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       const { trm: trmHoy, fx: mercado } = tasaRef.current
       const tasa = tx.fxRate ?? (tx.currency === 'USD' ? (trmHoy || mercado || undefined) : undefined)
       const full: Transaction = { ...tx, fxRate: tasa, id: uid() }
-      // `aplicarDelta` devuelve la misma referencia para las cuentas que no
-      // toca, así que comparar identidades basta para saber cuáles guardar.
-      let tocadas: Account[] = []
       setState((s) => {
         // Si va a un bolsillo, el saldo se mueve ahí y no en el general. Y si
         // es una transferencia, se mueve también en la cuenta de destino.
         const accounts = aplicarMovimiento(s.accounts, full, 1)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
         return { ...s, transactions: [full, ...s.transactions], accounts }
       })
-      await Promise.all([
-        remote()?.from('transactions').insert(txToRow(full)),
-        persistirSaldos(tocadas),
-      ])
+      await remote()?.from('transactions').insert(txToRow(full))
       return full.id
     },
-    [remote, persistirSaldos],
+    [remote, marcarCambiadas],
   )
 
   /**
@@ -747,7 +855,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const updateTransaction = useCallback(
     async (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
-      let tocadas: Account[] = []
       setState((s) => {
         const anterior = s.transactions.find((t) => t.id === id)
         if (!anterior) return s
@@ -755,7 +862,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
         let accounts = aplicarMovimiento(s.accounts, anterior, -1)
         accounts = aplicarMovimiento(accounts, nuevo, 1)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
 
         return {
           ...s,
@@ -763,34 +870,27 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           accounts,
         }
       })
-      await Promise.all([
-        remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id),
-        persistirSaldos(tocadas),
-      ])
+      await remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id)
     },
-    [remote, persistirSaldos],
+    [remote, marcarCambiadas],
   )
 
   const deleteTransaction = useCallback(
     async (id: string) => {
-      let tocadas: Account[] = []
       setState((s) => {
         const tx = s.transactions.find((t) => t.id === id)
         if (!tx) return s
         const accounts = aplicarMovimiento(s.accounts, tx, -1)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
         return {
           ...s,
           transactions: s.transactions.filter((t) => t.id !== id),
           accounts,
         }
       })
-      await Promise.all([
-        remote()?.from('transactions').delete().eq('id', id),
-        persistirSaldos(tocadas),
-      ])
+      await remote()?.from('transactions').delete().eq('id', id)
     },
-    [remote, persistirSaldos],
+    [remote, marcarCambiadas],
   )
 
   /**
@@ -808,15 +908,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const aplicarMovimientosAlSaldo = useCallback(
     async (accountId: string) => {
-      let tocadas: Account[] = []
       setState((s) => {
         const accounts = aplicarMovimientos(s.accounts, s.transactions, accountId)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
         return { ...s, accounts }
       })
-      await persistirSaldos(tocadas)
     },
-    [persistirSaldos],
+    [marcarCambiadas],
   )
 
   // ---- Cuentas -------------------------------------------------------------
@@ -920,60 +1018,43 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // ---- Bolsillos -----------------------------------------------------------
   // Viven dentro de la cuenta (columna jsonb): son subdivisiones suyas, no
   // entidades propias, y así se mueven y se borran con ella.
-  const persistPockets = useCallback(
-    async (accountId: string, pockets: Pocket[]) => {
-      await remote()?.from('accounts').update({ pockets }).eq('id', accountId)
+  //
+  // Se guardan por el mismo camino que los saldos —`marcarCambiadas` y el
+  // efecto que escribe el estado ya confirmado—, que además escribe la columna
+  // `pockets`. Sacar la lista nueva de dentro del actualizador podía dejarla
+  // vacía y borrar en el servidor todos los bolsillos de la cuenta.
+  const cambiarBolsillos = useCallback(
+    (accountId: string, cambio: (pockets: Pocket[]) => Pocket[]) => {
+      setState((s) => {
+        const accounts = s.accounts.map((a) =>
+          a.id === accountId ? { ...a, pockets: cambio(a.pockets ?? []) } : a)
+        marcarCambiadas(s.accounts, accounts)
+        return { ...s, accounts }
+      })
     },
-    [remote],
+    [marcarCambiadas],
   )
 
   const addPocket = useCallback(
     async (accountId: string, pocket: Omit<Pocket, 'id'>) => {
       const full: Pocket = { ...pocket, id: uid() }
-      let next: Pocket[] = []
-      setState((s) => ({
-        ...s,
-        accounts: s.accounts.map((a) => {
-          if (a.id !== accountId) return a
-          next = [...(a.pockets ?? []), full]
-          return { ...a, pockets: next }
-        }),
-      }))
-      await persistPockets(accountId, next)
+      cambiarBolsillos(accountId, (pockets) => [...pockets, full])
     },
-    [persistPockets],
+    [cambiarBolsillos],
   )
 
   const updatePocket = useCallback(
     async (accountId: string, pocketId: string, patch: Partial<Pocket>) => {
-      let next: Pocket[] = []
-      setState((s) => ({
-        ...s,
-        accounts: s.accounts.map((a) => {
-          if (a.id !== accountId) return a
-          next = (a.pockets ?? []).map((p) => (p.id === pocketId ? { ...p, ...patch } : p))
-          return { ...a, pockets: next }
-        }),
-      }))
-      await persistPockets(accountId, next)
+      cambiarBolsillos(accountId, (pockets) => pockets.map((p) => (p.id === pocketId ? { ...p, ...patch } : p)))
     },
-    [persistPockets],
+    [cambiarBolsillos],
   )
 
   const deletePocket = useCallback(
     async (accountId: string, pocketId: string) => {
-      let next: Pocket[] = []
-      setState((s) => ({
-        ...s,
-        accounts: s.accounts.map((a) => {
-          if (a.id !== accountId) return a
-          next = (a.pockets ?? []).filter((p) => p.id !== pocketId)
-          return { ...a, pockets: next }
-        }),
-      }))
-      await persistPockets(accountId, next)
+      cambiarBolsillos(accountId, (pockets) => pockets.filter((p) => p.id !== pocketId))
     },
-    [persistPockets],
+    [cambiarBolsillos],
   )
 
   // ---- Inversiones ---------------------------------------------------------
@@ -1128,8 +1209,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         }
       })
       remote()?.from('budgets').upsert(
-        { category_id: categoryId, amount, daily_cap: capFinal ?? null },
-        { onConflict: 'user_id,category_id' },
+        { category_id: categoryId, amount, daily_cap: capFinal ?? null, ...columnaEspacio() },
+        // «Transporte» puede tener un tope en casa y otro en el negocio.
+        { onConflict: servidorConEspacios() ? 'user_id,espacio,category_id' : 'user_id,category_id' },
       ).then(() => {}, () => {})
     },
     [remote],
@@ -1144,8 +1226,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         budgets: s.budgets.filter((b) => b.categoryId !== categoryId),
         allocations: s.allocations.filter((a) => a.categoryId !== categoryId),
       }))
-      remote()?.from('budgets').delete().eq('category_id', categoryId).then(() => {}, () => {})
-      remote()?.from('budget_allocations').delete().eq('category_id', categoryId).then(() => {}, () => {})
+      // Por categoría Y espacio: sin el segundo filtro, quitar «Transporte»
+      // del negocio se llevaba también el de casa.
+      const delEspacio = <Q extends { eq: (c: string, v: string) => Q }>(q: Q) =>
+        (servidorConEspacios() ? q.eq('espacio', espacioActual()) : q)
+      const sb = remote()
+      if (sb) {
+        delEspacio(sb.from('budgets').delete().eq('category_id', categoryId)).then(() => {}, () => {})
+        delEspacio(sb.from('budget_allocations').delete().eq('category_id', categoryId)).then(() => {}, () => {})
+      }
     },
     [remote],
   )
@@ -1506,11 +1595,38 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const generarCobros = useCallback(async () => {
     const hoy = hoyEnZona()
-    const { subscriptions, transactions } = stateRef.current
+    const { subscriptions, transactions, accounts } = stateRef.current
+    const { trm: trmHoy, fx: mercado } = tasaRef.current
+    const tasa = trmHoy || mercado
 
     for (const sub of subscriptions) {
       // Sin cuenta no hay de dónde sacarlo, y cancelada ya no cobra.
       if (sub.cancelled || !sub.accountId) continue
+
+      /*
+       * El cobro se anota en la moneda de la cuenta que lo paga, no en la de
+       * la suscripción.
+       *
+       * Un servicio en dólares pagado con una tarjeta en pesos es lo normal
+       * —Netflix, iCloud, ChatGPT— y el banco lo cobra en pesos, con la tasa
+       * del día. Anotarlo en dólares sobre la tarjeta movía su saldo con el
+       * número sin convertir: una suscripción de US$ 20 le subía la deuda
+       * veinte pesos. En Gastos se veía bien, porque ahí sí se convierte, y en
+       * la tarjeta no aparecía.
+       *
+       * Sin tasa conocida no se anota todavía: inventarla sería peor que
+       * esperar, y el arranque lo vuelve a intentar en cuanto llega una. El
+       * ancla no se mueve, así que el cobro no se pierde.
+       */
+      const cuenta = accounts.find((a) => a.id === sub.accountId)
+      const moneda = cuenta?.currency ?? sub.currency
+      if (moneda !== sub.currency && !tasa) continue
+      const importe = convertir(sub.amount, sub.currency, moneda, tasa)
+      // El precio original se queda en la descripción: «US$ 19,99» es lo que
+      // uno reconoce, y lo que dice la factura del servicio.
+      const descripcion = moneda === sub.currency
+        ? sub.name
+        : `${sub.name} · ${formatMoney(sub.amount, sub.currency)}`
 
       let fecha = sub.anchorAt
       let anotados = 0
@@ -1531,9 +1647,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             accountId: sub.accountId,
             type: 'expense',
             categoryId: 'subs',
-            amount: sub.amount,
-            currency: sub.currency,
-            description: sub.name,
+            amount: importe,
+            currency: moneda,
+            description: descripcion,
             occurredAt: instanteEnDia(fecha),
             subscriptionId: sub.id,
             pending: true,
@@ -1546,6 +1662,41 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [addTransaction, updateSubscription])
 
+  /**
+   * Corrige los cobros de suscripción anotados en una moneda distinta de la de
+   * su cuenta, que es como se anotaban antes.
+   *
+   * Esos cobros movieron el saldo con el número crudo —US$ 20 como veinte
+   * pesos— y siguen así en la tarjeta. Se pasan a la moneda de la cuenta con
+   * `updateTransaction`, que deshace lo que se aplicó y aplica lo nuevo: la
+   * diferencia entra en el saldo sola. Es idempotente —un cobro ya corregido
+   * tiene la moneda de su cuenta y no vuelve a entrar— así que puede correr en
+   * cada arranque sin llevar la cuenta de si ya se hizo.
+   *
+   * Solo los de suscripción: son los únicos que la app anotaba así. Manda la
+   * tasa guardada del día del cobro; si no la hay, la de hoy.
+   */
+  const repararCobrosEnOtraMoneda = useCallback(async () => {
+    const { transactions, accounts } = stateRef.current
+    const { trm: trmHoy, fx: mercado } = tasaRef.current
+
+    for (const t of transactions) {
+      if (!t.subscriptionId || !t.currency) continue
+      const cuenta = accounts.find((a) => a.id === t.accountId)
+      if (!cuenta || cuenta.currency === t.currency) continue
+      const tasa = (t.currency === 'USD' && t.fxRate) || trmHoy || mercado
+      if (!tasa) continue
+
+      await updateTransaction(t.id, {
+        amount: convertir(t.amount, t.currency, cuenta.currency, tasa),
+        currency: cuenta.currency,
+        // La tasa solo tiene sentido en un movimiento en dólares.
+        fxRate: cuenta.currency === 'USD' ? tasa : undefined,
+        description: `${t.description} · ${formatMoney(t.amount, t.currency)}`,
+      })
+    }
+  }, [updateTransaction])
+
   /** Sí me cobraron: deja de estar pendiente y pasa a ser un gasto normal. */
   const confirmarCobro = useCallback(
     (id: string) => updateTransaction(id, { pending: false }),
@@ -1553,23 +1704,38 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   )
 
   /*
-   * Los cobros que ya cayeron se anotan una vez por arranque, cuando los datos
-   * ya están. Con la guarda de `ref` y no solo con `ready`: el efecto se
-   * vuelve a disparar si `ready` cambia, y anotar dos veces el mismo cobro es
-   * justo lo que no puede pasar.
+   * Los cobros que ya cayeron se anotan al arrancar, cuando los datos ya
+   * están. Con la guarda de `ref` y no solo con `ready`: el efecto se vuelve a
+   * disparar si `ready` cambia, y anotar dos veces el mismo cobro es justo lo
+   * que no puede pasar.
+   *
+   * Hasta dos pasadas por arranque: una en cuanto hay datos y otra cuando
+   * llega la tasa, si la primera corrió sin ella —la de un servicio en dólares
+   * pagado en pesos se queda esperando—. Van en cadena y no a la vez: dos
+   * pasadas solapadas podrían ver el mismo cobro pendiente y anotarlo dos
+   * veces.
    */
-  const cobrosCorridos = useRef(false)
+  const hayTasa = trm.valor > 0 || fxRate > 0
+  const cobrosCorridos = useRef<'no' | 'sin-tasa' | 'con-tasa'>('no')
+  const cadenaCobros = useRef<Promise<void>>(Promise.resolve())
   useEffect(() => {
-    if (!ready || cobrosCorridos.current) return
-    cobrosCorridos.current = true
-    void generarCobros()
-  }, [ready, generarCobros])
+    if (!ready) return
+    const fase = hayTasa ? 'con-tasa' : 'sin-tasa'
+    if (cobrosCorridos.current === 'con-tasa' || cobrosCorridos.current === fase) return
+    cobrosCorridos.current = fase
+    cadenaCobros.current = cadenaCobros.current
+      .then(async () => {
+        await repararCobrosEnOtraMoneda()
+        await generarCobros()
+      })
+      .catch(() => { /* lo que no salió, sale en el siguiente arranque */ })
+  }, [ready, hayTasa, generarCobros, repararCobrosEnOtraMoneda])
 
 
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
   // explícita para que nunca pueda llevarse por delante los datos de un usuario.
   const resetDemo = useCallback(() => {
-    setState(INITIAL)
+    setState(inicialDemo())
     try { localStorage.removeItem(claveEstado(null)) } catch { /* noop */ }
   }, [])
 
@@ -1605,7 +1771,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      if (usuario) localStorage.removeItem(claveEstado(usuario))
+      // Los dos espacios: salir no puede dejar en el teléfono la caja del
+      // negocio porque se estaba mirando lo personal.
+      if (usuario) {
+        localStorage.removeItem(claveEstado(usuario, 'personal'))
+        localStorage.removeItem(claveEstado(usuario, 'negocio'))
+      }
     } catch { /* noop */ }
     olvidarNombreGuardado()
   }, [])
@@ -2767,6 +2938,7 @@ const rowToAccount = (r: Row): Account => ({
   dueDay: r.due_day ?? undefined,
 })
 const accountToRow = (a: Account) => ({
+  ...columnaEspacio(),
   id: a.id, name: a.name, institution: a.institution, type: a.type,
   balance: a.balance, currency: a.currency, color: a.color,
   apy: a.apy ?? null, pockets: a.pockets ?? [],
@@ -2814,6 +2986,7 @@ const rowToTx = (r: Row): Transaction => ({
   externalId: r.external_id ?? undefined,
 })
 const txToRow = (t: Transaction) => ({
+  ...columnaEspacio(),
   id: t.id, account_id: t.accountId, pocket_id: t.pocketId ?? null,
   to_account_id: t.toAccountId ?? null, to_pocket_id: t.toPocketId ?? null,
   category_id: t.categoryId, amount: t.amount, type: t.type,
@@ -2852,6 +3025,7 @@ const rowToHolding = (r: Row): Holding => ({
   accountId: r.account_id ?? undefined,
 })
 const holdingToRow = (h: Holding) => ({
+  ...columnaEspacio(),
   id: h.id, symbol: h.symbol, name: h.name, quantity: h.quantity,
   avg_cost: h.avgCost, asset_type: h.assetType, currency: h.currency,
   account_id: h.accountId ?? null,
@@ -2876,6 +3050,7 @@ const rowToTrade = (r: Row): Trade => ({
   occurredAt: r.occurred_at, opening: Boolean(r.opening),
 })
 const tradeToRow = (t: Trade) => ({
+  ...columnaEspacio(),
   id: t.id, symbol: t.symbol, name: t.name, side: t.side,
   quantity: t.quantity, price: t.price, currency: t.currency, asset_type: t.assetType,
   account_id: t.accountId ?? null, opening: t.opening ?? false, occurred_at: t.occurredAt,
@@ -2900,6 +3075,7 @@ const rowToGoal = (r: Row): Goal => ({
   accountId: r.account_id ?? undefined, pocketId: r.pocket_id ?? undefined,
 })
 const goalToRow = (g: Goal) => ({
+  ...columnaEspacio(),
   id: g.id, name: g.name, target: g.target, saved: g.saved, currency: g.currency,
   deadline: g.deadline ?? null, color: g.color,
   account_id: g.accountId ?? null, pocket_id: g.pocketId ?? null,
@@ -2930,6 +3106,7 @@ const rowToDebt = (r: Row): Debt => ({
   color: r.color,
 })
 const debtToRow = (d: Debt) => ({
+  ...columnaEspacio(),
   id: d.id, person: d.person, direction: d.direction,
   principal: d.principal, currency: d.currency,
   rate: d.rate ?? null, started_at: d.startedAt, due_date: d.dueDate ?? null,
@@ -2957,6 +3134,7 @@ const rowToDebtPayment = (r: Row): DebtPayment => ({
   accountId: r.account_id ?? undefined, transactionId: r.transaction_id ?? undefined,
 })
 const debtPaymentToRow = (p: DebtPayment) => ({
+  ...columnaEspacio(),
   id: p.id, debt_id: p.debtId, amount: p.amount,
   occurred_at: p.occurredAt, note: p.note ?? null,
   account_id: p.accountId ?? null, transaction_id: p.transactionId ?? null,
@@ -2975,6 +3153,7 @@ const rowToSub = (r: Row): Subscription => ({
   color: r.color,
 })
 const subToRow = (x: Subscription) => ({
+  ...columnaEspacio(),
   id: x.id, name: x.name, amount: x.amount, currency: x.currency, cycle: x.cycle,
   anchor_at: x.anchorAt, account_id: x.accountId ?? null,
   trial_ends_at: x.trialEndsAt ?? null, shared_with: x.sharedWith ?? null,
@@ -3023,6 +3202,7 @@ const rowToIngreso = (r: Row): RecurringIncome => ({
   pagaExtras: r.paga_extras ? true : undefined,
 })
 const ingresoToRow = (i: RecurringIncome) => ({
+  ...columnaEspacio(),
   id: i.id, name: i.name, amount: i.amount, currency: i.currency, cycle: i.cycle,
   anchor_at: i.anchorAt, account_id: i.accountId ?? null,
   active: i.active !== false, note: i.note ?? null, color: i.color,
@@ -3090,6 +3270,7 @@ const rowToAllocation = (r: Row): BudgetAllocation => ({
   createdAt: r.created_at,
 })
 const allocationToRow = (a: BudgetAllocation) => ({
+  ...columnaEspacio(),
   id: a.id,
   category_id: a.categoryId,
   account_id: a.accountId ?? null,

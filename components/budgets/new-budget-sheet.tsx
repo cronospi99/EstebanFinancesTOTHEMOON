@@ -5,7 +5,7 @@ import { Search } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
 import { MoneyInput } from '@/components/ui/money-input'
 import { CategoryIcon } from '@/components/ui/category-icon'
-import { DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoriasPara } from '@/lib/categories'
 import { formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
@@ -33,7 +33,7 @@ export function NewBudgetSheet({ open, onClose }: { open: boolean; onClose: () =
   const [dia, setDia] = useState('')
 
   const disponibles = useMemo(
-    () => DEFAULT_CATEGORIES.filter((c) => c.kind === 'expense' && !budgets.some((b) => b.categoryId === c.id)),
+    () => categoriasPara('expense').filter((c) => !budgets.some((b) => b.categoryId === c.id)),
     [budgets],
   )
 
