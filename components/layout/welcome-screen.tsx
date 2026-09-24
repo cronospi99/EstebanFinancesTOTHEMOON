@@ -2,11 +2,16 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, RefreshCw } from 'lucide-react'
+import { ArrowRight, RefreshCw, Store, Wallet, type LucideIcon } from 'lucide-react'
 import { APP_NAME } from '@/components/ui/brand'
+import { AVISO_SIN_MIGRACION } from './selector-espacio'
+import { ESPACIOS, type Espacio } from '@/lib/espacio'
+import { useEspacio, useNegocioDisponible } from '@/lib/use-espacio'
 import { consejoAlAzar, consejoDelDia } from '@/lib/tips'
 import { saludo, useProfileName } from '@/lib/use-profile'
-import { haptic } from '@/lib/utils'
+import { cn, haptic } from '@/lib/utils'
+
+const ICONO: Record<Espacio, LucideIcon> = { personal: Wallet, negocio: Store }
 
 /**
  * Pantalla de entrada.
@@ -15,10 +20,16 @@ import { haptic } from '@/lib/utils'
  * su dinero cada vez que abre una pestaña se vuelve un estorbo en dos días.
  * El consejo es determinista por fecha, así que el mismo día coincide en
  * todos sus dispositivos y no parece un aleatorio sin criterio.
+ *
+ * Es también la puerta de los dos espacios: lo primero que se decide al abrir
+ * es si se viene a mirar el dinero propio o la caja del negocio. El que se usó
+ * la última vez va destacado, porque casi siempre es el que se quiere otra vez.
  */
-export function WelcomeScreen({ onStart }: { onStart: () => void }) {
+export function WelcomeScreen({ onStart }: { onStart: (espacio: Espacio) => void }) {
   const { name } = useProfileName()
   const [consejo, setConsejo] = useState(() => consejoDelDia())
+  const actual = useEspacio()
+  const negocioDisponible = useNegocioDisponible()
 
   return (
     <motion.div
@@ -93,18 +104,43 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
         </motion.div>
       </div>
 
-      <motion.button
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.42, duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
-        whileTap={{ scale: 0.97 }}
-        onClick={() => { haptic(12); onStart() }}
-        className="relative flex h-[56px] w-full items-center justify-center gap-2 rounded-2xl
-                   bg-gradient-to-b from-accent-blue to-[#0060DF] text-[17px] font-semibold
-                   text-white shadow-glow"
-      >
-        Empezar
-        <ArrowRight size={19} strokeWidth={2.5} />
-      </motion.button>
+      <div className="relative w-full space-y-2.5">
+        {(['personal', 'negocio'] as const).map((e, i) => {
+          const Icono = ICONO[e]
+          const principal = e === actual
+          const apagado = e === 'negocio' && !negocioDisponible
+          return (
+            <motion.button
+              key={e}
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.42 + i * 0.06, duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
+              whileTap={apagado ? undefined : { scale: 0.97 }}
+              disabled={apagado}
+              onClick={() => { haptic(12); onStart(e) }}
+              className={cn(
+                'relative flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left disabled:opacity-50',
+                principal
+                  ? 'bg-gradient-to-b from-accent-blue to-[#0060DF] text-white shadow-glow'
+                  : 'glass text-label',
+              )}
+            >
+              <span className={cn(
+                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                principal ? 'bg-white/15' : e === 'negocio' ? 'bg-accent-violet/15 text-accent-violet' : 'bg-fill-3',
+              )}>
+                <Icono size={20} strokeWidth={2.2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-semibold leading-tight">{ESPACIOS[e].nombre}</span>
+                <span className={cn('mt-0.5 block text-[12.5px] leading-snug', principal ? 'text-white/75' : 'text-label-secondary')}>
+                  {apagado ? AVISO_SIN_MIGRACION : ESPACIOS[e].descripcion}
+                </span>
+              </span>
+              {!apagado && <ArrowRight size={18} strokeWidth={2.5} className="shrink-0" />}
+            </motion.button>
+          )
+        })}
+      </div>
     </motion.div>
   )
 }

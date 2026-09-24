@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { Activity, ChartPie, LayoutGrid, Plus, Repeat, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
 import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { cn } from '@/lib/utils'
+import { SelectorEspacio } from './selector-espacio'
 
 const TABS = [
   { href: '/', label: 'Resumen', icon: LayoutGrid },
@@ -52,6 +53,8 @@ export function SideNav({ onQuickAdd }: { onQuickAdd: () => void }) {
           <p className="text-[11px] leading-snug text-label-tertiary">{APP_TAGLINE}</p>
         </div>
       </div>
+
+      <SelectorEspacio id="espacio-lateral" className="mb-4" />
 
       <button
         onClick={onQuickAdd}

@@ -458,6 +458,98 @@ inalcanzable en el teléfono: no se puede anotar la primera si la única puerta
 aparece cuando ya hay una. El vacío es justo cuando más falta hace la puerta,
 porque es cuando nadie sabe que la pantalla existe.
 
+### El cobro tiene que llegar a la tarjeta
+
+Un cobro automático pagado con tarjeta de crédito se veía en Gastos y **no
+aparecía en la tarjeta**. Eran dos fallos a la vez, y los dos se reprodujeron
+contra un servidor antes de tocar nada:
+
+- **El saldo no se guardaba.** Cada movimiento sacaba de dentro del actualizador
+  de `setState` la lista de cuentas que había tocado, y la guardaba en la línea
+  siguiente. Eso da por hecho que React ejecuta el actualizador en el acto, y no
+  lo hace si el componente ya tiene otra actualización pendiente: lo aplaza al
+  render siguiente y la lista llega vacía. Los cobros se anotan al arrancar,
+  que es justo cuando el proveedor está lleno de actualizaciones, así que el
+  movimiento llegaba al servidor y el saldo no: en la siguiente apertura la
+  tarjeta volvía a su cifra de antes. Ahora el actualizador solo apunta qué
+  cuentas cambió, y un efecto escribe el estado ya confirmado. Los bolsillos
+  pasaban por el mismo agujero, con un final peor —una lista vacía guardada tal
+  cual borraba todos los bolsillos de la cuenta— y ahora van por el mismo camino.
+- **Los dólares entraban como pesos.** Un servicio en dólares pagado con una
+  tarjeta en pesos se anotaba en dólares sobre la tarjeta, y el saldo se movía
+  con el número sin convertir: Netflix a US$ 20 le subía la deuda veinte pesos.
+  Ahora el cobro va en la moneda de la cuenta que lo paga, convertido con la
+  TRM del día —como hace el banco—, y el precio original se queda en la
+  descripción: «Netflix · US$ 20». Sin tasa conocida el cobro espera: el
+  arranque lo reintenta en cuanto llega una, y el ancla no se mueve, así que no
+  se pierde.
+
+Los cobros que ya estaban mal anotados se corrigen solos al abrir la app: se
+pasan a la moneda de la cuenta con la tasa que se guardó el día del cobro, y la
+diferencia entra en el saldo. Lo que no se puede reconstruir es el saldo que
+nunca llegó al servidor por el primer fallo: no queda rastro de qué cobros se
+guardaron y cuáles no, así que si una tarjeta quedó corta, se corrige a mano
+tocando su saldo en la ficha de la cuenta.
+
+La entrada por SMS y atajos tiene todavía el segundo fallo, en el servidor: la
+función `ingesta_rapida` mueve el saldo con el importe tal cual venga, y un «USD
+20» sobre una tarjeta en pesos entra como veinte pesos. Arreglarlo pide una
+migración nueva que convierta con la TRM.
+
+---
+
+## Finanzas personales y del negocio
+
+Al abrir la app, la pantalla de entrada tiene dos puertas: **Finanzas
+personales** y **Empresa / Negocio**. La que se usó la última vez va destacada.
+Esa pantalla sale una vez al día, así que para cambiar sin esperar a mañana hay
+un selector «Personal · Negocio» arriba del resumen en el móvil y en la barra
+lateral en escritorio. Dentro del negocio, cada pantalla lleva una marca violeta
+que lo dice: la pregunta «¿dónde están mis cuentas?» delante de la caja de la
+empresa es justo la confusión que hay que evitar.
+
+**Son dos libros separados con la misma app encima.** Cada fila del servidor
+lleva su espacio (`espacio`: `personal` o `negocio`) y la app solo lee y escribe
+el que está abierto. Mezclarlos es el error clásico de quien lleva un negocio
+pequeño con la misma cabeza que su dinero: el patrimonio sale inflado con la
+caja de la empresa, el presupuesto del mercado compite con la nómina, y la
+declaración de renta de la persona suma consignaciones que eran del negocio.
+Todo lo que ya existía quedó en lo personal, que era lo único que se podía
+registrar. Los ajustes de avisos no se parten: son de la persona, que recibe
+los recordatorios de los dos espacios en el mismo teléfono.
+
+Lo que cambia en el negocio:
+
+- **Sus categorías.** Proveedores, Inventario, Arriendo del local, Publicidad,
+  Software, Nómina, Seguridad social, Honorarios, IVA, Retención en la fuente,
+  ICA y Retiro del dueño; y de ingresos, Ventas, Servicios prestados y Aporte de
+  socios. Desaparecen las de una persona —Mecato, Ropa, Mascotas—, y quedan las
+  que sirven a los dos —Transporte, Servicios públicos, Comisiones—, agrupadas
+  como en una empresa. «Retiro del dueño» y «Aporte de socios» van aparte a
+  propósito: mueven la caja pero no son gasto ni venta, y contarlos como tales
+  haría parecer que el negocio gana o pierde lo que no.
+- **La declaración de renta no aparece.** Esa tarjeta calcula los topes de una
+  persona natural, y sobre la caja del negocio daría un «debes declarar» que no
+  es de nadie.
+
+Por dentro, el espacio vive en un módulo (`lib/espacio.ts`) y no en React,
+porque lo necesitan los traductores de filas del store: así cada alta sale con
+su espacio sin que cada una de las diecisiete escrituras tenga que acordarse.
+Cambiar de espacio **recarga la app**, a propósito: es la única forma de estar
+seguros de que nada del espacio anterior —un cobro automático a medias, una
+escritura en vuelo— acaba guardado en el nuevo.
+
+Un movimiento vive donde vive su cuenta, y eso lo asegura la base de datos con
+un disparador, no la app: la entrada por SMS y atajos elige la cuenta por su
+nombre y no sabe de espacios, y sin el disparador un gasto que entraba en la
+cuenta del negocio se quedaba en lo personal, invisible en los dos lados.
+
+**Si la migración todavía no está aplicada, la app no se rompe.** La carga
+detecta que falta la columna, sigue como antes —todo personal— y apaga el
+negocio en la pantalla de entrada explicando qué falta. Lo recuerda entre
+aperturas para no repetir consultas que van a fallar, y pregunta con una
+consulta mínima si ya se aplicó: el día que se aplica, se entera sola.
+
 ---
 
 ## Mover dinero entre bolsillos
@@ -1103,17 +1195,30 @@ Lo que falta, en orden de lo que más duele.
 - [ ] **Aplicar las migraciones nuevas.** `supabase db push` con las cinco de
       `20260917*` —la TRM y el origen de cada movimiento, el ciclo de las
       tarjetas, los ingresos recurrentes, la ingesta rápida y los avisos— y con
-      `20260921120000_bolsillos_misma_cuenta`. Sin las primeras la app arranca
-      igual pero cada pantalla nueva avisa de que su tabla no existe; sin la
-      última, mover dinero entre bolsillos de una misma cuenta se ve en el
-      teléfono pero el servidor rechaza la fila por la restricción vieja, y el
-      traspaso no llega al resto de los dispositivos.
+      `20260921120000_bolsillos_misma_cuenta` y
+      `20260924120000_espacios_personal_y_negocio`. Sin las primeras la app
+      arranca igual pero cada pantalla nueva avisa de que su tabla no existe;
+      sin la de bolsillos, mover dinero entre bolsillos de una misma cuenta se
+      ve en el teléfono pero el servidor rechaza la fila por la restricción
+      vieja; sin la de espacios, todo sigue como personal y el modo Negocio
+      queda apagado hasta aplicarla.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.
 
 ### Código
 
+- [ ] **Con la tasa del dólar fijada a mano, el resumen no carga.** `use-fx.ts`
+      lee la tasa manual de `localStorage` al crear su estado, así que el
+      servidor pinta una cosa y el teléfono otra; la hidratación falla en `/` y
+      la app no llega a pedir ningún dato (se reprodujo con cero consultas). Las
+      demás pestañas cargan bien. Se arregla leyendo la tasa en un efecto, como
+      hace ya el resto de lo que vive en `localStorage`.
+- [ ] **Un SMS en dólares entra como pesos.** La función `ingesta_rapida` mueve
+      el saldo con el importe tal cual, así que «USD 20» sobre una tarjeta en
+      pesos le sube la deuda veinte pesos. Los cobros de suscripción ya
+      convierten; esta entrada necesita una migración que haga lo mismo con la
+      TRM. Ver «El cobro tiene que llegar a la tarjeta».
 - [ ] **Sin tiempo real en la cola.** La cola reenvía en cuanto vuelve la red,
       pero si el mismo movimiento se editó en otro dispositivo mientras tanto,
       gana el último que llegue. Con dos teléfonos y un movimiento editado a la

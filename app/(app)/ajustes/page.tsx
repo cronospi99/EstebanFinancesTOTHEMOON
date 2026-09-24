@@ -18,6 +18,7 @@ import { AtajosCard } from '@/components/settings/atajos-card'
 import { IngresosRecurrentesCard } from '@/components/settings/ingresos-card'
 import { DatosCard } from '@/components/settings/datos-card'
 import { DianCard } from '@/components/settings/dian-card'
+import { useEspacio } from '@/lib/use-espacio'
 import { useProfileName } from '@/lib/use-profile'
 import { useTheme, type Tema } from '@/lib/use-theme'
 import { formatKeypad, parseKeypad } from '@/lib/format'
@@ -25,6 +26,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { cn, haptic } from '@/lib/utils'
 
 export default function SettingsPage() {
+  const espacio = useEspacio()
   const {
     synced, syncError, transactions, accounts, holdings, resetDemo, fx, fxRate,
     quotes, quotesLoading, quotesFallos, signOut,
@@ -298,10 +300,15 @@ export default function SettingsPage() {
         <DatosCard />
       </section>
 
-      <section>
-        <CardHeader title="Declaración de renta" />
-        <DianCard />
-      </section>
+      {/* La de persona natural: sus topes y sus cifras son de una persona, y
+          calcularlos sobre la caja del negocio daría un «debes declarar» que
+          no es de nadie. El negocio declara aparte y con otras reglas. */}
+      {espacio === 'personal' && (
+        <section>
+          <CardHeader title="Declaración de renta" />
+          <DianCard />
+        </section>
+      )}
 
       <section>
         <CardHeader title="Atajos y automatizaciones" />

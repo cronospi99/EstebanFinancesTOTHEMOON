@@ -10,6 +10,7 @@ import { Bloqueo } from './bloqueo'
 import { EstadoCola } from './estado-cola'
 import { Recordatorios } from './recordatorios'
 import { WelcomeScreen } from './welcome-screen'
+import { cambiarEspacio, type Espacio } from '@/lib/espacio'
 
 /**
  * El sheet de captura vive en el shell, no en cada página: así se puede abrir
@@ -32,9 +33,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const empezar = () => {
+  const empezar = (espacio: Espacio) => {
     try { localStorage.setItem('eftm.welcome.seen', new Date().toDateString()) } catch { /* noop */ }
     setMostrarBienvenida(false)
+    // Si es el mismo que ya está abierto no pasa nada; si es el otro, la app
+    // se recarga en él.
+    cambiarEspacio(espacio)
   }
 
   /*
