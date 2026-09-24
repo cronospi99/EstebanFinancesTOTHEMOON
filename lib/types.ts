@@ -103,6 +103,16 @@ export interface Category {
   kind: 'expense' | 'income' | 'transfer'
   /** Agrupa en el selector para que la lista larga siga siendo navegable. */
   group: string
+  /**
+   * El único espacio en el que se ofrece. Vacío = en los dos.
+   *
+   * «Mecato» no pinta nada en la caja de un negocio, ni «Nómina» en la de una
+   * persona. Las que el código usa por su id —suscripciones, préstamos,
+   * transferencias— no llevan nada: tienen que existir en los dos.
+   */
+  espacio?: 'personal' | 'negocio'
+  /** Grupo en el que sale dentro del negocio, cuando el de siempre es de casa. */
+  grupoNegocio?: string
 }
 
 export interface Transaction {

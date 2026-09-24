@@ -7,7 +7,7 @@ import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
 import { AccountPicker } from '@/components/ui/account-picker'
 import { CategoryPicker } from '@/components/ui/category-picker'
-import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoriasPara, categoryById } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
@@ -108,7 +108,7 @@ export function EditTransactionSheet({
   const esTraspaso = transaction?.type === 'transfer'
   const destinoCuenta = accounts.find((a) => a.id === transaction?.toAccountId)
 
-  const categorias = useMemo(() => DEFAULT_CATEGORIES.filter((c) => c.kind === mode), [mode])
+  const categorias = useMemo(() => categoriasPara(mode), [mode])
 
   // Gasto e ingreso no comparten categorías.
   useEffect(() => {

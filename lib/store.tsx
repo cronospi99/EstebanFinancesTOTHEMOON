@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createClient, isSupabaseConfigured } from './supabase/client'
 import {
   DEMO_ACCOUNTS, DEMO_ALLOCATIONS, DEMO_BUDGETS, DEMO_DEBTS, DEMO_DEBT_PAYMENTS, DEMO_GOALS,
-  DEMO_HOLDINGS, DEMO_INGRESOS, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
+  DEMO_HOLDINGS, DEMO_INGRESOS, DEMO_NEGOCIO, DEMO_SETTINGS, DEMO_SUBSCRIPTIONS, DEMO_TRANSACTIONS,
 } from './demo-data'
 import { institutionByName } from './categories'
 import { nombreVisible } from './issuers'
@@ -35,6 +35,7 @@ import type {
   RecurringIncome, Settings, Subscription, Trade, Transaction,
 } from './types'
 import { uid } from './utils'
+import { columnaEspacio, espacioActual, faltaColumnaEspacio, marcarServidorSinEspacios, servidorConEspacios, cambiarEspacio, type Espacio } from './espacio'
 
 const STORAGE_KEY = 'eftm.state.v2'
 
@@ -83,6 +84,28 @@ const INITIAL: State = {
   settings: DEMO_SETTINGS,
 }
 
+/**
+ * Datos de ejemplo del Modo Demo en el espacio del negocio. Los de siempre son
+ * los de una persona: enseñárselos a quien abre «Empresa / Negocio» sería
+ * enseñarle un mercado y un Netflix donde espera ventas y nómina.
+ */
+const INITIAL_NEGOCIO: State = {
+  accounts: DEMO_NEGOCIO.accounts,
+  transactions: DEMO_NEGOCIO.transactions,
+  budgets: DEMO_NEGOCIO.budgets,
+  allocations: [],
+  holdings: [],
+  goals: DEMO_NEGOCIO.goals,
+  trades: [],
+  debts: [],
+  debtPayments: [],
+  subscriptions: DEMO_NEGOCIO.subscriptions,
+  recurringIncomes: [],
+  settings: DEMO_SETTINGS,
+}
+
+const inicialDemo = () => (espacioActual() === 'negocio' ? INITIAL_NEGOCIO : INITIAL)
+
 const VACIO: State = {
   accounts: [], transactions: [], budgets: [], allocations: [],
   holdings: [], goals: [], trades: [], debts: [], debtPayments: [], subscriptions: [],
@@ -114,7 +137,12 @@ function motivoTabla(error: unknown): string | null {
   return e.message?.slice(0, 90) || 'el servidor rechazó la consulta'
 }
 
-const claveEstado = (userId?: string | null) => (userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY)
+const claveEstado = (userId?: string | null, espacio: Espacio = espacioActual()) => {
+  const base = userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY
+  // Lo personal conserva la clave de siempre: lo que ya estaba guardado en el
+  // teléfono sigue apareciendo tras actualizar la app.
+  return espacio === 'negocio' ? `${base}:negocio` : base
+}
 
 function leerEstado(clave: string, base: State): State | null {
   try {
@@ -480,22 +508,60 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             if (cache) setState(cache)
           }
 
-          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
-                 debts, debtPayments, subscriptions, recurringIncomes] =
-            await Promise.all([
-              supabase.from('accounts').select('*').order('created_at'),
-              supabase.from('transactions').select('*').order('occurred_at', { ascending: false }),
-              supabase.from('holdings').select('*'),
-              supabase.from('budgets').select('*'),
-              supabase.from('goals').select('*'),
-              supabase.from('trades').select('*').order('occurred_at', { ascending: false }),
-              supabase.from('budget_allocations').select('*').order('created_at'),
+          /*
+           * Solo el espacio abierto. Los ajustes no se filtran: son de la
+           * persona, no de un espacio. Ver `lib/espacio.ts`.
+           */
+          const espacio = espacioActual()
+          const consultar = (conEspacio: boolean) => {
+            const de = (tabla: string) => {
+              const q = supabase.from(tabla).select('*')
+              return conEspacio ? q.eq('espacio', espacio) : q
+            }
+            return Promise.all([
+              de('accounts').order('created_at'),
+              de('transactions').order('occurred_at', { ascending: false }),
+              de('holdings'),
+              de('budgets'),
+              de('goals'),
+              de('trades').order('occurred_at', { ascending: false }),
+              de('budget_allocations').order('created_at'),
               supabase.from('settings').select('*').maybeSingle(),
-              supabase.from('debts').select('*').order('started_at'),
-              supabase.from('debt_payments').select('*').order('occurred_at'),
-              supabase.from('subscriptions').select('*').order('anchor_at'),
-              supabase.from('recurring_incomes').select('*').order('anchor_at'),
+              de('debts').order('started_at'),
+              de('debt_payments').order('occurred_at'),
+              de('subscriptions').order('anchor_at'),
+              de('recurring_incomes').order('anchor_at'),
             ])
+          }
+
+          /*
+           * Sin la columna, todo lo que hay es personal: enseñarlo bajo
+           * «Negocio» sería enseñar el dinero de la persona con otra etiqueta.
+           * Se vuelve a lo personal, y la app sigue como antes de los espacios.
+           */
+          let resultados
+          if (servidorConEspacios()) {
+            resultados = await consultar(true)
+            if (faltaColumnaEspacio(resultados[0].error)) {
+              marcarServidorSinEspacios(true)
+              if (espacio === 'negocio') { cambiarEspacio('personal'); return }
+              resultados = await consultar(false)
+            }
+          } else {
+            if (espacio === 'negocio') { cambiarEspacio('personal'); return }
+            // Ya se sabe que faltaba: se carga sin el filtro, y aparte se
+            // pregunta con una consulta mínima si ya se aplicó la migración.
+            // Así la app se entera sola, sin repetir en cada apertura once
+            // consultas que van a fallar.
+            const [r, prueba] = await Promise.all([
+              consultar(false),
+              supabase.from('accounts').select('id').eq('espacio', 'personal').limit(1),
+            ])
+            resultados = r
+            if (!prueba.error) marcarServidorSinEspacios(false)
+          }
+          const [accounts, transactions, holdings, budgets, goals, trades, allocations, settings,
+                 debts, debtPayments, subscriptions, recurringIncomes] = resultados
           if (!vivo.current) return
 
           if (accounts.error) {
@@ -587,7 +653,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
       // Modo Demo: sin llaves de Supabase, o sin sesión desde el principio.
       setUserId(null)
-      if (pintarCache) setState(leerEstado(STORAGE_KEY, INITIAL) ?? INITIAL)
+      if (pintarCache) setState(leerEstado(claveEstado(null), inicialDemo()) ?? inicialDemo())
       setSynced(false)
       setSyncError(false)
       setReady(true)
@@ -1143,8 +1209,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         }
       })
       remote()?.from('budgets').upsert(
-        { category_id: categoryId, amount, daily_cap: capFinal ?? null },
-        { onConflict: 'user_id,category_id' },
+        { category_id: categoryId, amount, daily_cap: capFinal ?? null, ...columnaEspacio() },
+        // «Transporte» puede tener un tope en casa y otro en el negocio.
+        { onConflict: servidorConEspacios() ? 'user_id,espacio,category_id' : 'user_id,category_id' },
       ).then(() => {}, () => {})
     },
     [remote],
@@ -1159,8 +1226,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         budgets: s.budgets.filter((b) => b.categoryId !== categoryId),
         allocations: s.allocations.filter((a) => a.categoryId !== categoryId),
       }))
-      remote()?.from('budgets').delete().eq('category_id', categoryId).then(() => {}, () => {})
-      remote()?.from('budget_allocations').delete().eq('category_id', categoryId).then(() => {}, () => {})
+      // Por categoría Y espacio: sin el segundo filtro, quitar «Transporte»
+      // del negocio se llevaba también el de casa.
+      const delEspacio = <Q extends { eq: (c: string, v: string) => Q }>(q: Q) =>
+        (servidorConEspacios() ? q.eq('espacio', espacioActual()) : q)
+      const sb = remote()
+      if (sb) {
+        delEspacio(sb.from('budgets').delete().eq('category_id', categoryId)).then(() => {}, () => {})
+        delEspacio(sb.from('budget_allocations').delete().eq('category_id', categoryId)).then(() => {}, () => {})
+      }
     },
     [remote],
   )
@@ -1661,7 +1735,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra
   // explícita para que nunca pueda llevarse por delante los datos de un usuario.
   const resetDemo = useCallback(() => {
-    setState(INITIAL)
+    setState(inicialDemo())
     try { localStorage.removeItem(claveEstado(null)) } catch { /* noop */ }
   }, [])
 
@@ -1697,7 +1771,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      if (usuario) localStorage.removeItem(claveEstado(usuario))
+      // Los dos espacios: salir no puede dejar en el teléfono la caja del
+      // negocio porque se estaba mirando lo personal.
+      if (usuario) {
+        localStorage.removeItem(claveEstado(usuario, 'personal'))
+        localStorage.removeItem(claveEstado(usuario, 'negocio'))
+      }
     } catch { /* noop */ }
     olvidarNombreGuardado()
   }, [])
@@ -2859,6 +2938,7 @@ const rowToAccount = (r: Row): Account => ({
   dueDay: r.due_day ?? undefined,
 })
 const accountToRow = (a: Account) => ({
+  ...columnaEspacio(),
   id: a.id, name: a.name, institution: a.institution, type: a.type,
   balance: a.balance, currency: a.currency, color: a.color,
   apy: a.apy ?? null, pockets: a.pockets ?? [],
@@ -2906,6 +2986,7 @@ const rowToTx = (r: Row): Transaction => ({
   externalId: r.external_id ?? undefined,
 })
 const txToRow = (t: Transaction) => ({
+  ...columnaEspacio(),
   id: t.id, account_id: t.accountId, pocket_id: t.pocketId ?? null,
   to_account_id: t.toAccountId ?? null, to_pocket_id: t.toPocketId ?? null,
   category_id: t.categoryId, amount: t.amount, type: t.type,
@@ -2944,6 +3025,7 @@ const rowToHolding = (r: Row): Holding => ({
   accountId: r.account_id ?? undefined,
 })
 const holdingToRow = (h: Holding) => ({
+  ...columnaEspacio(),
   id: h.id, symbol: h.symbol, name: h.name, quantity: h.quantity,
   avg_cost: h.avgCost, asset_type: h.assetType, currency: h.currency,
   account_id: h.accountId ?? null,
@@ -2968,6 +3050,7 @@ const rowToTrade = (r: Row): Trade => ({
   occurredAt: r.occurred_at, opening: Boolean(r.opening),
 })
 const tradeToRow = (t: Trade) => ({
+  ...columnaEspacio(),
   id: t.id, symbol: t.symbol, name: t.name, side: t.side,
   quantity: t.quantity, price: t.price, currency: t.currency, asset_type: t.assetType,
   account_id: t.accountId ?? null, opening: t.opening ?? false, occurred_at: t.occurredAt,
@@ -2992,6 +3075,7 @@ const rowToGoal = (r: Row): Goal => ({
   accountId: r.account_id ?? undefined, pocketId: r.pocket_id ?? undefined,
 })
 const goalToRow = (g: Goal) => ({
+  ...columnaEspacio(),
   id: g.id, name: g.name, target: g.target, saved: g.saved, currency: g.currency,
   deadline: g.deadline ?? null, color: g.color,
   account_id: g.accountId ?? null, pocket_id: g.pocketId ?? null,
@@ -3022,6 +3106,7 @@ const rowToDebt = (r: Row): Debt => ({
   color: r.color,
 })
 const debtToRow = (d: Debt) => ({
+  ...columnaEspacio(),
   id: d.id, person: d.person, direction: d.direction,
   principal: d.principal, currency: d.currency,
   rate: d.rate ?? null, started_at: d.startedAt, due_date: d.dueDate ?? null,
@@ -3049,6 +3134,7 @@ const rowToDebtPayment = (r: Row): DebtPayment => ({
   accountId: r.account_id ?? undefined, transactionId: r.transaction_id ?? undefined,
 })
 const debtPaymentToRow = (p: DebtPayment) => ({
+  ...columnaEspacio(),
   id: p.id, debt_id: p.debtId, amount: p.amount,
   occurred_at: p.occurredAt, note: p.note ?? null,
   account_id: p.accountId ?? null, transaction_id: p.transactionId ?? null,
@@ -3067,6 +3153,7 @@ const rowToSub = (r: Row): Subscription => ({
   color: r.color,
 })
 const subToRow = (x: Subscription) => ({
+  ...columnaEspacio(),
   id: x.id, name: x.name, amount: x.amount, currency: x.currency, cycle: x.cycle,
   anchor_at: x.anchorAt, account_id: x.accountId ?? null,
   trial_ends_at: x.trialEndsAt ?? null, shared_with: x.sharedWith ?? null,
@@ -3115,6 +3202,7 @@ const rowToIngreso = (r: Row): RecurringIncome => ({
   pagaExtras: r.paga_extras ? true : undefined,
 })
 const ingresoToRow = (i: RecurringIncome) => ({
+  ...columnaEspacio(),
   id: i.id, name: i.name, amount: i.amount, currency: i.currency, cycle: i.cycle,
   anchor_at: i.anchorAt, account_id: i.accountId ?? null,
   active: i.active !== false, note: i.note ?? null, color: i.color,
@@ -3182,6 +3270,7 @@ const rowToAllocation = (r: Row): BudgetAllocation => ({
   createdAt: r.created_at,
 })
 const allocationToRow = (a: BudgetAllocation) => ({
+  ...columnaEspacio(),
   id: a.id,
   category_id: a.categoryId,
   account_id: a.accountId ?? null,

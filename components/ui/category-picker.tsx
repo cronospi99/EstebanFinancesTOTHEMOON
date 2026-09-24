@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { CategoryIcon } from './category-icon'
-import { categoriesByGroup, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoriasPara, categoriesByGroup } from '@/lib/categories'
 import { useFinance } from '@/lib/store'
 import { cn, haptic } from '@/lib/utils'
 
@@ -24,7 +24,7 @@ export function CategoryPicker({
   const { transactions } = useFinance()
   const [todas, setTodas] = useState(false)
 
-  const categories = useMemo(() => DEFAULT_CATEGORIES.filter((c) => c.kind === mode), [mode])
+  const categories = useMemo(() => categoriasPara(mode), [mode])
 
   const frecuentes = useMemo(() => {
     const usos = new Map<string, number>()

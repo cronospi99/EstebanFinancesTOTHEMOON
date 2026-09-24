@@ -210,3 +210,62 @@ export const DEMO_INGRESOS: RecurringIncome[] = [
     cycle: 'mensual', anchorAt: diaAtras(-6), accountId: 'acc_nequi', color: '#40C8E0',
   },
 ]
+
+/**
+ * Un negocio pequeño de ejemplo, para el espacio «Empresa / Negocio».
+ *
+ * Una tienda con un par de empleados: vende, compra a proveedores, paga
+ * nómina, arriendo y el IVA del bimestre. Lo justo para que las pantallas
+ * tengan algo que enseñar sin que parezca la contabilidad de una multinacional.
+ */
+export const DEMO_NEGOCIO: {
+  accounts: Account[]
+  transactions: Transaction[]
+  budgets: Budget[]
+  goals: Goal[]
+  subscriptions: Subscription[]
+} = {
+  accounts: [
+    {
+      id: 'neg_banco', name: 'Cuenta empresarial', institution: 'Bancolombia', type: 'checking',
+      balance: 23_450_000, currency: 'COP', color: '#FDDA24',
+      // El IVA cobrado no es del negocio: es de la DIAN hasta que se paga.
+      // Apartarlo en un bolsillo es la costumbre que evita el susto del bimestre.
+      pockets: [{ id: 'neg_p_iva', name: 'IVA por pagar', balance: 3_120_000, color: '#98989F' }],
+    },
+    { id: 'neg_caja', name: 'Caja menor', institution: 'Efectivo', type: 'cash', balance: 640_000, currency: 'COP', color: '#30D158' },
+    {
+      id: 'neg_tarjeta', name: 'Tarjeta empresarial', institution: 'Davivienda', type: 'credit',
+      balance: -1_870_000, currency: 'COP', color: '#ED1C27', creditLimit: 15_000_000, statementDay: 20, dueDay: 8,
+    },
+  ],
+  transactions: [
+    { id: 'nt1', accountId: 'neg_banco', categoryId: 'sales', amount: 4_380_000, type: 'income', description: 'Ventas de la semana', occurredAt: daysAgo(0, 18) },
+    { id: 'nt2', accountId: 'neg_banco', categoryId: 'biz-suppliers', amount: 2_940_000, type: 'expense', description: 'Distribuidora del Norte — pedido', occurredAt: daysAgo(1, 10) },
+    { id: 'nt3', accountId: 'neg_tarjeta', categoryId: 'biz-marketing', amount: 450_000, type: 'expense', description: 'Pauta en Instagram', occurredAt: daysAgo(2, 21) },
+    { id: 'nt4', accountId: 'neg_caja', categoryId: 'shipping', amount: 86_000, type: 'expense', description: 'Envíos con mensajería', occurredAt: daysAgo(2, 15) },
+    { id: 'nt5', accountId: 'neg_banco', categoryId: 'biz-services', amount: 1_800_000, type: 'income', description: 'Instalación a cliente corporativo', occurredAt: daysAgo(3, 11) },
+    { id: 'nt6', accountId: 'neg_banco', categoryId: 'biz-payroll', amount: 5_200_000, type: 'expense', description: 'Nómina — quincena', occurredAt: daysAgo(4, 8) },
+    { id: 'nt7', accountId: 'neg_banco', categoryId: 'biz-social', amount: 1_310_000, type: 'expense', description: 'PILA — seguridad social', occurredAt: daysAgo(5, 9) },
+    { id: 'nt8', accountId: 'neg_banco', categoryId: 'biz-rent', amount: 2_600_000, type: 'expense', description: 'Arriendo del local', occurredAt: daysAgo(6, 9) },
+    { id: 'nt9', accountId: 'neg_banco', categoryId: 'sales', amount: 6_120_000, type: 'income', description: 'Ventas de la semana', occurredAt: daysAgo(7, 18) },
+    { id: 'nt10', accountId: 'neg_banco', categoryId: 'biz-iva', amount: 2_480_000, type: 'expense', description: 'IVA — bimestre anterior', occurredAt: daysAgo(9, 10) },
+    { id: 'nt11', accountId: 'neg_tarjeta', categoryId: 'biz-software', amount: 89_900, type: 'expense', description: 'Siigo', occurredAt: daysAgo(10, 7) },
+    { id: 'nt12', accountId: 'neg_banco', categoryId: 'biz-owner-draw', amount: 3_000_000, type: 'expense', description: 'Retiro del dueño', occurredAt: daysAgo(12, 16) },
+    { id: 'nt13', accountId: 'neg_banco', categoryId: 'sales', amount: 5_940_000, type: 'income', description: 'Ventas de la semana', occurredAt: daysAgo(14, 18) },
+    { id: 'nt14', accountId: 'neg_caja', categoryId: 'sales', amount: 1_260_000, type: 'income', description: 'Ventas en efectivo', occurredAt: daysAgo(16, 17) },
+    { id: 'nt15', accountId: 'neg_banco', categoryId: 'sales', amount: 5_480_000, type: 'income', description: 'Ventas de la semana', occurredAt: daysAgo(21, 18) },
+  ],
+  budgets: [
+    { categoryId: 'biz-marketing', amount: 1_500_000 },
+    { categoryId: 'biz-suppliers', amount: 12_000_000 },
+    { categoryId: 'shipping', amount: 400_000 },
+  ],
+  goals: [
+    // Lo que se recomienda tener a mano: tres meses de nómina y arriendo.
+    { id: 'ng1', name: 'Reserva de 3 meses', target: 39_000_000, saved: 12_500_000, currency: 'COP', color: '#30D158' },
+  ],
+  subscriptions: [
+    { id: 'ns1', name: 'Siigo', amount: 89_900, currency: 'COP', cycle: 'mensual', anchorAt: diaAtras(-20), accountId: 'neg_tarjeta', color: '#0A84FF' },
+  ],
+}

@@ -10,6 +10,7 @@ import { SaludTeaser } from '@/components/dashboard/salud-teaser'
 import { DemoBanner } from '@/components/layout/demo-banner'
 import { monthName } from '@/lib/format'
 import { saludo, useProfileName } from '@/lib/use-profile'
+import { SelectorEspacio } from '@/components/layout/selector-espacio'
 
 const stagger = {
   hidden: { opacity: 0, y: 16 },
@@ -25,13 +26,19 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 px-5">
-      <header className="pt-safe pt-6">
-        <p className="text-[14px] text-label-secondary">
-          {saludo()}{name ? `, ${name}` : ''}
-        </p>
-        <h1 className="text-[30px] font-bold capitalize leading-tight tracking-[-0.02em]">
-          {monthName()}
-        </h1>
+      <header className="pt-safe flex items-start justify-between gap-3 pt-6">
+        <div className="min-w-0">
+          <p className="text-[14px] text-label-secondary">
+            {saludo()}{name ? `, ${name}` : ''}
+          </p>
+          <h1 className="text-[30px] font-bold capitalize leading-tight tracking-[-0.02em]">
+            {monthName()}
+          </h1>
+        </div>
+        {/* En el móvil, a la vista y a un toque: es la pantalla a la que se
+            llega, y la que dice de quién es el dinero que se está mirando.
+            En escritorio el selector vive en la lateral. */}
+        <SelectorEspacio id="espacio-resumen" className="mt-1 w-[168px] shrink-0 lg:hidden" />
       </header>
 
       <DemoBanner />

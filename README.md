@@ -498,6 +498,60 @@ migración nueva que convierta con la TRM.
 
 ---
 
+## Finanzas personales y del negocio
+
+Al abrir la app, la pantalla de entrada tiene dos puertas: **Finanzas
+personales** y **Empresa / Negocio**. La que se usó la última vez va destacada.
+Esa pantalla sale una vez al día, así que para cambiar sin esperar a mañana hay
+un selector «Personal · Negocio» arriba del resumen en el móvil y en la barra
+lateral en escritorio. Dentro del negocio, cada pantalla lleva una marca violeta
+que lo dice: la pregunta «¿dónde están mis cuentas?» delante de la caja de la
+empresa es justo la confusión que hay que evitar.
+
+**Son dos libros separados con la misma app encima.** Cada fila del servidor
+lleva su espacio (`espacio`: `personal` o `negocio`) y la app solo lee y escribe
+el que está abierto. Mezclarlos es el error clásico de quien lleva un negocio
+pequeño con la misma cabeza que su dinero: el patrimonio sale inflado con la
+caja de la empresa, el presupuesto del mercado compite con la nómina, y la
+declaración de renta de la persona suma consignaciones que eran del negocio.
+Todo lo que ya existía quedó en lo personal, que era lo único que se podía
+registrar. Los ajustes de avisos no se parten: son de la persona, que recibe
+los recordatorios de los dos espacios en el mismo teléfono.
+
+Lo que cambia en el negocio:
+
+- **Sus categorías.** Proveedores, Inventario, Arriendo del local, Publicidad,
+  Software, Nómina, Seguridad social, Honorarios, IVA, Retención en la fuente,
+  ICA y Retiro del dueño; y de ingresos, Ventas, Servicios prestados y Aporte de
+  socios. Desaparecen las de una persona —Mecato, Ropa, Mascotas—, y quedan las
+  que sirven a los dos —Transporte, Servicios públicos, Comisiones—, agrupadas
+  como en una empresa. «Retiro del dueño» y «Aporte de socios» van aparte a
+  propósito: mueven la caja pero no son gasto ni venta, y contarlos como tales
+  haría parecer que el negocio gana o pierde lo que no.
+- **La declaración de renta no aparece.** Esa tarjeta calcula los topes de una
+  persona natural, y sobre la caja del negocio daría un «debes declarar» que no
+  es de nadie.
+
+Por dentro, el espacio vive en un módulo (`lib/espacio.ts`) y no en React,
+porque lo necesitan los traductores de filas del store: así cada alta sale con
+su espacio sin que cada una de las diecisiete escrituras tenga que acordarse.
+Cambiar de espacio **recarga la app**, a propósito: es la única forma de estar
+seguros de que nada del espacio anterior —un cobro automático a medias, una
+escritura en vuelo— acaba guardado en el nuevo.
+
+Un movimiento vive donde vive su cuenta, y eso lo asegura la base de datos con
+un disparador, no la app: la entrada por SMS y atajos elige la cuenta por su
+nombre y no sabe de espacios, y sin el disparador un gasto que entraba en la
+cuenta del negocio se quedaba en lo personal, invisible en los dos lados.
+
+**Si la migración todavía no está aplicada, la app no se rompe.** La carga
+detecta que falta la columna, sigue como antes —todo personal— y apaga el
+negocio en la pantalla de entrada explicando qué falta. Lo recuerda entre
+aperturas para no repetir consultas que van a fallar, y pregunta con una
+consulta mínima si ya se aplicó: el día que se aplica, se entera sola.
+
+---
+
 ## Mover dinero entre bolsillos
 
 Un bolsillo de Nequi o de Lulo no es una etiqueta: es dinero apartado de
@@ -1141,17 +1195,25 @@ Lo que falta, en orden de lo que más duele.
 - [ ] **Aplicar las migraciones nuevas.** `supabase db push` con las cinco de
       `20260917*` —la TRM y el origen de cada movimiento, el ciclo de las
       tarjetas, los ingresos recurrentes, la ingesta rápida y los avisos— y con
-      `20260921120000_bolsillos_misma_cuenta`. Sin las primeras la app arranca
-      igual pero cada pantalla nueva avisa de que su tabla no existe; sin la
-      última, mover dinero entre bolsillos de una misma cuenta se ve en el
-      teléfono pero el servidor rechaza la fila por la restricción vieja, y el
-      traspaso no llega al resto de los dispositivos.
+      `20260921120000_bolsillos_misma_cuenta` y
+      `20260924120000_espacios_personal_y_negocio`. Sin las primeras la app
+      arranca igual pero cada pantalla nueva avisa de que su tabla no existe;
+      sin la de bolsillos, mover dinero entre bolsillos de una misma cuenta se
+      ve en el teléfono pero el servidor rechaza la fila por la restricción
+      vieja; sin la de espacios, todo sigue como personal y el modo Negocio
+      queda apagado hasta aplicarla.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.
 
 ### Código
 
+- [ ] **Con la tasa del dólar fijada a mano, el resumen no carga.** `use-fx.ts`
+      lee la tasa manual de `localStorage` al crear su estado, así que el
+      servidor pinta una cosa y el teléfono otra; la hidratación falla en `/` y
+      la app no llega a pedir ningún dato (se reprodujo con cero consultas). Las
+      demás pestañas cargan bien. Se arregla leyendo la tasa en un efecto, como
+      hace ya el resto de lo que vive en `localStorage`.
 - [ ] **Un SMS en dólares entra como pesos.** La función `ingesta_rapida` mueve
       el saldo con el importe tal cual, así que «USD 20» sobre una tarjeta en
       pesos le sube la deuda veinte pesos. Los cobros de suscripción ya

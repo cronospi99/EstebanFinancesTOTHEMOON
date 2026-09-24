@@ -1,4 +1,4 @@
-import { DEFAULT_CATEGORIES } from './categories'
+import { categoriasPara } from './categories'
 
 /**
  * Interpretación de un dictado en español para registrar un movimiento.
@@ -110,7 +110,7 @@ export function interpretarDictado(texto: string): Dictado {
   // ---- Categoría -----------------------------------------------------------
   let categoryId: string | null = null
   let mejor = 0
-  for (const cat of DEFAULT_CATEGORIES.filter((c) => c.kind === type)) {
+  for (const cat of categoriasPara(type)) {
     const claves = [normalizar(cat.name), ...(SINONIMOS[cat.id] ?? []).map(normalizar)]
     for (const k of claves) {
       // La coincidencia más larga gana: "mercado" antes que "cad" dentro de otra.

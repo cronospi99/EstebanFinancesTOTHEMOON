@@ -11,7 +11,7 @@ import { CategoryPicker } from '@/components/ui/category-picker'
 import { Keypad, ThousandsKey } from './keypad'
 import { FotoFactura, type LecturaFactura } from './foto-factura'
 import { RecomendadorTarjeta } from '@/components/accounts/recomendador-tarjeta'
-import { categoryById, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { categoriasPara, categoryById } from '@/lib/categories'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { useFinance } from '@/lib/store'
 import { useVoice } from '@/lib/use-voice'
@@ -64,7 +64,7 @@ export function QuickAddSheet({ open, onClose }: { open: boolean; onClose: () =>
   const account = accounts.find((a) => a.id === accountId)
   const currency = account?.currency ?? 'COP'
 
-  const categories = useMemo(() => DEFAULT_CATEGORIES.filter((c) => c.kind === mode), [mode])
+  const categories = useMemo(() => categoriasPara(mode), [mode])
 
   useEffect(() => {
     if (!accounts.length) return
