@@ -458,6 +458,44 @@ inalcanzable en el teléfono: no se puede anotar la primera si la única puerta
 aparece cuando ya hay una. El vacío es justo cuando más falta hace la puerta,
 porque es cuando nadie sabe que la pantalla existe.
 
+### El cobro tiene que llegar a la tarjeta
+
+Un cobro automático pagado con tarjeta de crédito se veía en Gastos y **no
+aparecía en la tarjeta**. Eran dos fallos a la vez, y los dos se reprodujeron
+contra un servidor antes de tocar nada:
+
+- **El saldo no se guardaba.** Cada movimiento sacaba de dentro del actualizador
+  de `setState` la lista de cuentas que había tocado, y la guardaba en la línea
+  siguiente. Eso da por hecho que React ejecuta el actualizador en el acto, y no
+  lo hace si el componente ya tiene otra actualización pendiente: lo aplaza al
+  render siguiente y la lista llega vacía. Los cobros se anotan al arrancar,
+  que es justo cuando el proveedor está lleno de actualizaciones, así que el
+  movimiento llegaba al servidor y el saldo no: en la siguiente apertura la
+  tarjeta volvía a su cifra de antes. Ahora el actualizador solo apunta qué
+  cuentas cambió, y un efecto escribe el estado ya confirmado. Los bolsillos
+  pasaban por el mismo agujero, con un final peor —una lista vacía guardada tal
+  cual borraba todos los bolsillos de la cuenta— y ahora van por el mismo camino.
+- **Los dólares entraban como pesos.** Un servicio en dólares pagado con una
+  tarjeta en pesos se anotaba en dólares sobre la tarjeta, y el saldo se movía
+  con el número sin convertir: Netflix a US$ 20 le subía la deuda veinte pesos.
+  Ahora el cobro va en la moneda de la cuenta que lo paga, convertido con la
+  TRM del día —como hace el banco—, y el precio original se queda en la
+  descripción: «Netflix · US$ 20». Sin tasa conocida el cobro espera: el
+  arranque lo reintenta en cuanto llega una, y el ancla no se mueve, así que no
+  se pierde.
+
+Los cobros que ya estaban mal anotados se corrigen solos al abrir la app: se
+pasan a la moneda de la cuenta con la tasa que se guardó el día del cobro, y la
+diferencia entra en el saldo. Lo que no se puede reconstruir es el saldo que
+nunca llegó al servidor por el primer fallo: no queda rastro de qué cobros se
+guardaron y cuáles no, así que si una tarjeta quedó corta, se corrige a mano
+tocando su saldo en la ficha de la cuenta.
+
+La entrada por SMS y atajos tiene todavía el segundo fallo, en el servidor: la
+función `ingesta_rapida` mueve el saldo con el importe tal cual venga, y un «USD
+20» sobre una tarjeta en pesos entra como veinte pesos. Arreglarlo pide una
+migración nueva que convierta con la TRM.
+
 ---
 
 ## Mover dinero entre bolsillos
@@ -1114,6 +1152,11 @@ Lo que falta, en orden de lo que más duele.
 
 ### Código
 
+- [ ] **Un SMS en dólares entra como pesos.** La función `ingesta_rapida` mueve
+      el saldo con el importe tal cual, así que «USD 20» sobre una tarjeta en
+      pesos le sube la deuda veinte pesos. Los cobros de suscripción ya
+      convierten; esta entrada necesita una migración que haga lo mismo con la
+      TRM. Ver «El cobro tiene que llegar a la tarjeta».
 - [ ] **Sin tiempo real en la cola.** La cola reenvía en cuanto vuelve la red,
       pero si el mismo movimiento se editó en otro dispositivo mientras tanto,
       gana el último que llegue. Con dos teléfonos y un movimiento editado a la

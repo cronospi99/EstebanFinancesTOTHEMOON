@@ -14,7 +14,7 @@ import {
   parteAjena, proximoCobro, tuParte,
 } from './suscripciones'
 import { cargarZona, diaEn, hoyEnZona, instanteEnDia, sumarDias } from './zona'
-import { monthKey, monthlyFromApy } from './format'
+import { formatMoney, monthKey, monthlyFromApy } from './format'
 import { olvidarNombreGuardado } from './use-profile'
 import { useExchangeRate, type FxState } from './use-fx'
 import { useTrm, type TrmState } from './use-trm'
@@ -157,6 +157,18 @@ function aplicarDelta(
     }
     return { ...a, balance: a.balance + delta }
   })
+}
+
+/**
+ * Pasa un importe de una moneda a otra con una tasa en pesos por dólar.
+ *
+ * Redondea a lo que admite la moneda de llegada —pesos enteros, centavos de
+ * dólar—: un cobro de «80.209,875 pesos» no lo emite ningún banco, y los
+ * decimales sueltos se acumulan en el saldo mes tras mes.
+ */
+function convertir(importe: number, de: Currency, a: Currency, tasa: number): number {
+  if (de === a) return importe
+  return a === 'COP' ? Math.round(importe * tasa) : Math.round((importe / tasa) * 100) / 100
 }
 
 /** Lo que un movimiento le suma al saldo de su cuenta de origen. */
@@ -698,6 +710,42 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /*
+   * Qué cuentas cambiaron de saldo en memoria y falta escribir en el servidor.
+   *
+   * Antes cada mutación sacaba la lista de dentro del actualizador de
+   * `setState` —`let tocadas; setState((s) => { tocadas = … })`— y la
+   * guardaba en la línea siguiente. Eso da por hecho que React ejecuta el
+   * actualizador en el acto, y no siempre lo hace: si el proveedor ya tiene
+   * otra actualización pendiente, lo aplaza al siguiente render, y la lista
+   * llegaba vacía. El movimiento se guardaba y el saldo no. Pasaba sobre todo
+   * con los cobros de suscripción, que se anotan en el arranque, justo cuando
+   * el proveedor está lleno de actualizaciones: el cobro aparecía en Gastos
+   * y la tarjeta, al volver a abrir la app, seguía sin él. En los bolsillos
+   * era peor: la lista vacía se guardaba tal cual y se llevaba por delante
+   * todos los bolsillos de la cuenta en el servidor.
+   *
+   * Ahora el actualizador solo apunta qué cuentas tocó, y lo que se guarda es
+   * el estado ya confirmado, en un efecto que corre después del render. Da
+   * igual cuándo ejecute React el actualizador: cuando el efecto corre, ya lo
+   * hizo.
+   */
+  const saldosPorGuardar = useRef(new Set<string>())
+
+  /** Se llama DENTRO del actualizador: apunta las cuentas que cambiaron. */
+  const marcarCambiadas = useCallback((antes: Account[], despues: Account[]) => {
+    // `aplicarDelta` y los `map` de bolsillos devuelven la misma referencia
+    // para las cuentas que no tocan: comparar identidades basta.
+    despues.forEach((a, i) => { if (a !== antes[i]) saldosPorGuardar.current.add(a.id) })
+  }, [])
+
+  useEffect(() => {
+    if (!saldosPorGuardar.current.size) return
+    const ids = saldosPorGuardar.current
+    saldosPorGuardar.current = new Set()
+    void persistirSaldos(state.accounts.filter((a) => ids.has(a.id)))
+  }, [state.accounts, persistirSaldos])
+
   /** Devuelve el id del movimiento creado: un abono a una deuda lo guarda para
    *  poder deshacerlo si se borra el abono. */
   const addTransaction = useCallback(
@@ -718,23 +766,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       const { trm: trmHoy, fx: mercado } = tasaRef.current
       const tasa = tx.fxRate ?? (tx.currency === 'USD' ? (trmHoy || mercado || undefined) : undefined)
       const full: Transaction = { ...tx, fxRate: tasa, id: uid() }
-      // `aplicarDelta` devuelve la misma referencia para las cuentas que no
-      // toca, así que comparar identidades basta para saber cuáles guardar.
-      let tocadas: Account[] = []
       setState((s) => {
         // Si va a un bolsillo, el saldo se mueve ahí y no en el general. Y si
         // es una transferencia, se mueve también en la cuenta de destino.
         const accounts = aplicarMovimiento(s.accounts, full, 1)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
         return { ...s, transactions: [full, ...s.transactions], accounts }
       })
-      await Promise.all([
-        remote()?.from('transactions').insert(txToRow(full)),
-        persistirSaldos(tocadas),
-      ])
+      await remote()?.from('transactions').insert(txToRow(full))
       return full.id
     },
-    [remote, persistirSaldos],
+    [remote, marcarCambiadas],
   )
 
   /**
@@ -747,7 +789,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const updateTransaction = useCallback(
     async (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
-      let tocadas: Account[] = []
       setState((s) => {
         const anterior = s.transactions.find((t) => t.id === id)
         if (!anterior) return s
@@ -755,7 +796,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
         let accounts = aplicarMovimiento(s.accounts, anterior, -1)
         accounts = aplicarMovimiento(accounts, nuevo, 1)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
 
         return {
           ...s,
@@ -763,34 +804,27 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           accounts,
         }
       })
-      await Promise.all([
-        remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id),
-        persistirSaldos(tocadas),
-      ])
+      await remote()?.from('transactions').update(txPatchToRow(patch)).eq('id', id)
     },
-    [remote, persistirSaldos],
+    [remote, marcarCambiadas],
   )
 
   const deleteTransaction = useCallback(
     async (id: string) => {
-      let tocadas: Account[] = []
       setState((s) => {
         const tx = s.transactions.find((t) => t.id === id)
         if (!tx) return s
         const accounts = aplicarMovimiento(s.accounts, tx, -1)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
         return {
           ...s,
           transactions: s.transactions.filter((t) => t.id !== id),
           accounts,
         }
       })
-      await Promise.all([
-        remote()?.from('transactions').delete().eq('id', id),
-        persistirSaldos(tocadas),
-      ])
+      await remote()?.from('transactions').delete().eq('id', id)
     },
-    [remote, persistirSaldos],
+    [remote, marcarCambiadas],
   )
 
   /**
@@ -808,15 +842,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const aplicarMovimientosAlSaldo = useCallback(
     async (accountId: string) => {
-      let tocadas: Account[] = []
       setState((s) => {
         const accounts = aplicarMovimientos(s.accounts, s.transactions, accountId)
-        tocadas = accounts.filter((a, i) => a !== s.accounts[i])
+        marcarCambiadas(s.accounts, accounts)
         return { ...s, accounts }
       })
-      await persistirSaldos(tocadas)
     },
-    [persistirSaldos],
+    [marcarCambiadas],
   )
 
   // ---- Cuentas -------------------------------------------------------------
@@ -920,60 +952,43 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // ---- Bolsillos -----------------------------------------------------------
   // Viven dentro de la cuenta (columna jsonb): son subdivisiones suyas, no
   // entidades propias, y así se mueven y se borran con ella.
-  const persistPockets = useCallback(
-    async (accountId: string, pockets: Pocket[]) => {
-      await remote()?.from('accounts').update({ pockets }).eq('id', accountId)
+  //
+  // Se guardan por el mismo camino que los saldos —`marcarCambiadas` y el
+  // efecto que escribe el estado ya confirmado—, que además escribe la columna
+  // `pockets`. Sacar la lista nueva de dentro del actualizador podía dejarla
+  // vacía y borrar en el servidor todos los bolsillos de la cuenta.
+  const cambiarBolsillos = useCallback(
+    (accountId: string, cambio: (pockets: Pocket[]) => Pocket[]) => {
+      setState((s) => {
+        const accounts = s.accounts.map((a) =>
+          a.id === accountId ? { ...a, pockets: cambio(a.pockets ?? []) } : a)
+        marcarCambiadas(s.accounts, accounts)
+        return { ...s, accounts }
+      })
     },
-    [remote],
+    [marcarCambiadas],
   )
 
   const addPocket = useCallback(
     async (accountId: string, pocket: Omit<Pocket, 'id'>) => {
       const full: Pocket = { ...pocket, id: uid() }
-      let next: Pocket[] = []
-      setState((s) => ({
-        ...s,
-        accounts: s.accounts.map((a) => {
-          if (a.id !== accountId) return a
-          next = [...(a.pockets ?? []), full]
-          return { ...a, pockets: next }
-        }),
-      }))
-      await persistPockets(accountId, next)
+      cambiarBolsillos(accountId, (pockets) => [...pockets, full])
     },
-    [persistPockets],
+    [cambiarBolsillos],
   )
 
   const updatePocket = useCallback(
     async (accountId: string, pocketId: string, patch: Partial<Pocket>) => {
-      let next: Pocket[] = []
-      setState((s) => ({
-        ...s,
-        accounts: s.accounts.map((a) => {
-          if (a.id !== accountId) return a
-          next = (a.pockets ?? []).map((p) => (p.id === pocketId ? { ...p, ...patch } : p))
-          return { ...a, pockets: next }
-        }),
-      }))
-      await persistPockets(accountId, next)
+      cambiarBolsillos(accountId, (pockets) => pockets.map((p) => (p.id === pocketId ? { ...p, ...patch } : p)))
     },
-    [persistPockets],
+    [cambiarBolsillos],
   )
 
   const deletePocket = useCallback(
     async (accountId: string, pocketId: string) => {
-      let next: Pocket[] = []
-      setState((s) => ({
-        ...s,
-        accounts: s.accounts.map((a) => {
-          if (a.id !== accountId) return a
-          next = (a.pockets ?? []).filter((p) => p.id !== pocketId)
-          return { ...a, pockets: next }
-        }),
-      }))
-      await persistPockets(accountId, next)
+      cambiarBolsillos(accountId, (pockets) => pockets.filter((p) => p.id !== pocketId))
     },
-    [persistPockets],
+    [cambiarBolsillos],
   )
 
   // ---- Inversiones ---------------------------------------------------------
@@ -1506,11 +1521,38 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
    */
   const generarCobros = useCallback(async () => {
     const hoy = hoyEnZona()
-    const { subscriptions, transactions } = stateRef.current
+    const { subscriptions, transactions, accounts } = stateRef.current
+    const { trm: trmHoy, fx: mercado } = tasaRef.current
+    const tasa = trmHoy || mercado
 
     for (const sub of subscriptions) {
       // Sin cuenta no hay de dónde sacarlo, y cancelada ya no cobra.
       if (sub.cancelled || !sub.accountId) continue
+
+      /*
+       * El cobro se anota en la moneda de la cuenta que lo paga, no en la de
+       * la suscripción.
+       *
+       * Un servicio en dólares pagado con una tarjeta en pesos es lo normal
+       * —Netflix, iCloud, ChatGPT— y el banco lo cobra en pesos, con la tasa
+       * del día. Anotarlo en dólares sobre la tarjeta movía su saldo con el
+       * número sin convertir: una suscripción de US$ 20 le subía la deuda
+       * veinte pesos. En Gastos se veía bien, porque ahí sí se convierte, y en
+       * la tarjeta no aparecía.
+       *
+       * Sin tasa conocida no se anota todavía: inventarla sería peor que
+       * esperar, y el arranque lo vuelve a intentar en cuanto llega una. El
+       * ancla no se mueve, así que el cobro no se pierde.
+       */
+      const cuenta = accounts.find((a) => a.id === sub.accountId)
+      const moneda = cuenta?.currency ?? sub.currency
+      if (moneda !== sub.currency && !tasa) continue
+      const importe = convertir(sub.amount, sub.currency, moneda, tasa)
+      // El precio original se queda en la descripción: «US$ 19,99» es lo que
+      // uno reconoce, y lo que dice la factura del servicio.
+      const descripcion = moneda === sub.currency
+        ? sub.name
+        : `${sub.name} · ${formatMoney(sub.amount, sub.currency)}`
 
       let fecha = sub.anchorAt
       let anotados = 0
@@ -1531,9 +1573,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             accountId: sub.accountId,
             type: 'expense',
             categoryId: 'subs',
-            amount: sub.amount,
-            currency: sub.currency,
-            description: sub.name,
+            amount: importe,
+            currency: moneda,
+            description: descripcion,
             occurredAt: instanteEnDia(fecha),
             subscriptionId: sub.id,
             pending: true,
@@ -1546,6 +1588,41 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [addTransaction, updateSubscription])
 
+  /**
+   * Corrige los cobros de suscripción anotados en una moneda distinta de la de
+   * su cuenta, que es como se anotaban antes.
+   *
+   * Esos cobros movieron el saldo con el número crudo —US$ 20 como veinte
+   * pesos— y siguen así en la tarjeta. Se pasan a la moneda de la cuenta con
+   * `updateTransaction`, que deshace lo que se aplicó y aplica lo nuevo: la
+   * diferencia entra en el saldo sola. Es idempotente —un cobro ya corregido
+   * tiene la moneda de su cuenta y no vuelve a entrar— así que puede correr en
+   * cada arranque sin llevar la cuenta de si ya se hizo.
+   *
+   * Solo los de suscripción: son los únicos que la app anotaba así. Manda la
+   * tasa guardada del día del cobro; si no la hay, la de hoy.
+   */
+  const repararCobrosEnOtraMoneda = useCallback(async () => {
+    const { transactions, accounts } = stateRef.current
+    const { trm: trmHoy, fx: mercado } = tasaRef.current
+
+    for (const t of transactions) {
+      if (!t.subscriptionId || !t.currency) continue
+      const cuenta = accounts.find((a) => a.id === t.accountId)
+      if (!cuenta || cuenta.currency === t.currency) continue
+      const tasa = (t.currency === 'USD' && t.fxRate) || trmHoy || mercado
+      if (!tasa) continue
+
+      await updateTransaction(t.id, {
+        amount: convertir(t.amount, t.currency, cuenta.currency, tasa),
+        currency: cuenta.currency,
+        // La tasa solo tiene sentido en un movimiento en dólares.
+        fxRate: cuenta.currency === 'USD' ? tasa : undefined,
+        description: `${t.description} · ${formatMoney(t.amount, t.currency)}`,
+      })
+    }
+  }, [updateTransaction])
+
   /** Sí me cobraron: deja de estar pendiente y pasa a ser un gasto normal. */
   const confirmarCobro = useCallback(
     (id: string) => updateTransaction(id, { pending: false }),
@@ -1553,17 +1630,32 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   )
 
   /*
-   * Los cobros que ya cayeron se anotan una vez por arranque, cuando los datos
-   * ya están. Con la guarda de `ref` y no solo con `ready`: el efecto se
-   * vuelve a disparar si `ready` cambia, y anotar dos veces el mismo cobro es
-   * justo lo que no puede pasar.
+   * Los cobros que ya cayeron se anotan al arrancar, cuando los datos ya
+   * están. Con la guarda de `ref` y no solo con `ready`: el efecto se vuelve a
+   * disparar si `ready` cambia, y anotar dos veces el mismo cobro es justo lo
+   * que no puede pasar.
+   *
+   * Hasta dos pasadas por arranque: una en cuanto hay datos y otra cuando
+   * llega la tasa, si la primera corrió sin ella —la de un servicio en dólares
+   * pagado en pesos se queda esperando—. Van en cadena y no a la vez: dos
+   * pasadas solapadas podrían ver el mismo cobro pendiente y anotarlo dos
+   * veces.
    */
-  const cobrosCorridos = useRef(false)
+  const hayTasa = trm.valor > 0 || fxRate > 0
+  const cobrosCorridos = useRef<'no' | 'sin-tasa' | 'con-tasa'>('no')
+  const cadenaCobros = useRef<Promise<void>>(Promise.resolve())
   useEffect(() => {
-    if (!ready || cobrosCorridos.current) return
-    cobrosCorridos.current = true
-    void generarCobros()
-  }, [ready, generarCobros])
+    if (!ready) return
+    const fase = hayTasa ? 'con-tasa' : 'sin-tasa'
+    if (cobrosCorridos.current === 'con-tasa' || cobrosCorridos.current === fase) return
+    cobrosCorridos.current = fase
+    cadenaCobros.current = cadenaCobros.current
+      .then(async () => {
+        await repararCobrosEnOtraMoneda()
+        await generarCobros()
+      })
+      .catch(() => { /* lo que no salió, sale en el siguiente arranque */ })
+  }, [ready, hayTasa, generarCobros, repararCobrosEnOtraMoneda])
 
 
   // Solo se ofrece en Modo Demo, donde la clave es la anónima; se nombra

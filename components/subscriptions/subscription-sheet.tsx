@@ -304,6 +304,14 @@ export function SubscriptionSheet({
           {cuenta
             ? 'El día que toque, el cobro se anota solo en esta cuenta y solo tendrás que confirmarlo.'
             : 'Sin cuenta la suscripción cuenta igual en los totales, pero el cobro no se anota solo: no hay de dónde sacarlo.'}
+          {/* Se dice antes de guardar: ver el cobro en otra moneda en la lista
+              sin haberlo esperado parece un error. */}
+          {cuenta && cuenta.currency !== currency && (
+            <>
+              {' '}Como {cuenta.name} va en {cuenta.currency === 'USD' ? 'dólares' : 'pesos'}, se anota
+              convertido con la tasa del día, igual que hace el banco.
+            </>
+          )}
         </p>
 
         {/* ---- Prueba gratis ------------------------------------------------ */}
