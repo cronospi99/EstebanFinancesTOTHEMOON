@@ -73,6 +73,21 @@ export function formatDate(iso: string) {
   }).format(new Date(iso))
 }
 
+/**
+ * Un día suelto («2026-02-05»), no un instante.
+ *
+ * `formatDate` recibe instantes y los pinta en la zona del usuario; un día
+ * suelto pasado por ahí es la medianoche UTC, que en Colombia todavía es el
+ * día anterior: el corte del 5 salía como el 4. Aquí el día se toma tal cual.
+ * El año solo aparece si no es el de hoy.
+ */
+export function formatDia(dia: string) {
+  const conAnio = dia.slice(0, 4) !== hoyEnZona().slice(0, 4)
+  return new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric', month: 'short', ...(conAnio ? { year: 'numeric' } : {}), timeZone: 'UTC',
+  }).format(new Date(`${dia}T12:00:00Z`))
+}
+
 export function formatDayLabel(iso: string) {
   // Se comparan días, no instantes: dos momentos del mismo día son «Hoy»
   // aunque los separen veinte horas.

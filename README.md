@@ -498,6 +498,81 @@ migración nueva que convierta con la TRM.
 
 ---
 
+## Préstamos a clientes
+
+Para quien presta plata con interés mensual fijo: se entregan 500.000 al 10 %
+y cada mes el cliente paga 50.000 de intereses mientras el capital sigue
+intacto, hasta que lo devuelva. Puede abonar a capital cuando quiera, y desde
+el mes siguiente el interés se calcula sobre lo que queda: si el día del corte
+paga los 50.000 y abona 100.000, queda debiendo 400.000 y el mes siguiente paga
+40.000 —o 440.000 para saldar—.
+
+**No es para todos: se desbloquea con un código.** En **Ajustes → Funciones
+especiales → Desbloquear función**. Hasta entonces no aparece en ninguna parte;
+después tiene su entrada en Cuentas y en la barra lateral. El candado está en
+la base de datos y no en la pantalla: sin la función desbloqueada, las
+políticas de las tablas devuelven cero filas y rechazan cualquier escritura, así
+que escribir la dirección de la página o hablarle a la API directamente no sirve
+de nada.
+
+Los códigos los crea el dueño de la app, desde el **SQL Editor** de Supabase:
+
+```sql
+-- Un código de un solo uso, con una nota para acordarse de a quién se le dio.
+select public.crear_codigo_desbloqueo('prestamos', 1, 'para Juan');
+--> ABCD-1234-EFGH   (solo se muestra esta vez: se guarda su hash)
+
+-- O darle la función a alguien directamente, sin código:
+insert into public.funciones_desbloqueadas (user_id, funcion)
+values ('<id del usuario en Authentication → Users>', 'prestamos');
+
+-- Quitársela:
+delete from public.funciones_desbloqueadas where user_id = '<id>' and funcion = 'prestamos';
+```
+
+Un código se escribe como se quiera —con guiones, espacios o minúsculas—. Los
+fallos dicen siempre «código inválido», sea que no existe, que se gastó o que
+está apagado: distinguirlos le diría a quien prueba códigos al azar cuándo
+acertó. En el Modo Demo, sin servidor que guarde códigos, el código es `DEMO`.
+
+**El tablero** tiene arriba cuatro cifras —capital en la calle, lo que hay por
+cobrar en los próximos cortes, los intereses cobrados este mes y lo vencido— y
+debajo una tabla con una fila por cliente: cuánto debe, cuándo corta, los
+intereses de ese corte, cuánto para saldar ese día, cuánto le costará el mes
+siguiente, lo que debe hoy y lo que ya pagó en intereses. Se ordena por
+cualquier columna —por defecto, lo vencido primero y luego el corte más
+cercano: a quién le toca cobrar— y se filtra por activos, en mora, saldados y
+archivo. En el móvil la tabla se desplaza de lado con el nombre fijo.
+
+**La ficha de cada cliente** registra los pagos con su fecha, partidos entre
+intereses y abono a capital, con dos atajos para lo de todos los meses —«solo
+intereses» y «saldar todo»—. Antes de guardar se ve cómo queda. Debajo, el mes
+a mes (capital, interés, pagado, vencido) y el historial de pagos.
+
+La regla de cálculo, entera (ver `lib/prestamos.ts`):
+
+- Los meses se cuentan desde el día del préstamo. Uno del 31 corta el último
+  día de los meses cortos y vuelve al 31 cuando puede.
+- Cada mes cobra el interés sobre el capital que había al empezar, contando lo
+  abonado ese mismo día. Un abono a mitad de mes baja el interés desde el mes
+  siguiente: el que ya empezó se cobra entero.
+- El día del corte el interés «vence hoy», y desde el día siguiente lo que
+  falte es mora. El mes que empieza ese día todavía no se debe: por eso, el día
+  del corte, para saldar basta capital más el interés que vence —550.000, no
+  600.000—.
+- Los pagos de intereses cubren primero lo más viejo.
+
+Los préstamos viven en el espacio abierto (personal o negocio), como todo lo
+demás. **No mueven el saldo de las cuentas**: es una cartera aparte, y la plata
+que se entrega o se cobra no pasa sola por ninguna cuenta de la app.
+
+La ficha enseña la tasa también en efectiva anual, para poder compararla con la
+de un banco. En Colombia, cobrar por encima de la tasa de usura que certifica
+la Superintendencia Financiera es delito (artículo 305 del Código Penal), y un
+10 % mensual equivale a más del 200 % efectivo anual.
+
+---
+
 ## Finanzas personales y del negocio
 
 Al abrir la app, la pantalla de entrada tiene dos puertas: **Finanzas
@@ -1201,7 +1276,8 @@ Lo que falta, en orden de lo que más duele.
       sin la de bolsillos, mover dinero entre bolsillos de una misma cuenta se
       ve en el teléfono pero el servidor rechaza la fila por la restricción
       vieja; sin la de espacios, todo sigue como personal y el modo Negocio
-      queda apagado hasta aplicarla.
+      queda apagado hasta aplicarla. Y `20260927120000_prestamos_a_clientes`:
+      sin ella, el botón de desbloquear préstamos dice que falta la migración.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.

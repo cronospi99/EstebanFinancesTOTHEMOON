@@ -11,6 +11,8 @@ import { AccountDetailSheet } from '@/components/accounts/account-detail-sheet'
 import { TransferSheet } from '@/components/accounts/transfer-sheet'
 import { PayCardSheet } from '@/components/accounts/pay-card-sheet'
 import { AvisosTarjetas } from '@/components/accounts/avisos-tarjetas'
+import { DesbloqueoPrestamos } from '@/components/prestamos/desbloqueo'
+import { usePrestamos } from '@/lib/use-prestamos'
 import { CO_INSTITUTIONS } from '@/lib/categories'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { accountTotal, useAccountsAvailable, useFinance } from '@/lib/store'
@@ -32,6 +34,7 @@ const TYPE_LABEL: Record<AccountType, string> = {
 export default function AccountsPage() {
   const { accounts, fxRate } = useFinance()
   const saldos = useAccountsAvailable()
+  const prestamosAbiertos = usePrestamos().disponibilidad === 'desbloqueado'
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   // Con qué cuenta abrir la hoja de transferir, cuando se entra desde una.
@@ -155,6 +158,15 @@ export default function AccountsPage() {
           lo tiene otro— y quien entra aquí a mirar saldos quiere verlas en la
           misma pantalla. */}
       <DebtsSection />
+
+      {/* Solo para quien la tiene desbloqueada: a los demás no se les ofrece
+          algo que no pueden abrir. El botón para desbloquearla vive en Ajustes. */}
+      {prestamosAbiertos && (
+        <section>
+          <CardHeader title="Préstamos a clientes" />
+          <DesbloqueoPrestamos />
+        </section>
+      )}
 
       <section>
         <CardHeader title="Instituciones soportadas" />
