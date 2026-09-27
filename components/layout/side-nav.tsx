@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity, ChartPie, LayoutGrid, Plus, Repeat, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
+import { Activity, ChartPie, HandCoins, LayoutGrid, Plus, Repeat, Settings, Target, TrendingUp, Wallet } from 'lucide-react'
 import { APP_NAME, APP_TAGLINE, BrandMark } from '@/components/ui/brand'
 import { cn } from '@/lib/utils'
 import { SelectorEspacio } from './selector-espacio'
+import { usePrestamos } from '@/lib/use-prestamos'
 
 const TABS = [
   { href: '/', label: 'Resumen', icon: LayoutGrid },
@@ -39,6 +40,12 @@ const TABS = [
  */
 export function SideNav({ onQuickAdd }: { onQuickAdd: () => void }) {
   const pathname = usePathname()
+  // Los préstamos solo tienen entrada para quien los tiene desbloqueados, y
+  // justo antes de Ajustes: es una herramienta, no una pestaña de todos los días.
+  const prestamosAbiertos = usePrestamos().disponibilidad === 'desbloqueado'
+  const tabs = prestamosAbiertos
+    ? [...TABS.slice(0, -1), { href: '/prestamos', label: 'Préstamos', icon: HandCoins }, TABS[TABS.length - 1]]
+    : TABS
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-hairline bg-chrome-soft px-4 py-6 backdrop-blur-2xl lg:flex">
@@ -66,7 +73,7 @@ export function SideNav({ onQuickAdd }: { onQuickAdd: () => void }) {
       </button>
 
       <nav className="flex flex-col gap-1">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = pathname === tab.href
           const Icon = tab.icon
           return (

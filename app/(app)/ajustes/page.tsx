@@ -19,6 +19,7 @@ import { IngresosRecurrentesCard } from '@/components/settings/ingresos-card'
 import { DatosCard } from '@/components/settings/datos-card'
 import { DianCard } from '@/components/settings/dian-card'
 import { useEspacio } from '@/lib/use-espacio'
+import { DesbloqueoPrestamos } from '@/components/prestamos/desbloqueo'
 import { useProfileName } from '@/lib/use-profile'
 import { useTheme, type Tema } from '@/lib/use-theme'
 import { formatKeypad, parseKeypad } from '@/lib/format'
@@ -293,6 +294,13 @@ export default function SettingsPage() {
             </ol>
           </Card>
         )}
+      </section>
+
+      {/* Lo que no viene abierto para todos. Va antes que los datos porque es
+          donde se busca el botón cuando alguien te pasa un código. */}
+      <section>
+        <CardHeader title="Funciones especiales" />
+        <DesbloqueoPrestamos />
       </section>
 
       <section>
