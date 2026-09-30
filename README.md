@@ -909,6 +909,35 @@ pesos conviene ser más conservador, y lo que se pide es el rendimiento **real**
 —ya descontada la inflación—: un CDT al 11 % con inflación del 6 % no renta un
 11 %, renta un 5 % escaso.
 
+### Confirmar un ingreso recurrente
+
+Un ingreso recurrente no se anota solo: se confirma con **«Ya me pagaron»**. El
+botón ya no anota al instante: abre un panel para dejarlo como de verdad llegó.
+
+- **Si ya lo anotaste desde el botón +**, arriba salen los ingresos de las
+  últimas semanas —primero los de la misma cuenta y los de importe más
+  parecido—. Tocar uno lo **vincula**: el movimiento se queda como está y pasa
+  a contar como el pago de ese ingreso, sin duplicar nada.
+- **Si no**, se anota con el importe, el día y la cuenta que se pongan. Vienen
+  rellenos con lo de siempre y se cambian antes de confirmar: el sueldo con
+  horas extra, la quincena que entró ayer. Si el importe es otro, se puede
+  marcar «usar de ahora en adelante» para que la proyección lo tome.
+
+Hasta ahora «Anotado» se adivinaba buscando un ingreso del mismo importe exacto
+en la misma cuenta, y fallaba por los dos lados: un sueldo con otra cifra no se
+reconocía —y se volvía a anotar—, y cualquier ingreso que coincidiera en cifra
+daba la quincena por cobrada. Ahora el movimiento dice de qué ingreso es
+(`recurring_income_id`, como `subscription_id` en los cobros), y la fila enseña
+«Pagado» con su fecha. Tocarlo deja **desvincular**, que no borra el movimiento.
+
+El vínculo se escribe aparte del alta del movimiento, a propósito: si la
+migración `20260930120000_ingreso_vinculado` aún no está aplicada, lo que falla
+es el vínculo y el ingreso queda guardado igual.
+
+Cada ingreso se puede **editar** —nombre, importe, ciclo, día, cuenta, y pasar
+de importe fijo a sueldo o al revés—. Las filas van en dos líneas: en una sola
+el nombre se quedaba en «S…» detrás de los botones.
+
 ---
 
 ## Tarjetas de crédito: corte y fecha límite
@@ -1278,6 +1307,9 @@ Lo que falta, en orden de lo que más duele.
       vieja; sin la de espacios, todo sigue como personal y el modo Negocio
       queda apagado hasta aplicarla. Y `20260927120000_prestamos_a_clientes`:
       sin ella, el botón de desbloquear préstamos dice que falta la migración.
+      Y `20260930120000_ingreso_vinculado`: sin ella, confirmar un ingreso
+      recurrente lo guarda igual pero sin el vínculo, y la fila no lo marca
+      como pagado tras recargar.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.

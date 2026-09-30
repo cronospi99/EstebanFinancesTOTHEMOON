@@ -156,6 +156,14 @@ export interface Transaction {
    */
   subscriptionId?: string
   /**
+   * El ingreso recurrente del que es este pago, si lo es.
+   *
+   * Lo pone «Ya me pagaron» al anotarlo, o se vincula después a un ingreso
+   * que ya se había registrado desde el botón de captura. Es lo que dice que
+   * la quincena está cobrada sin tener que adivinarlo por el importe.
+   */
+  recurringIncomeId?: string
+  /**
    * Anotado por la app y todavía sin confirmar por su dueño.
    *
    * Cuenta en el saldo desde el primer momento —el cobro de una suscripción va
