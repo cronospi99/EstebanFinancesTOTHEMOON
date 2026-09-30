@@ -627,6 +627,22 @@ consulta mínima si ya se aplicó: el día que se aplica, se entera sola.
 
 ---
 
+## Gastos e ingresos, con la misma pantalla
+
+En **Gastos**, un selector arriba cambia entre **Gastos** e **Ingresos**. Con
+ingresos, todo lo de la pantalla pasa al otro lado: el anillo dice cuánto se
+recibió en el período y de dónde —salario, freelance, rendimientos…—, cada
+categoría se despliega con su histórico completo, y la lista de movimientos
+enseña solo los ingresos. Debajo del anillo va la cifra contraria —lo gastado—
+y el balance, que es el mismo en las dos vistas.
+
+Es la misma pantalla y no otra a propósito: la pregunta es la misma dada
+vuelta, de dónde vino el dinero en vez de adónde se fue, y con el mismo
+selector de período —semana, mes, trimestre, semestre, año— las dos se
+comparan sin aprender nada nuevo.
+
+---
+
 ## Mover dinero entre bolsillos
 
 Un bolsillo de Nequi o de Lulo no es una etiqueta: es dinero apartado de
