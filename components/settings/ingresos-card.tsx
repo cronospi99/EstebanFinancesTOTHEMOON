@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { BadgeCheck, Check, Plus, Trash2, TrendingUp, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { BadgeCheck, Check, Link2, Pencil, Plus, Trash2, TrendingUp, Unlink, X } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { AccountPicker } from '@/components/ui/account-picker'
+import { MoneyInput } from '@/components/ui/money-input'
 import { formatKeypad, formatMoney, parseKeypad } from '@/lib/format'
 import { fechaCobro } from '@/lib/suscripciones'
 import { resumirNomina } from '@/lib/nomina'
@@ -11,7 +12,7 @@ import { NominaForm, type DatosNomina } from './nomina-form'
 import { ocurrencias } from '@/lib/liquidez'
 import { useFinance } from '@/lib/store'
 import type { IncomeCycle, RecurringIncome, Transaction } from '@/lib/types'
-import { hoyEnZona, instanteEnDia, sumarDias } from '@/lib/zona'
+import { diaEn, hoyEnZona, instanteEnDia, sumarDias } from '@/lib/zona'
 import { cn, haptic } from '@/lib/utils'
 
 const CICLOS: { valor: IncomeCycle; etiqueta: string }[] = [
@@ -22,6 +23,40 @@ const CICLOS: { valor: IncomeCycle; etiqueta: string }[] = [
   { valor: 'semestral', etiqueta: 'Semestral' },
   { valor: 'anual', etiqueta: 'Anual' },
 ]
+
+/**
+ * Cuánto atrás cuenta un pago como «el de este ciclo»: la mitad del ciclo,
+ * acotada. En un sueldo quincenal, mirar treinta días atrás daría por cobrada
+ * la segunda quincena con el pago de la primera.
+ */
+const ventanaDe = (ciclo: IncomeCycle) =>
+  ({ semanal: 3, quincenal: 6, mensual: 12 } as Partial<Record<IncomeCycle, number>>)[ciclo] ?? 20
+
+/** El movimiento vinculado que cubre el ciclo en curso, si lo hay. */
+function pagoDelCiclo(i: RecurringIncome, txs: Transaction[], hoy: string) {
+  const desde = sumarDias(hoy, -ventanaDe(i.cycle))
+  return txs
+    .filter((t) => t.recurringIncomeId === i.id && diaEn(t.occurredAt) >= desde)
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0]
+}
+
+/**
+ * Ingresos ya registrados que podrían ser este pago: los de las últimas
+ * semanas que no están vinculados a ningún otro ingreso. Primero los de la
+ * misma cuenta y los de importe más parecido, que es como lo buscaría uno.
+ */
+function candidatos(i: RecurringIncome, txs: Transaction[], hoy: string) {
+  const desde = sumarDias(hoy, -40)
+  return txs
+    .filter((t) => t.type === 'income' && !t.recurringIncomeId && diaEn(t.occurredAt) >= desde)
+    .sort((a, b) => {
+      const cuenta = Number(b.accountId === i.accountId) - Number(a.accountId === i.accountId)
+      if (cuenta) return cuenta
+      const cerca = Math.abs(a.amount - i.amount) - Math.abs(b.amount - i.amount)
+      return cerca || b.occurredAt.localeCompare(a.occurredAt)
+    })
+    .slice(0, 4)
+}
 
 /**
  * El sueldo, el arriendo que cobras, el cliente fijo.
@@ -36,7 +71,7 @@ const CICLOS: { valor: IncomeCycle; etiqueta: string }[] = [
  * sueldo dado por recibido que no llegó deja el saldo mintiendo hacia arriba.
  */
 export function IngresosRecurrentesCard() {
-  const { recurringIncomes, accounts, transactions, addIngreso, addTransaction, updateIngreso, deleteIngreso } = useFinance()
+  const { recurringIncomes, addIngreso } = useFinance()
   const [creando, setCreando] = useState(false)
 
   return (
@@ -55,52 +90,15 @@ export function IngresosRecurrentesCard() {
       </div>
 
       {recurringIncomes.length > 0 && (
-        <div className="mb-3 space-y-1 border-t border-hairline pt-3">
-          {recurringIncomes.map((i) => {
-            const proxima = ocurrencias(i.anchorAt, i.cycle, sumarDias(hoyEnZona(), 1), sumarDias(hoyEnZona(), 400))[0]
-            const cuenta = accounts.find((a) => a.id === i.accountId)
-            return (
-              <div key={i.id} className={cn('flex items-center gap-2.5 py-1.5', i.active === false && 'opacity-45')}>
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: i.color }} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14.5px] text-label">{i.name}</p>
-                  <p className="truncate text-[11.5px] text-label-tertiary">
-                    {CICLOS.find((c) => c.valor === i.cycle)?.etiqueta}
-                    {cuenta && ` · ${cuenta.name}`}
-                    {i.active !== false && proxima && ` · próximo el ${fechaCobro(proxima)}`}
-                    {i.active === false && ' · apagado'}
-                  </p>
-                </div>
-                <span className="tnum shrink-0 text-[14px] font-semibold text-accent-green">
-                  {formatMoney(i.amount, i.currency)}
-                </span>
-                {i.active !== false && (
-                  <BotonYaMePagaron ingreso={i} transactions={transactions} onRegistrar={addTransaction} />
-                )}
-                <button
-                  onClick={() => { haptic(6); updateIngreso(i.id, { active: i.active === false }) }}
-                  aria-label={i.active === false ? 'Reactivar' : 'Apagar'}
-                  className="press shrink-0 rounded-lg px-2 py-1 text-[11.5px] text-label-tertiary"
-                >
-                  {i.active === false ? 'Activar' : 'Apagar'}
-                </button>
-                <button
-                  onClick={() => { haptic([14, 30]); deleteIngreso(i.id) }}
-                  aria-label={`Borrar ${i.name}`}
-                  className="press flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-accent-red"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            )
-          })}
+        <div className="mb-3 divide-y divide-hairline border-t border-hairline">
+          {recurringIncomes.map((i) => <FilaIngreso key={i.id} ingreso={i} />)}
         </div>
       )}
 
       {creando ? (
         <Formulario
           onCancelar={() => setCreando(false)}
-          onGuardar={(datos) => { void addIngreso(datos); setCreando(false) }}
+          onGuardar={(datos) => { void addIngreso({ ...datos, active: true, color: '#30D158' }); setCreando(false) }}
         />
       ) : (
         <button
@@ -122,25 +120,262 @@ export function IngresosRecurrentesCard() {
   )
 }
 
+type Panel = null | 'editar' | 'cobro' | 'pagado'
+
+/**
+ * Un ingreso, en dos líneas: arriba qué es y cuánto, abajo lo que se hace con
+ * él. En una sola línea no cabía: el nombre se quedaba en «S…» detrás de los
+ * botones, justo lo único que dice de qué ingreso se trata.
+ */
+function FilaIngreso({ ingreso: i }: { ingreso: RecurringIncome }) {
+  const { accounts, transactions, updateIngreso, deleteIngreso, vincularIngreso } = useFinance()
+  const [panel, setPanel] = useState<Panel>(null)
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false)
+  const hoy = hoyEnZona()
+
+  const proxima = ocurrencias(i.anchorAt, i.cycle, sumarDias(hoy, 1), sumarDias(hoy, 400))[0]
+  const cuenta = accounts.find((a) => a.id === i.accountId)
+  const pagado = useMemo(() => pagoDelCiclo(i, transactions, hoy), [i, transactions, hoy])
+  const activo = i.active !== false
+  const abrir = (p: Panel) => { haptic(6); setPanel((x) => (x === p ? null : p)); setConfirmarBorrado(false) }
+
+  return (
+    <div className={cn('py-3', !activo && 'opacity-50')}>
+      <div className="flex items-start gap-2.5">
+        <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: i.color }} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-medium leading-snug text-label">{i.name || 'Sin nombre'}</p>
+          <p className="text-[12px] text-label-tertiary">
+            {CICLOS.find((c) => c.valor === i.cycle)?.etiqueta}
+            {cuenta && ` · ${cuenta.name}`}
+            {activo && proxima && ` · próximo el ${fechaCobro(proxima)}`}
+            {!activo && ' · apagado'}
+          </p>
+        </div>
+        <span className="tnum shrink-0 text-[15px] font-semibold text-accent-green">
+          {formatMoney(i.amount, i.currency)}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-center gap-1 pl-5">
+        {activo && (pagado ? (
+          <button onClick={() => abrir('pagado')}
+            className="press flex shrink-0 items-center gap-1 whitespace-nowrap rounded-pill bg-accent-green/15 px-2.5 py-1 text-[12px] font-medium text-accent-green">
+            <BadgeCheck size={13} /> Pagado {fechaCobro(diaEn(pagado.occurredAt))}
+          </button>
+        ) : (
+          <button onClick={() => abrir('cobro')}
+            className={cn('press shrink-0 whitespace-nowrap rounded-pill px-2.5 py-1 text-[12px] font-semibold',
+              panel === 'cobro' ? 'bg-fill-4 text-label' : 'bg-accent-blue/15 text-accent-blue')}>
+            Ya me pagaron
+          </button>
+        ))}
+        <button onClick={() => abrir('editar')}
+          className={cn('press flex shrink-0 items-center gap-1 rounded-pill px-2 py-1 text-[12px]',
+            panel === 'editar' ? 'bg-fill-4 text-label' : 'text-label-secondary')}>
+          <Pencil size={12} /> Editar
+        </button>
+        <button onClick={() => { haptic(6); void updateIngreso(i.id, { active: !activo }) }}
+          className="press shrink-0 rounded-pill px-2 py-1 text-[12px] text-label-tertiary">
+          {activo ? 'Apagar' : 'Activar'}
+        </button>
+        <span className="flex-1" />
+        {confirmarBorrado ? (
+          <button onClick={() => { haptic([18, 30]); void deleteIngreso(i.id) }}
+            className="press rounded-pill bg-accent-red px-2.5 py-1 text-[12px] font-semibold text-white">
+            Sí, borrar
+          </button>
+        ) : (
+          <button onClick={() => { haptic(8); setConfirmarBorrado(true) }} aria-label={`Borrar ${i.name}`}
+            className="press flex h-7 w-7 items-center justify-center rounded-lg text-accent-red">
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+
+      {panel === 'editar' && (
+        <div className="mt-3">
+          <Formulario
+            inicial={i}
+            onCancelar={() => setPanel(null)}
+            onGuardar={(datos) => { void updateIngreso(i.id, datos); setPanel(null) }}
+          />
+        </div>
+      )}
+      {panel === 'cobro' && !pagado && <PanelCobro ingreso={i} onListo={() => setPanel(null)} />}
+      {panel === 'pagado' && pagado && (
+        <div className="mt-3 rounded-2xl border border-hairline bg-fill-1 p-3">
+          <p className="text-[13px] text-label-secondary">
+            Vinculado a <span className="font-medium text-label">{pagado.description || 'un ingreso'}</span>{' '}
+            del {fechaCobro(diaEn(pagado.occurredAt))}
+            {accounts.find((a) => a.id === pagado.accountId) && ` en ${accounts.find((a) => a.id === pagado.accountId)!.name}`}
+            , por <span className="tnum font-semibold text-accent-green">{formatMoney(pagado.amount, pagado.currency)}</span>.
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-label-tertiary">
+            Desvincular no borra el movimiento: solo deja de contar como el pago de este ingreso.
+            Para borrarlo, hazlo desde Gastos.
+          </p>
+          <button
+            onClick={() => { haptic([14, 30]); void vincularIngreso(pagado.id, null); setPanel(null) }}
+            className="press mt-2 flex items-center gap-1.5 rounded-xl border border-hairline px-3 py-2 text-[13px] font-medium text-label-secondary"
+          >
+            <Unlink size={14} /> Desvincular
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Confirmar un pago: anotarlo, o decir cuál de los ya anotados es.
+ *
+ * Antes, «Ya me pagaron» anotaba al instante el importe de siempre con la
+ * fecha de hoy. Servía el mes en que llegaba exacto; el resto quedaba mal —el
+ * sueldo con horas extra, la quincena que entró ayer— y no había forma de
+ * decirlo antes. Ahora se ve y se corrige antes de confirmar.
+ *
+ * Y quien ya lo había anotado desde el botón de captura no tenía cómo decir
+ * «es este»: la app buscaba un ingreso del mismo importe exacto y, si no lo
+ * encontraba, invitaba a anotarlo otra vez. Los ingresos de las últimas
+ * semanas salen arriba para vincular el que sea, sin duplicar nada.
+ */
+function PanelCobro({ ingreso: i, onListo }: { ingreso: RecurringIncome; onListo: () => void }) {
+  const { transactions, accounts, addTransaction, vincularIngreso, updateIngreso } = useFinance()
+  const hoy = hoyEnZona()
+  const [monto, setMonto] = useState(String(i.amount).replace('.', ','))
+  const [fecha, setFecha] = useState(hoy)
+  const [cuenta, setCuenta] = useState(i.accountId ?? '')
+  const [pocket, setPocket] = useState<string | undefined>()
+  const [actualizarImporte, setActualizarImporte] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+
+  const lista = useMemo(() => candidatos(i, transactions, hoy), [i, transactions, hoy])
+  const importe = parseKeypad(monto)
+  const cambia = Math.abs(importe - i.amount) >= 1
+  // En un sueldo, el importe sale del cálculo de la nómina: cambiarlo a mano
+  // se pisaría en la siguiente edición.
+  const puedeActualizar = cambia && !i.salarioBase
+  const listo = importe > 0 && Boolean(cuenta) && !guardando
+
+  const confirmar = async () => {
+    if (!listo) return
+    setGuardando(true)
+    haptic([14, 40, 22])
+    const id = await addTransaction({
+      accountId: cuenta,
+      pocketId: pocket,
+      // El sueldo es salario; lo demás, un ingreso sin más. La categoría
+      // decide si cuenta como fijo en el desglose de `lib/ingresos.ts`.
+      categoryId: i.salarioBase ? 'salary' : 'other-income',
+      amount: importe,
+      type: 'income',
+      description: i.name,
+      occurredAt: instanteEnDia(fecha),
+      currency: i.currency,
+    })
+    await vincularIngreso(id, i.id)
+    if (puedeActualizar && actualizarImporte) await updateIngreso(i.id, { amount: importe })
+    onListo()
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-2xl border border-hairline bg-fill-1 p-3">
+      {lista.length > 0 && (
+        <div>
+          <p className="mb-1.5 px-1 text-[12px] font-medium text-label-secondary">¿Ya lo anotaste? Vincúlalo</p>
+          <div className="divide-y divide-hairline overflow-hidden rounded-xl border border-hairline">
+            {lista.map((t) => {
+              const c = accounts.find((a) => a.id === t.accountId)
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => { haptic([14, 30]); void vincularIngreso(t.id, i.id); onListo() }}
+                  className="press flex w-full items-center gap-2.5 bg-fill-2 px-3 py-2.5 text-left"
+                >
+                  <Link2 size={15} className="shrink-0 text-accent-blue" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] text-label">{t.description || 'Ingreso'}</span>
+                    <span className="block truncate text-[11.5px] text-label-tertiary">
+                      {fechaCobro(diaEn(t.occurredAt))}{c && ` · ${c.name}`}
+                    </span>
+                  </span>
+                  <span className="tnum shrink-0 text-[13.5px] font-semibold text-accent-green">
+                    {formatMoney(t.amount, t.currency)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-1.5 px-1 text-[11.5px] text-label-tertiary">
+            Se queda como está —importe, fecha y cuenta— y pasa a contar como el pago de {i.name}.
+          </p>
+        </div>
+      )}
+
+      <div>
+        <p className="mb-1.5 px-1 text-[12px] font-medium text-label-secondary">
+          {lista.length > 0 ? 'O anótalo ahora' : 'Anótalo'}
+        </p>
+        <MoneyInput value={monto} onChange={setMonto} currency={i.currency} className="mb-2" />
+        {puedeActualizar && (
+          <label className="mb-2 flex items-center gap-2 px-1 text-[12px] text-label-secondary">
+            <input type="checkbox" checked={actualizarImporte} onChange={(e) => setActualizarImporte(e.target.checked)}
+              className="h-4 w-4 accent-[var(--accent-blue)]" />
+            Usar {formatMoney(importe, i.currency)} de ahora en adelante
+          </label>
+        )}
+        <label className="mb-2 flex items-center gap-2.5 rounded-xl border border-hairline bg-fill-2 px-3 py-2">
+          <span className="flex-1 text-[13px] text-label-secondary">Día en que llegó</span>
+          <input type="date" value={fecha} max={hoy} onChange={(e) => e.target.value && setFecha(e.target.value)}
+            className="bg-transparent text-[14px] text-label focus:outline-none" />
+        </label>
+        <AccountPicker accountId={cuenta} pocketId={pocket} onChange={(c, b) => { setCuenta(c); setPocket(b) }} />
+        <div className="mt-1 flex gap-2">
+          <button onClick={onListo} className="press flex-1 rounded-xl border border-hairline py-2.5 text-label-secondary">
+            <X size={15} className="mx-auto" />
+          </button>
+          <button onClick={confirmar} disabled={!listo}
+            className="press flex-[2] rounded-xl bg-accent-green py-2.5 text-[14px] font-semibold text-black disabled:opacity-40">
+            {cuenta ? `Confirmar ${formatMoney(importe, i.currency)}` : 'Elige una cuenta'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type DatosIngreso = Omit<RecurringIncome, 'id' | 'active' | 'color'>
+
+/**
+ * Alta y edición. Al editar se parte de lo guardado, sueldo incluido: pasar
+ * un ingreso de «importe fijo» a «es un sueldo» o al revés es un cambio de
+ * verdad, y por eso lo que deja de aplicar se borra en vez de quedarse.
+ */
 function Formulario({
-  onGuardar, onCancelar,
+  onGuardar, onCancelar, inicial,
 }: {
-  onGuardar: (datos: Parameters<ReturnType<typeof useFinance>['addIngreso']>[0]) => void
+  onGuardar: (datos: DatosIngreso) => void
   onCancelar: () => void
+  inicial?: RecurringIncome
 }) {
-  const [nombre, setNombre] = useState('')
-  const [monto, setMonto] = useState('')
-  const [ciclo, setCiclo] = useState<IncomeCycle>('quincenal')
-  const [cuenta, setCuenta] = useState('')
-  const [dia, setDia] = useState(hoyEnZona)
+  const [nombre, setNombre] = useState(inicial?.name ?? '')
+  const [monto, setMonto] = useState(inicial && !inicial.salarioBase ? String(inicial.amount).replace('.', ',') : '')
+  const [ciclo, setCiclo] = useState<IncomeCycle>(inicial?.cycle ?? 'quincenal')
+  const [cuenta, setCuenta] = useState(inicial?.accountId ?? '')
+  const [dia, setDia] = useState(inicial?.anchorAt ?? hoyEnZona())
   /*
    * Modo nómina: en vez de teclear lo que llega, se teclea el sueldo pactado y
    * la app deriva lo que llega. Son dos cifras distintas y pedir solo una
    * obligaba a elegir cuál mentira preferías: con el bruto la proyección iba
    * inflada un 8 %, y con el neto no se podía estimar la prima.
    */
-  const [esNomina, setEsNomina] = useState(false)
-  const [nomina, setNomina] = useState<DatosNomina>({})
+  const [esNomina, setEsNomina] = useState(Boolean(inicial?.salarioBase))
+  const [nomina, setNomina] = useState<DatosNomina>(inicial?.salarioBase ? {
+    salarioBase: inicial.salarioBase, auxilioTransporte: inicial.auxilioTransporte,
+    cotiza: inicial.cotiza, turnos: inicial.turnos,
+    trabajaFestivos: inicial.trabajaFestivos, pagaExtras: inicial.pagaExtras,
+  } : {})
 
   // Lo que de verdad va a `amount`: en nómina es el resultado del cálculo.
   const resumen = esNomina && nomina.salarioBase
@@ -160,7 +395,7 @@ function Formulario({
         value={nombre}
         onChange={(e) => setNombre(e.target.value)}
         placeholder="Salario, arriendo, cliente…"
-        autoFocus
+        autoFocus={!inicial}
         className="mb-2 w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2.5 text-[15px]
                    text-label placeholder:text-label-tertiary focus:border-accent-blue/50 focus:outline-none"
       />
@@ -248,101 +483,27 @@ function Formulario({
               // En nómina, `amount` es lo que llega: el cálculo manda. Lo
               // pactado se guarda aparte, en `salarioBase`.
               amount: importe,
-              currency: 'COP',
+              currency: inicial?.currency ?? 'COP',
               cycle: ciclo,
               anchorAt: dia,
               accountId: cuenta || undefined,
-              active: true,
-              color: '#30D158',
-              ...(esNomina ? {
-                salarioBase: nomina.salarioBase,
-                auxilioTransporte: nomina.auxilioTransporte,
-                cotiza: nomina.cotiza,
-                turnos: nomina.turnos,
-                trabajaFestivos: nomina.trabajaFestivos,
-                pagaExtras: nomina.pagaExtras,
-              } : {}),
+              // Las claves van siempre, también vacías: dejar de ser sueldo
+              // tiene que borrar lo pactado, y sin la clave el borrado no
+              // viajaría (ver `ingresoPatchToRow`).
+              salarioBase: esNomina ? nomina.salarioBase : undefined,
+              auxilioTransporte: esNomina ? nomina.auxilioTransporte : undefined,
+              cotiza: esNomina ? nomina.cotiza : undefined,
+              turnos: esNomina ? nomina.turnos : undefined,
+              trabajaFestivos: esNomina ? nomina.trabajaFestivos : undefined,
+              pagaExtras: esNomina ? nomina.pagaExtras : undefined,
             })
           }}
           disabled={!valido}
           className="press flex-[2] rounded-xl bg-accent-green py-2.5 font-semibold text-black disabled:opacity-40"
         >
-          <Check size={17} className="mx-auto" />
+          {inicial ? 'Guardar cambios' : <Check size={17} className="mx-auto" />}
         </button>
       </div>
     </div>
-  )
-}
-
-/**
- * «Ya me pagaron»: anota el ingreso con la fecha de hoy.
- *
- * Un ingreso recurrente NO se anota solo, y esa decisión sigue siendo la
- * correcta: un sueldo dado por recibido que no llegó deja el saldo mintiendo
- * hacia arriba. Pero el otro extremo tampoco servía: quien cobraba tenía que
- * ir a la captura rápida, elegir categoría, importe y cuenta, y teclear a mano
- * lo que la app ya sabía. Con un toque se anota, y desde ahí cuenta para el
- * saldo, para el reparto 50/30/20 y para el puntaje de salud.
- *
- * El doble toque es el error que hay que impedir: anotar dos veces la quincena
- * infla el mes entero. Si ya hay un ingreso del mismo importe en la misma
- * cuenta en los últimos días, el botón lo dice en vez de volver a anotarlo.
- */
-function BotonYaMePagaron({
-  ingreso, transactions, onRegistrar,
-}: {
-  ingreso: RecurringIncome
-  transactions: Transaction[]
-  onRegistrar: (t: Omit<Transaction, 'id'>) => void
-}) {
-  const hoy = hoyEnZona()
-  // Cuánto atrás se mira para no repetir: la mitad del ciclo, acotada. En un
-  // sueldo quincenal, mirar treinta días atrás bloquearía la segunda quincena.
-  const ventana = { semanal: 3, quincenal: 6, mensual: 12 }[ingreso.cycle as string] ?? 20
-  const desde = sumarDias(hoy, -ventana)
-
-  const yaEsta = transactions.some((t) =>
-    t.type === 'income'
-    && t.occurredAt.slice(0, 10) >= desde
-    && Math.abs(t.amount - ingreso.amount) < 1
-    && (!ingreso.accountId || t.accountId === ingreso.accountId))
-
-  if (yaEsta) {
-    return (
-      <span className="flex shrink-0 items-center gap-1 px-2 text-[11.5px] text-accent-green">
-        <BadgeCheck size={13} /> Anotado
-      </span>
-    )
-  }
-
-  const cuenta = ingreso.accountId ?? ''
-  if (!cuenta) {
-    return (
-      <span className="shrink-0 px-2 text-[11px] text-label-tertiary" title="Elige una cuenta para poder anotarlo">
-        sin cuenta
-      </span>
-    )
-  }
-
-  return (
-    <button
-      onClick={() => {
-        haptic([14, 30])
-        onRegistrar({
-          accountId: cuenta,
-          // El sueldo es salario; lo demás, un ingreso sin más. La categoría
-          // decide si cuenta como fijo en el desglose de `lib/ingresos.ts`.
-          categoryId: ingreso.salarioBase ? 'salary' : 'other-income',
-          amount: ingreso.amount,
-          type: 'income',
-          description: ingreso.name,
-          occurredAt: instanteEnDia(hoy),
-          currency: ingreso.currency,
-        })
-      }}
-      className="press shrink-0 rounded-lg px-2 py-1 text-[11.5px] font-medium text-accent-blue"
-    >
-      Ya me pagaron
-    </button>
   )
 }
