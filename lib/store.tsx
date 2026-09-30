@@ -387,6 +387,11 @@ interface FinanceContextValue extends State {
   addIngreso: (i: Omit<RecurringIncome, 'id'>) => Promise<void>
   updateIngreso: (id: string, patch: Partial<RecurringIncome>) => Promise<void>
   deleteIngreso: (id: string) => Promise<void>
+  /**
+   * Dice que un movimiento es el pago de un ingreso recurrente, o lo desdice
+   * con null. No toca el saldo: el movimiento ya está aplicado.
+   */
+  vincularIngreso: (txId: string, ingresoId: string | null) => Promise<void>
   /** Preferencias de avisos. Lo que no venga en el parche se queda como está. */
   guardarAjustes: (patch: Partial<Settings>) => Promise<void>
   /**
@@ -1388,6 +1393,25 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     [remote],
   )
 
+  /*
+   * El vínculo va en su propia escritura y no dentro del alta del movimiento,
+   * a propósito: si el servidor todavía no tiene la columna, la que falla es
+   * esta y el ingreso queda guardado igual. Meterlo en `txToRow` hacía que,
+   * sin la migración, fallara el alta entera y el dinero no llegara al
+   * servidor. Tampoco pasa por `updateTransaction`, que deshace y rehace el
+   * movimiento sobre el saldo para no cambiar nada.
+   */
+  const vincularIngreso = useCallback(
+    async (txId: string, ingresoId: string | null) => {
+      setState((s) => ({
+        ...s,
+        transactions: s.transactions.map((t) => (t.id === txId ? { ...t, recurringIncomeId: ingresoId ?? undefined } : t)),
+      }))
+      await remote()?.from('transactions').update(txPatchToRow({ recurringIncomeId: ingresoId ?? undefined })).eq('id', txId)
+    },
+    [remote],
+  )
+
   // ---- Metas de ahorro -----------------------------------------------------
   const addGoal = useCallback(
     async (g: Omit<Goal, 'id'>) => {
@@ -1796,7 +1820,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addGoal, updateGoal, deleteGoal, resetDemo, signOut,
       addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
       addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError,
-      addIngreso, updateIngreso, deleteIngreso, guardarAjustes, restaurar,
+      addIngreso, updateIngreso, deleteIngreso, vincularIngreso, guardarAjustes, restaurar,
     }),
     [state, ready, synced, syncError, cargar, fxRate, fx, trm, colaPendientes, sincronizarPendientes,
      quotes, quotesLoading, quotesFallos, refreshQuotes,
@@ -1808,7 +1832,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
      addGoal, updateGoal, deleteGoal, resetDemo, signOut,
      addDebt, updateDebt, deleteDebt, abonarDeuda, deleteDebtPayment, deudasError,
      addSubscription, updateSubscription, deleteSubscription, confirmarCobro, suscripcionesError,
-     addIngreso, updateIngreso, deleteIngreso, guardarAjustes, restaurar],
+     addIngreso, updateIngreso, deleteIngreso, vincularIngreso, guardarAjustes, restaurar],
   )
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -2979,6 +3003,7 @@ const rowToTx = (r: Row): Transaction => ({
   categoryId: r.category_id, amount: Number(r.amount), type: r.type,
   description: r.description ?? '', occurredAt: r.occurred_at, currency: r.currency ?? undefined,
   subscriptionId: r.subscription_id ?? undefined,
+  recurringIncomeId: r.recurring_income_id ?? undefined,
   pending: r.pending ? true : undefined,
   fxRate: r.fx_rate == null ? undefined : Number(r.fx_rate),
   merchant: r.merchant ?? undefined,
@@ -3010,6 +3035,7 @@ const txPatchToRow = (p: Partial<Transaction>) => {
   if (p.occurredAt !== undefined) r.occurred_at = p.occurredAt
   if (p.currency !== undefined) r.currency = p.currency ?? null
   if ('subscriptionId' in p) r.subscription_id = p.subscriptionId ?? null
+  if ('recurringIncomeId' in p) r.recurring_income_id = p.recurringIncomeId ?? null
   // Con 'in': confirmar un cobro es ponerlo a undefined, y eso tiene que
   // llegar al servidor como false en vez de no viajar.
   if ('pending' in p) r.pending = Boolean(p.pending)
