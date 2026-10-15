@@ -49,7 +49,7 @@ export const CODIGO_DEMO = 'DEMO'
 const CLAVE_FUNCIONES = 'eftm.funciones'
 const clavePrestamos = () => `eftm.prestamos:${espacioActual()}`
 
-/** Tres clientes de ejemplo para quien lo prueba sin cuenta. */
+/** Cuatro clientes de ejemplo para quien lo prueba sin cuenta. */
 function demo(): { prestamos: Prestamo[]; pagos: PagoPrestamo[] } {
   const hoy = hoyEnZona()
   const hace = (meses: number, dias = 0) => {
@@ -61,6 +61,7 @@ function demo(): { prestamos: Prestamo[]; pagos: PagoPrestamo[] } {
     { id: 'dp1', cliente: 'Pedro Gómez', telefono: '3001234567', monto: 500_000, tasaMensual: 10, fecha: hace(2, 3) },
     { id: 'dp2', cliente: 'María Rincón', monto: 1_200_000, tasaMensual: 8, fecha: hace(3, 10), nota: 'Tienda de la esquina' },
     { id: 'dp3', cliente: 'Luis Torres', monto: 300_000, tasaMensual: 10, fecha: hace(2, 20) },
+    { id: 'dp4', cliente: 'Andrés Mejía', monto: 1_000_000, tasaMensual: 10, fecha: hace(2, 5), cuotas: 5 },
   ]
   const pagos: PagoPrestamo[] = [
     // Pedro: paga el interés del primer mes y en el segundo abona 100.000.
@@ -71,6 +72,9 @@ function demo(): { prestamos: Prestamo[]; pagos: PagoPrestamo[] } {
     // Luis: pagó el interés y devolvió todo en el corte.
     { id: 'dq4', prestamoId: 'dp3', fecha: hace(1, 20), interes: 30_000, capital: 0 },
     { id: 'dq5', prestamoId: 'dp3', fecha: hace(0, 20), interes: 30_000, capital: 300_000 },
+    // Andrés: 1.000.000 en 5 cuotas de 300.000; lleva dos pagadas.
+    { id: 'dq6', prestamoId: 'dp4', fecha: hace(1, 5), interes: 100_000, capital: 200_000 },
+    { id: 'dq7', prestamoId: 'dp4', fecha: hace(0, 5), interes: 100_000, capital: 200_000 },
   ]
   return { prestamos, pagos }
 }
@@ -83,6 +87,7 @@ const rowAPrestamo = (r: Row): Prestamo => ({
   monto: Number(r.monto),
   tasaMensual: Number(r.tasa_mensual),
   fecha: String(r.fecha).slice(0, 10),
+  cuotas: r.cuotas == null ? undefined : Number(r.cuotas),
   nota: (r.nota as string | null) ?? undefined,
   archivado: Boolean(r.archivado),
 })
@@ -91,6 +96,9 @@ const prestamoAFila = (p: Prestamo) => ({
   id: p.id, cliente: p.cliente.trim(), telefono: p.telefono?.trim() || null,
   monto: p.monto, tasa_mensual: p.tasaMensual, fecha: p.fecha,
   nota: p.nota?.trim() || null, archivado: Boolean(p.archivado),
+  // Solo si es en cuotas: así un préstamo de solo intereses se guarda aunque
+  // falte la migración de las cuotas.
+  ...(p.cuotas ? { cuotas: p.cuotas } : {}),
 })
 const parcheAFila = (p: Partial<Prestamo>) => {
   const r: Row = {}
@@ -99,6 +107,7 @@ const parcheAFila = (p: Partial<Prestamo>) => {
   if (p.monto !== undefined) r.monto = p.monto
   if (p.tasaMensual !== undefined) r.tasa_mensual = p.tasaMensual
   if (p.fecha !== undefined) r.fecha = p.fecha
+  if ('cuotas' in p) r.cuotas = p.cuotas ?? null
   if ('nota' in p) r.nota = p.nota?.trim() || null
   if (p.archivado !== undefined) r.archivado = p.archivado
   return r
@@ -122,6 +131,9 @@ function motivo(error: unknown): string | null {
   const e = error as { code?: string; message?: string }
   if (e.code === '42501' || /row-level security/i.test(e.message ?? '')) return 'la función no está desbloqueada en esta cuenta'
   if (e.code === '42P01' || e.code === 'PGRST205') return 'falta aplicar la migración de préstamos en Supabase'
+  if ((e.code === 'PGRST204' || e.code === '42703') && /cuotas/.test(e.message ?? '')) {
+    return 'falta aplicar en Supabase la migración «prestamos_en_cuotas»'
+  }
   return e.message?.slice(0, 90) || 'el servidor rechazó el cambio'
 }
 

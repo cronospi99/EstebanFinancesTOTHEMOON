@@ -16,7 +16,7 @@ import { hoyEnZona } from '@/lib/zona'
 import { cn, haptic } from '@/lib/utils'
 
 type Filtro = 'activos' | 'mora' | 'saldados' | 'archivados'
-type Orden = 'cliente' | 'capital' | 'corte' | 'pago' | 'siguiente' | 'saldar' | 'cobrado' | 'mora'
+type Orden = 'cliente' | 'fecha' | 'capital' | 'corte' | 'pago' | 'siguiente' | 'saldar' | 'cobrado' | 'mora'
 
 interface Fila { p: Prestamo; e: EstadoPrestamo }
 
@@ -27,8 +27,9 @@ interface Fila { p: Prestamo; e: EstadoPrestamo }
  */
 const CLAVE: Record<Orden, (f: Fila) => number | string> = {
   cliente: (f) => f.p.cliente.toLocaleLowerCase('es'),
-  capital: (f) => f.e.capital,
-  corte: (f) => (f.e.mora > 0 ? '0' : f.e.venceHoy > 0 ? '1' : '2') + (f.e.proximoCorte ?? '9999'),
+  fecha: (f) => f.p.fecha,
+  capital: (f) => f.e.debe,
+  corte: (f) => (f.e.mora > 0 ? '0' + (f.e.vencidoDesde ?? '') : f.e.venceHoy > 0 ? '1' : '2' + (f.e.proximoCorte ?? '9999')),
   pago: (f) => f.e.pagoProximoCorte,
   siguiente: (f) => f.e.interesSiguienteMes,
   saldar: (f) => f.e.paraSaldarEnCorte,
@@ -134,7 +135,7 @@ export default function PrestamosPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tarjeta('Capital en la calle', formatMoney(resumen.capitalEnLaCalle),
           `${resumen.clientesActivos} cliente${resumen.clientesActivos === 1 ? '' : 's'} activo${resumen.clientesActivos === 1 ? '' : 's'}`)}
-        {tarjeta('Por cobrar en los cortes', formatMoney(resumen.porCobrarProximosCortes), 'intereses del próximo corte + lo vencido')}
+        {tarjeta('Por cobrar en los cortes', formatMoney(resumen.porCobrarProximosCortes), 'próximo corte (intereses o cuota) + lo vencido')}
         {tarjeta('Intereses este mes', formatMoney(resumen.interesCobradoEsteMes), `${formatMoney(resumen.interesCobrado)} en total`, 'text-accent-green')}
         {tarjeta('Vencido', formatMoney(resumen.moraTotal),
           resumen.clientesEnMora ? `${resumen.clientesEnMora} cliente${resumen.clientesEnMora === 1 ? '' : 's'}` : 'nadie atrasado',
@@ -142,8 +143,9 @@ export default function PrestamosPage() {
       </div>
       {resumen.capitalEnLaCalle > 0 && (
         <p className="px-1 text-[12px] leading-relaxed text-label-tertiary">
-          Si todos pagan solo intereses, la cartera deja{' '}
-          <span className="tnum font-semibold text-label-secondary">{formatMoney(resumen.interesMensualCartera)}</span> al mes.
+          La cartera deja{' '}
+          <span className="tnum font-semibold text-label-secondary">{formatMoney(resumen.interesMensualCartera)}</span> de
+          intereses al mes si nadie abona capital fuera de sus cuotas.
           Ya recuperaste {formatMoney(resumen.capitalRecuperado)} de {formatMoney(resumen.prestadoTotal)} prestados.
         </p>
       )}
@@ -176,18 +178,19 @@ export default function PrestamosPage() {
       {visibles.length ? (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] whitespace-nowrap text-[13px] lg:min-w-0 lg:text-[12.5px]">
+            <table className="w-full min-w-[980px] whitespace-nowrap text-[13px] lg:min-w-0 lg:text-[12.5px]">
               <thead className="border-b border-hairline text-left text-[11px]">
                 <tr>
                   {/* La primera columna se queda quieta al desplazar: sin el
                       nombre a la vista, la fila de números no es de nadie. */}
                   <Th col="cliente" className="sticky left-0 z-10 bg-surface">Cliente</Th>
                   <th className="px-3 py-2.5 font-medium uppercase tracking-wider text-label-tertiary lg:px-2">Estado</th>
-                  <Th col="capital" className="text-right">Debe</Th>
-                  <Th col="corte" titulo="Próximo corte">Corte</Th>
-                  <Th col="pago" className="text-right" titulo="Intereses a pagar en el próximo corte, con lo vencido">Intereses</Th>
+                  <Th col="fecha" titulo="Cuándo se le prestó">Prestado</Th>
+                  <Th col="capital" className="text-right" titulo="Solo intereses: el capital. En cuotas: lo que falta del total pactado">Debe</Th>
+                  <Th col="corte" titulo="Cuándo tiene que pagar: la cuota o el corte más viejo sin pagar si está en mora, y si no, el siguiente">Próx. pago</Th>
+                  <Th col="pago" className="text-right" titulo="Lo que paga en el próximo corte (intereses o la cuota), con lo vencido">A pagar</Th>
                   <Th col="saldar" className="text-right" titulo="Capital más intereses, el día del próximo corte">Para saldar</Th>
-                  <Th col="siguiente" className="text-right" titulo="Interés del mes siguiente si no abona más capital">Mes sig.</Th>
+                  <Th col="siguiente" className="text-right" titulo="Lo del mes siguiente: el interés si no abona más capital, o la cuota">Mes sig.</Th>
                   <Th col="mora" className="text-right" titulo="Vencido más lo que vence hoy">Debe hoy</Th>
                   <Th col="cobrado" className="text-right">Cobrado</Th>
                 </tr>
@@ -199,12 +202,32 @@ export default function PrestamosPage() {
                     <td className="sticky left-0 z-10 bg-surface px-3 py-3 lg:px-2 group-active:bg-fill-2">
                       <p className="max-w-[150px] truncate text-[14px] font-medium">{p.cliente}</p>
                       <p className="text-[11px] text-label-tertiary">
-                        {formatMoney(p.monto)} · {String(p.tasaMensual).replace('.', ',')} % · {formatDia(p.fecha)}
+                        {formatMoney(p.monto)} · {String(p.tasaMensual).replace('.', ',')} %
                       </p>
                     </td>
                     <td className="px-3 py-3 lg:px-2"><EstadoChip estado={e.estado} diasMora={e.diasMora} /></td>
-                    <td className="px-3 py-3 lg:px-2 text-right font-semibold">{formatMoney(e.capital)}</td>
-                    <td className="whitespace-nowrap px-3 py-3 lg:px-2">{e.proximoCorte ? formatDia(e.proximoCorte) : '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-3 lg:px-2 text-label-secondary">{formatDia(p.fecha)}</td>
+                    <td className="px-3 py-3 lg:px-2 text-right">
+                      <p className="font-semibold">{formatMoney(e.debe)}</p>
+                      {e.modalidad === 'cuotas' && (
+                        <p className="text-[11px] text-label-tertiary">{e.cuotasPagadas}/{e.plan.length} cuotas</p>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 lg:px-2">
+                      {/* En mora manda la fecha que no se pagó; la siguiente va debajo. */}
+                      {e.vencidoDesde ? (
+                        <>
+                          <p className="font-semibold text-accent-red">{formatDia(e.vencidoDesde)}</p>
+                          <p className="text-[11px] text-accent-red">hace {e.diasMora} d</p>
+                          {e.proximoCorte && <p className="text-[11px] text-label-tertiary">sig. {formatDia(e.proximoCorte)}</p>}
+                        </>
+                      ) : e.venceHoy > 0 ? (
+                        <>
+                          <p className="font-semibold text-accent-orange">Hoy</p>
+                          {e.proximoCorte && <p className="text-[11px] text-label-tertiary">sig. {formatDia(e.proximoCorte)}</p>}
+                        </>
+                      ) : e.proximoCorte ? formatDia(e.proximoCorte) : '—'}
+                    </td>
                     <td className={cn('px-3 py-3 lg:px-2 text-right font-semibold', e.mora > 0 && 'text-accent-red')}>{formatMoney(e.pagoProximoCorte)}</td>
                     <td className="px-3 py-3 lg:px-2 text-right">{formatMoney(e.paraSaldarEnCorte)}</td>
                     <td className="px-3 py-3 lg:px-2 text-right text-label-secondary">{formatMoney(e.interesSiguienteMes)}</td>
@@ -221,7 +244,8 @@ export default function PrestamosPage() {
                     {visibles.length} cliente{visibles.length === 1 ? '' : 's'}
                   </td>
                   <td />
-                  <td className="px-3 py-3 lg:px-2 text-right">{formatMoney(total((x) => x.e.capital))}</td>
+                  <td />
+                  <td className="px-3 py-3 lg:px-2 text-right">{formatMoney(total((x) => x.e.debe))}</td>
                   <td />
                   <td className="px-3 py-3 lg:px-2 text-right">{formatMoney(total((x) => x.e.pagoProximoCorte))}</td>
                   <td className="px-3 py-3 lg:px-2 text-right">{formatMoney(total((x) => x.e.paraSaldarEnCorte))}</td>
@@ -241,15 +265,17 @@ export default function PrestamosPage() {
           <p className="mt-1 text-[13px] leading-relaxed text-label-secondary">
             {prestamos.length
               ? 'Cambia el filtro o la búsqueda para ver al resto.'
-              : 'Registra el primero con el nombre del cliente, cuánto le prestas y a qué interés mensual.'}
+              : 'Registra el primero con el nombre del cliente, cuánto le prestas, a qué interés mensual y si paga en cuotas.'}
           </p>
         </Card>
       )}
 
       <p className="px-1 pb-4 text-[12px] leading-relaxed text-label-tertiary">
-        Cada mes se cobra el interés sobre el capital que había al empezar el mes. Un abono a capital
-        baja el interés desde el mes siguiente; el que ya empezó se cobra entero. Los pagos de
-        intereses cubren primero lo más viejo.
+        Solo intereses: cada mes se cobra el interés sobre el capital que había al empezar el mes. Un
+        abono a capital baja el interés desde el mes siguiente; el que ya empezó se cobra entero. Los
+        pagos de intereses cubren primero lo más viejo. Cuotas fijas: el interés de cada mes va sobre
+        lo prestado y se suma por todos los meses pactados; abonar no lo baja, y los pagos cubren
+        primero la cuota más vieja.
       </p>
 
       <PrestamoSheet open={nuevo} onClose={() => setNuevo(false)} />

@@ -537,8 +537,9 @@ acertó. En el Modo Demo, sin servidor que guarde códigos, el código es `DEMO`
 
 **El tablero** tiene arriba cuatro cifras —capital en la calle, lo que hay por
 cobrar en los próximos cortes, los intereses cobrados este mes y lo vencido— y
-debajo una tabla con una fila por cliente: cuánto debe, cuándo corta, los
-intereses de ese corte, cuánto para saldar ese día, cuánto le costará el mes
+debajo una tabla con una fila por cliente: cuándo se le prestó, cuánto debe,
+cuándo tiene que pagar —si está en mora, en rojo la fecha que no pagó, hace
+cuántos días y la siguiente—, lo que paga en ese corte (intereses o la cuota), cuánto para saldar ese día, cuánto le costará el mes
 siguiente, lo que debe hoy y lo que ya pagó en intereses. Se ordena por
 cualquier columna —por defecto, lo vencido primero y luego el corte más
 cercano: a quién le toca cobrar— y se filtra por activos, en mora, saldados y
@@ -548,6 +549,33 @@ archivo. En el móvil la tabla se desplaza de lado con el nombre fijo.
 intereses y abono a capital, con dos atajos para lo de todos los meses —«solo
 intereses» y «saldar todo»—. Antes de guardar se ve cómo queda. Debajo, el mes
 a mes (capital, interés, pagado, vencido) y el historial de pagos.
+
+### En cuotas fijas
+
+La otra forma de prestar, el «paga diario» a plazos: 1.000.000 al 10 % a un
+mes son 1.100.000; si el cliente lo quiere a 5 meses, se suma el 10 % por cada
+mes —1.500.000 en total— y paga **5 cuotas de 300.000** (200.000 de capital y
+100.000 de interés cada una). Al crear el préstamo se elige **Cómo paga →
+Cuotas fijas** y el número de cuotas (atajos 1, 2, 3, 4, 5, 6 y 12, o
+cualquiera hasta 360), y antes de guardar se ve el total, la cuota, la primera
+y la última fecha y cuánto se gana.
+
+- El interés va siempre sobre lo prestado, no sobre lo que queda: abonar
+  capital cuota a cuota no lo baja, porque lo pactado fue la plata y los
+  meses. Pagar antes no descuenta: para saldar se paga lo que falta del total.
+- Cada cuota vence el mismo día del mes que el préstamo. Ese día «vence hoy»;
+  desde el día siguiente, lo que falte es mora (sin interés extra).
+- En la ficha el pago es un solo monto —la cuota viene puesta— y la app lo
+  parte sola: cubre las cuotas de la más vieja a la más nueva, y en cada una
+  primero el interés y luego el capital. Un pago parcial deja la cuota
+  «abonada»; uno de más adelanta la siguiente.
+- La ficha enseña el saldo pendiente de lo pactado, cuántas cuotas van, el
+  capital que falta y el plan entero de cuotas con su estado. En la tabla,
+  «Debe» es lo que falta del total y debajo va «2/5 cuotas».
+- Cambiar el número de cuotas de un préstamo ya empezado rehace el plan con lo
+  ya pagado.
+
+### La regla de solo intereses
 
 La regla de cálculo, entera (ver `lib/prestamos.ts`):
 
@@ -1325,7 +1353,9 @@ Lo que falta, en orden de lo que más duele.
       sin ella, el botón de desbloquear préstamos dice que falta la migración.
       Y `20260930120000_ingreso_vinculado`: sin ella, confirmar un ingreso
       recurrente lo guarda igual pero sin el vínculo, y la fila no lo marca
-      como pagado tras recargar.
+      como pagado tras recargar. Y `20261015120000_prestamos_en_cuotas`: sin
+      ella, los préstamos de solo intereses se guardan igual, pero uno en
+      cuotas fijas no llega al servidor y la página de préstamos lo avisa.
 - [ ] **Volver a desplegar tras añadirlas.** Vercel congela las variables en el
       build. *Ajustes → Datos de mercado* confirma si el servidor las ve, y el
       pie de esa pantalla dice qué commit está sirviendo la app.

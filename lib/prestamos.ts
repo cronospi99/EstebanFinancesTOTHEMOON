@@ -39,6 +39,26 @@ import { diasEntre, sumarMeses } from './suscripciones'
  *   el mes en curso, que es como la cuenta cualquiera que presta.
  * - Sin capital no hay meses nuevos. El préstamo queda saldado cuando no
  *   queda capital ni interés por pagar de los meses que llegaron a empezar.
+ *
+ * ---------------------------------------------------------------------------
+ * La otra modalidad: cuotas fijas
+ * ---------------------------------------------------------------------------
+ * Es el «paga diario» a plazos: se presta 1.000.000 al 10 % y, si el cliente
+ * lo quiere a 5 meses, se le suma el 10 % por cada mes —1.500.000 en total—
+ * y paga 5 cuotas de 300.000. El interés va siempre sobre lo prestado, no
+ * sobre lo que queda: abonar capital cuota a cuota no lo baja, porque lo que
+ * se pactó fue la plata y los meses.
+ *
+ * - Cada cuota vence el mismo día del mes que el préstamo, como los cortes.
+ * - Cada cuota lleva el interés de un mes sobre lo prestado más su parte del
+ *   capital, en pesos enteros: si el capital no se parte exacto, unas cuotas
+ *   llevan un peso más que otras y la suma da justo lo prestado.
+ * - Lo que paga el cliente cubre las cuotas de la más vieja a la más nueva, y
+ *   dentro de cada una primero el interés y luego el capital. Por eso aquí la
+ *   cuenta sale del total pagado y no de cómo se partió cada pago.
+ * - Pagar antes no descuenta: para saldar hay que pagar lo que falta del
+ *   total pactado. Una cuota vencida sin pagar es mora; no genera interés
+ *   extra.
  */
 
 export interface Prestamo {
@@ -52,6 +72,11 @@ export interface Prestamo {
   tasaMensual: number
   /** El día en que se entregó la plata. De aquí salen todos los cortes. */
   fecha: string
+  /**
+   * En cuántas cuotas fijas se paga. Sin él, es de solo intereses: el
+   * capital se devuelve cuando el cliente quiera.
+   */
+  cuotas?: number
   nota?: string
   /**
    * Fuera de la tabla sin borrarse. Un cliente que ya pagó deja de interesar
@@ -76,7 +101,7 @@ export interface PagoPrestamo {
   nota?: string
 }
 
-export type EstadoMes = 'pagado' | 'en-curso' | 'vencido'
+export type EstadoMes = 'pagado' | 'en-curso' | 'vencido' | 'pendiente'
 
 export interface MesPrestamo {
   numero: number
@@ -91,11 +116,34 @@ export interface MesPrestamo {
   estado: EstadoMes
 }
 
+/** Una cuota del plan de un préstamo en cuotas fijas. */
+export interface CuotaPrestamo {
+  numero: number
+  /** Cuándo empieza el mes que paga esta cuota. */
+  inicio: string
+  vence: string
+  /** Lo que baja el capital. */
+  capital: number
+  interes: number
+  /** Capital más interés. */
+  valor: number
+  /** Cuánto de la cuota ya está cubierto por los pagos. */
+  pagado: number
+  /** 'en-curso' es la del mes que corre; 'pendiente', las que vienen después. */
+  estado: EstadoMes
+}
+
 export type EstadoCliente = 'al-dia' | 'vence-hoy' | 'mora' | 'saldado'
 
 export interface EstadoPrestamo {
+  modalidad: 'intereses' | 'cuotas'
   /** El capital que falta por devolver. */
   capital: number
+  /**
+   * Lo que el cliente debe según lo pactado. En solo intereses es el
+   * capital; en cuotas, todo lo que falta del total, intereses incluidos.
+   */
+  debe: number
   capitalPagado: number
   interesPagado: number
   /** Interés de todos los meses que ya empezaron. */
@@ -104,15 +152,20 @@ export interface EstadoPrestamo {
   mora: number
   /** Días desde el corte más viejo sin pagar. 0 si no hay mora. */
   diasMora: number
+  /** El corte (o la cuota) más viejo sin pagar, si ya pasó. Null sin mora. */
+  vencidoDesde: string | null
   /** Interés que vence hoy y todavía no se ha pagado. */
   venceHoy: number
   /** Lo que debería pagar hoy: la mora más lo que vence hoy. */
   pendienteHoy: number
   /** El siguiente corte después de hoy. Null si ya no corre ningún mes. */
   proximoCorte: string | null
-  /** Lo que falta del interés que vence en ese corte. */
+  /** Lo que falta del interés que vence en ese corte (en cuotas, lo que falta de esa cuota). */
   interesProximoCorte: number
-  /** Solo intereses para estar al día en el próximo corte: lo pendiente más lo de ese corte. */
+  /**
+   * Lo que tiene que pagar en el próximo corte para quedar al día: lo
+   * pendiente más los intereses de ese corte (en cuotas, la cuota).
+   */
   pagoProximoCorte: number
   /** Lo que tiene que pagar para cerrar el préstamo hoy mismo. */
   paraSaldarHoy: number
@@ -120,12 +173,23 @@ export interface EstadoPrestamo {
   paraSaldarEnCorte: number
   /**
    * El interés del mes que empieza en el próximo corte, si no abona nada más
-   * a capital. Es el «el mes que viene pagas 40.000».
+   * a capital. Es el «el mes que viene pagas 40.000». En cuotas, la cuota del
+   * mes siguiente a ese corte.
    */
   interesSiguienteMes: number
+  /** Los intereses que deja este préstamo en un mes, mientras siga corriendo. */
+  interesMensual: number
   /** Intereses pagados de más: cubren los meses que vengan. */
   saldoAFavor: number
+  /** Solo intereses: los meses que ya empezaron. En cuotas va vacío. */
   meses: MesPrestamo[]
+  /** En cuotas: el plan entero, con las que faltan. Vacío en solo intereses. */
+  plan: CuotaPrestamo[]
+  /** En cuotas: el total pactado, capital más todos los intereses. */
+  totalPactado: number
+  /** En cuotas: el valor de la primera cuota (si el capital no se parte exacto, alguna lleva un peso de diferencia). */
+  cuota: number
+  cuotasPagadas: number
   estado: EstadoCliente
 }
 
@@ -143,7 +207,112 @@ export const interesDelMes = (capital: number, tasaMensual: number) =>
  */
 export const efectivaAnual = (tasaMensual: number) => (Math.pow(1 + tasaMensual / 100, 12) - 1) * 100
 
+/** ¿Es de cuotas fijas? Un número de cuotas raro cae a solo intereses. */
+export const enCuotas = (p: Pick<Prestamo, 'cuotas'>) => Number.isInteger(p.cuotas) && (p.cuotas ?? 0) >= 1
+
+/**
+ * El plan de cuotas fijas: el interés de un mes sobre lo prestado en cada
+ * cuota, y el capital repartido en partes iguales. 1.000.000 al 10 % en 5
+ * cuotas son 5 de 300.000 (200.000 de capital y 100.000 de interés).
+ */
+export function planDeCuotas(p: Pick<Prestamo, 'monto' | 'tasaMensual' | 'fecha' | 'cuotas'>) {
+  const n = Math.max(1, Math.floor(p.cuotas ?? 1))
+  const interes = interesDelMes(p.monto, p.tasaMensual)
+  const capitalHasta = (k: number) => redondear(p.monto * k / n)
+  return Array.from({ length: n }, (_, i) => {
+    const capital = capitalHasta(i + 1) - capitalHasta(i)
+    return { numero: i + 1, inicio: sumarMeses(p.fecha, i), vence: sumarMeses(p.fecha, i + 1), capital, interes, valor: capital + interes }
+  })
+}
+
+/**
+ * Cómo se parte un pago en intereses y capital en un préstamo en cuotas:
+ * sigue a lo ya pagado, cuota por cuota, primero el interés de cada una. Es
+ * lo que se guarda en el pago para que el historial diga cuánto fue a cada
+ * cosa; la cuenta del préstamo sale igual del total pagado.
+ */
+export function repartirPagoEnCuotas(p: Prestamo, pagos: PagoPrestamo[], monto: number) {
+  const plan = planDeCuotas(p)
+  const yaPagado = pagos.filter((x) => x.prestamoId === p.id).reduce((s, x) => s + x.interes + x.capital, 0)
+  let antes = yaPagado
+  let resto = Math.max(0, monto)
+  let interes = 0
+  let capital = 0
+  for (const c of plan) {
+    if (resto <= 0) break
+    // Lo que ya estaba cubierto de esta cuota, primero el interés.
+    const cubierto = Math.min(c.valor, antes)
+    antes -= cubierto
+    const faltaInteres = Math.max(0, c.interes - cubierto)
+    const faltaCapital = c.valor - Math.max(cubierto, c.interes)
+    const aInteres = Math.min(faltaInteres, resto)
+    resto -= aInteres
+    const aCapital = Math.min(faltaCapital, resto)
+    resto -= aCapital
+    interes += aInteres
+    capital += aCapital
+  }
+  // Lo que pase del total pactado se anota como interés: es plata de más que
+  // no baja ningún capital.
+  return { interes: interes + resto, capital }
+}
+
+function estadoEnCuotas(p: Prestamo, pagos: PagoPrestamo[], hoy: string): EstadoPrestamo {
+  const propios = pagos.filter((x) => x.prestamoId === p.id)
+  const pagadoTotal = propios.reduce((s, x) => s + x.interes + x.capital, 0)
+
+  let disponible = pagadoTotal
+  let capitalPagado = 0
+  let interesPagado = 0
+  const plan: CuotaPrestamo[] = planDeCuotas(p).map((c) => {
+    const pagado = Math.min(c.valor, disponible)
+    disponible -= pagado
+    interesPagado += Math.min(c.interes, pagado)
+    capitalPagado += Math.max(0, pagado - c.interes)
+    const estado: EstadoMes = pagado >= c.valor ? 'pagado'
+      : c.vence < hoy ? 'vencido'
+      : c.inicio <= hoy ? 'en-curso' : 'pendiente'
+    return { ...c, pagado, estado }
+  })
+  const saldoAFavor = Math.max(0, disponible)
+  const totalPactado = plan.reduce((s, c) => s + c.valor, 0)
+  const debe = Math.max(0, totalPactado - pagadoTotal)
+  const capital = Math.max(0, p.monto - capitalPagado)
+
+  const falta = (c: CuotaPrestamo) => c.valor - c.pagado
+  const vencidas = plan.filter((c) => c.vence < hoy)
+  const mora = vencidas.reduce((s, c) => s + falta(c), 0)
+  const primeraSinPagar = vencidas.find((c) => falta(c) > 0)
+  const diasMora = primeraSinPagar ? diasEntre(primeraSinPagar.vence, hoy) : 0
+  const venceHoy = plan.filter((c) => c.vence === hoy).reduce((s, c) => s + falta(c), 0)
+  const pendienteHoy = mora + venceHoy
+
+  // La próxima cuota que falta después de hoy, y la que le sigue.
+  const futuras = plan.filter((c) => c.vence > hoy && falta(c) > 0)
+  const proxima = futuras[0]
+  const interesProximoCorte = proxima ? falta(proxima) : 0
+  const pagoProximoCorte = pendienteHoy + interesProximoCorte
+  const interesCausado = plan.filter((c) => c.inicio <= hoy).reduce((s, c) => s + c.interes, 0)
+
+  return {
+    modalidad: 'cuotas',
+    capital, debe, capitalPagado, interesPagado, interesCausado, mora, diasMora, venceHoy, pendienteHoy,
+    vencidoDesde: primeraSinPagar?.vence ?? null,
+    proximoCorte: proxima?.vence ?? null,
+    interesProximoCorte, pagoProximoCorte,
+    // Pagar antes no descuenta: se salda con lo que falta del total.
+    paraSaldarHoy: debe, paraSaldarEnCorte: debe,
+    interesSiguienteMes: futuras[1] ? falta(futuras[1]) : 0,
+    interesMensual: debe > 0 ? interesDelMes(p.monto, p.tasaMensual) : 0,
+    saldoAFavor, meses: [], plan, totalPactado,
+    cuota: plan[0]?.valor ?? 0,
+    cuotasPagadas: plan.filter((c) => c.estado === 'pagado').length,
+    estado: debe <= 0 ? 'saldado' : mora > 0 ? 'mora' : venceHoy > 0 ? 'vence-hoy' : 'al-dia',
+  }
+}
+
 export function estadoPrestamo(p: Prestamo, pagos: PagoPrestamo[], hoy: string): EstadoPrestamo {
+  if (enCuotas(p)) return estadoEnCuotas(p, pagos, hoy)
   const propios = pagos.filter((x) => x.prestamoId === p.id)
   const capitalPagado = propios.reduce((s, x) => s + x.capital, 0)
   const interesPagado = propios.reduce((s, x) => s + x.interes, 0)
@@ -204,9 +373,12 @@ export function estadoPrestamo(p: Prestamo, pagos: PagoPrestamo[], hoy: string):
   const interesSiguienteMes = capital > 0 ? interesDelMes(capital, p.tasaMensual) : 0
 
   return {
-    capital, capitalPagado, interesPagado, interesCausado, mora, diasMora, venceHoy, pendienteHoy,
+    modalidad: 'intereses',
+    capital, debe: capital, capitalPagado, interesPagado, interesCausado, mora, diasMora, venceHoy, pendienteHoy,
+    vencidoDesde: primeroSinPagar?.corte ?? null,
     proximoCorte, interesProximoCorte, pagoProximoCorte, paraSaldarHoy, paraSaldarEnCorte,
-    interesSiguienteMes, saldoAFavor, meses,
+    interesSiguienteMes, interesMensual: interesSiguienteMes, saldoAFavor, meses,
+    plan: [], totalPactado: 0, cuota: 0, cuotasPagadas: 0,
     estado: paraSaldarHoy <= 0 ? 'saldado' : mora > 0 ? 'mora' : venceHoy > 0 ? 'vence-hoy' : 'al-dia',
   }
 }
@@ -222,7 +394,10 @@ export interface ResumenCartera {
   capitalRecuperado: number
   interesCobrado: number
   interesCobradoEsteMes: number
-  /** Lo que entraría cada mes si todos pagan solo intereses. */
+  /**
+   * Los intereses que deja la cartera en un mes: en solo intereses, si nadie
+   * abona más capital; en cuotas, el interés fijo de cada cuota.
+   */
   interesMensualCartera: number
   /** Lo que hay que cobrar en los próximos cortes para que todos queden al día. */
   porCobrarProximosCortes: number
@@ -247,7 +422,7 @@ export function resumenCartera(prestamos: Prestamo[], pagos: PagoPrestamo[], hoy
     r.clientesActivos++
     if (e.estado === 'mora') r.clientesEnMora++
     r.capitalEnLaCalle += e.capital
-    r.interesMensualCartera += e.interesSiguienteMes
+    r.interesMensualCartera += e.interesMensual
     r.porCobrarProximosCortes += e.pagoProximoCorte
     r.moraTotal += e.mora
   }
