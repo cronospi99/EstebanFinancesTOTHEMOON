@@ -7,7 +7,7 @@ import { MoneyInput } from '@/components/ui/money-input'
 import { PrestamoSheet } from './prestamo-sheet'
 import { EstadoChip } from './estado-chip'
 import { formatDia, formatMoney, parseKeypad } from '@/lib/format'
-import { estadoPrestamo, type Prestamo } from '@/lib/prestamos'
+import { estadoPrestamo, repartirPagoEnCuotas, type Prestamo } from '@/lib/prestamos'
 import { usePrestamos } from '@/lib/use-prestamos'
 import { hoyEnZona } from '@/lib/zona'
 import { cn, haptic } from '@/lib/utils'
@@ -26,6 +26,9 @@ type Atajo = 'intereses' | 'saldar' | 'libre'
  * Cualquier otra cosa se escribe a mano, partida entre intereses y capital,
  * y antes de guardar se ve cómo queda: «queda debiendo 400.000 y el mes que
  * viene paga 40.000».
+ *
+ * En un préstamo en cuotas fijas el pago es un solo monto —la cuota, casi
+ * siempre— y la app lo parte sola en intereses y capital, siguiendo el plan.
  */
 export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo | null; onClose: () => void }) {
   const { prestamos, pagos, registrarPago, borrarPago, actualizarPrestamo, borrarPrestamo } = usePrestamos()
@@ -36,6 +39,8 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
   const [fecha, setFecha] = useState(hoy)
   const [interes, setInteres] = useState('')
   const [capital, setCapital] = useState('')
+  // En cuotas: lo que paga, sin partir.
+  const [monto, setMonto] = useState('')
   const [nota, setNota] = useState('')
   const [atajo, setAtajo] = useState<Atajo>('intereses')
   const [editando, setEditando] = useState(false)
@@ -55,6 +60,7 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
     if (!prestamo || !e) return
     setFecha(hoy)
     setInteres(interesQueToca(e) > 0 ? String(interesQueToca(e)) : '')
+    setMonto(interesQueToca(e) > 0 ? String(interesQueToca(e)) : '')
     setCapital('')
     setNota('')
     setAtajo('intereses')
@@ -64,8 +70,15 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prestamo?.id])
 
-  const interesNum = parseKeypad(interes)
-  const capitalNum = Math.min(parseKeypad(capital), e?.capital ?? 0)
+  const enCuotas = e?.modalidad === 'cuotas'
+  // En cuotas, el monto se parte solo siguiendo el plan; no pasa de lo que debe.
+  const montoNum = Math.min(parseKeypad(monto), e?.debe ?? 0)
+  const reparto = useMemo(
+    () => (p && enCuotas ? repartirPagoEnCuotas(p, pagos, montoNum) : null),
+    [p, enCuotas, pagos, montoNum],
+  )
+  const interesNum = reparto ? reparto.interes : parseKeypad(interes)
+  const capitalNum = reparto ? reparto.capital : Math.min(parseKeypad(capital), e?.capital ?? 0)
   const listo = interesNum > 0 || capitalNum > 0
 
   // Cómo queda si se guarda este pago, visto desde el día del pago (o desde
@@ -81,7 +94,12 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
   const elegir = (a: Atajo) => {
     haptic(6)
     setAtajo(a)
-    if (a === 'intereses') { setInteres(interesQueToca(e) > 0 ? String(interesQueToca(e)) : ''); setCapital('') }
+    if (a === 'intereses') {
+      setInteres(interesQueToca(e) > 0 ? String(interesQueToca(e)) : ''); setCapital('')
+      setMonto(interesQueToca(e) > 0 ? String(interesQueToca(e)) : '')
+    }
+    // En cuotas se salda con lo que falta del total pactado.
+    if (a === 'saldar') setMonto(String(e.debe))
     // Saldar hoy: todo el capital y los intereses que se deben hoy.
     if (a === 'saldar') {
       const intereses = e.paraSaldarHoy - e.capital
@@ -94,7 +112,7 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
     if (!listo) return
     haptic([14, 40, 22])
     await registrarPago({ prestamoId: p.id, fecha, interes: interesNum, capital: capitalNum, nota: nota.trim() || undefined })
-    setInteres(''); setCapital(''); setNota(''); setAtajo('libre')
+    setInteres(''); setCapital(''); setMonto(''); setNota(''); setAtajo('libre')
   }
 
   const cifra = (etiqueta: string, valor: string, detalle?: string, tono?: string) => (
@@ -117,7 +135,9 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
                 <EstadoChip estado={e.estado} diasMora={e.diasMora} />
               </div>
               <p className="text-[13px] text-label-secondary">
-                {formatMoney(p.monto)} al {String(p.tasaMensual).replace('.', ',')} % mensual · desde el {formatDia(p.fecha)}
+                {formatMoney(p.monto)} al {String(p.tasaMensual).replace('.', ',')} % mensual
+                {enCuotas && <> · {e.plan.length} cuota{e.plan.length === 1 ? '' : 's'} de {formatMoney(e.cuota)}</>}
+                {' '}· desde el {formatDia(p.fecha)}
               </p>
               {p.telefono && (
                 <a href={`tel:${p.telefono}`} className="mt-1 inline-flex items-center gap-1 text-[13px] font-medium text-accent-blue">
@@ -132,11 +152,27 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
           </div>
 
           {/* Cifras */}
+          {enCuotas ? (
+          <div className="mb-5 grid grid-cols-2 gap-2">
+            {cifra('Saldo pendiente', formatMoney(e.debe), `de ${formatMoney(e.totalPactado)} pactados`)}
+            {e.pendienteHoy > 0
+              ? cifra('A pagar hoy', formatMoney(e.pendienteHoy),
+                  e.mora > 0 ? `${formatMoney(e.mora)} vencidos desde el ${formatDia(e.vencidoDesde ?? hoy)} (${e.diasMora} d)` : 'cuota que vence hoy',
+                  e.mora > 0 ? 'text-accent-red' : 'text-accent-orange')
+              : cifra(e.proximoCorte ? `Cuota del ${formatDia(e.proximoCorte)}` : 'Próxima cuota', formatMoney(e.interesProximoCorte), 'próxima cuota')}
+            {cifra('Cuotas pagadas', `${e.cuotasPagadas} de ${e.plan.length}`,
+              e.plan.length ? `termina el ${formatDia(e.plan[e.plan.length - 1].vence)}` : undefined)}
+            {cifra('Capital pendiente', formatMoney(e.capital), e.capitalPagado > 0 ? `abonado ${formatMoney(e.capitalPagado)}` : undefined)}
+            {cifra('Cuota mensual', formatMoney(e.cuota),
+              e.plan[0] ? `${formatMoney(e.plan[0].capital)} capital + ${formatMoney(e.plan[0].interes)} interés` : undefined)}
+            {cifra('Intereses cobrados', formatMoney(e.interesPagado), `de ${formatMoney(e.totalPactado - p.monto)} pactados`, 'text-accent-green')}
+          </div>
+          ) : (
           <div className="mb-5 grid grid-cols-2 gap-2">
             {cifra('Capital pendiente', formatMoney(e.capital), e.capitalPagado > 0 ? `abonado ${formatMoney(e.capitalPagado)}` : undefined)}
             {e.pendienteHoy > 0
               ? cifra('A pagar hoy', formatMoney(e.pendienteHoy),
-                  e.mora > 0 ? `${formatMoney(e.mora)} vencidos hace ${e.diasMora} días` : 'intereses que vencen hoy',
+                  e.mora > 0 ? `${formatMoney(e.mora)} vencidos desde el ${formatDia(e.vencidoDesde ?? hoy)} (${e.diasMora} d)` : 'intereses que vencen hoy',
                   e.mora > 0 ? 'text-accent-red' : 'text-accent-orange')
               : cifra(e.proximoCorte ? `Intereses del ${formatDia(e.proximoCorte)}` : 'Intereses', formatMoney(e.interesProximoCorte), 'próximo corte')}
             {cifra('Para saldar hoy', formatMoney(e.paraSaldarHoy), 'capital + intereses que se deben')}
@@ -146,9 +182,12 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
             {cifra('El mes siguiente', formatMoney(e.interesSiguienteMes), 'si no abona más capital')}
             {cifra('Intereses cobrados', formatMoney(e.interesPagado), undefined, 'text-accent-green')}
           </div>
+          )}
           {e.saldoAFavor > 0 && (
             <p className="-mt-3 mb-5 px-1 text-[12px] text-label-tertiary">
-              Tiene {formatMoney(e.saldoAFavor)} de intereses pagados por adelantado: cubren los próximos meses.
+              {enCuotas
+                ? `Pagó ${formatMoney(e.saldoAFavor)} más de lo pactado.`
+                : `Tiene ${formatMoney(e.saldoAFavor)} de intereses pagados por adelantado: cubren los próximos meses.`}
             </p>
           )}
 
@@ -158,7 +197,7 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
               <p className="mb-3 text-[15px] font-semibold">Registrar pago</p>
               <div className="mb-3 flex gap-1.5">
                 {([
-                  ['intereses', 'Solo intereses'],
+                  ['intereses', enCuotas ? 'La cuota' : 'Solo intereses'],
                   ['saldar', 'Saldar todo'],
                   ['libre', 'Otro'],
                 ] as const).map(([a, texto]) => (
@@ -170,6 +209,12 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
                 ))}
               </div>
 
+              {enCuotas ? (
+                <div className="mb-3">
+                  <p className="mb-1 px-1 text-[11px] text-label-tertiary">Cuánto paga</p>
+                  <MoneyInput value={monto} onChange={(v) => { setMonto(v); setAtajo('libre') }} placeholder="0" />
+                </div>
+              ) : (
               <div className="mb-3 grid grid-cols-2 gap-2">
                 <div>
                   <p className="mb-1 px-1 text-[11px] text-label-tertiary">A intereses</p>
@@ -180,6 +225,7 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
                   <MoneyInput value={capital} onChange={(v) => { setCapital(v); setAtajo('libre') }} placeholder="0" />
                 </div>
               </div>
+              )}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 <input type="date" value={fecha} onChange={(ev) => ev.target.value && setFecha(ev.target.value)}
                   className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2.5 text-[15px] text-label focus:outline-none" />
@@ -187,12 +233,30 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
                   className="w-full rounded-xl border border-hairline bg-fill-2 px-3 py-2.5 text-[15px] text-label placeholder:text-label-tertiary focus:outline-none" />
               </div>
 
-              {parseKeypad(capital) > e.capital && (
+              {enCuotas && parseKeypad(monto) > e.debe && (
+                <p className="mb-2 px-1 text-[12px] text-accent-orange">
+                  No puede pasar de lo que falta del total: se toman {formatMoney(e.debe)}.
+                </p>
+              )}
+              {!enCuotas && parseKeypad(capital) > e.capital && (
                 <p className="mb-2 px-1 text-[12px] text-accent-orange">
                   El abono no puede pasar del capital pendiente: se toman {formatMoney(e.capital)}.
                 </p>
               )}
-              {despues && (
+              {despues && enCuotas && (
+                <p className="mb-3 px-1 text-[12px] leading-relaxed text-label-secondary">
+                  Van <b className="tnum text-label">{formatMoney(interesNum)}</b> a intereses
+                  y <b className="tnum text-label">{formatMoney(capitalNum)}</b> a capital.{' '}
+                  {despues.estado === 'saldado'
+                    ? 'Con este pago el préstamo queda saldado.'
+                    : <>Queda debiendo <b className="tnum text-label">{formatMoney(despues.debe)}</b>
+                        {' '}({despues.cuotasPagadas} de {despues.plan.length} cuotas pagadas)
+                        {despues.pendienteHoy > 0 && <>, con <b className="tnum text-accent-red">{formatMoney(despues.pendienteHoy)}</b> atrasados</>}.
+                        {despues.proximoCorte && <>
+                          {' '}El {formatDia(despues.proximoCorte)} paga <b className="tnum text-label">{formatMoney(despues.pagoProximoCorte)}</b>.</>}</>}
+                </p>
+              )}
+              {despues && !enCuotas && (
                 <p className="mb-3 px-1 text-[12px] leading-relaxed text-label-secondary">
                   {despues.estado === 'saldado'
                     ? 'Con este pago el préstamo queda saldado.'
@@ -212,7 +276,63 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
             </div>
           )}
 
+          {/* Plan de cuotas */}
+          {enCuotas && (
+            <>
+              <Etiqueta>Plan de cuotas</Etiqueta>
+              <div className="-mx-5 mb-6 overflow-x-auto px-5">
+                <table className="w-full min-w-[480px] text-[13px]">
+                  <thead>
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-label-tertiary">
+                      <th className="py-1.5 pr-2 font-medium">#</th>
+                      <th className="py-1.5 pr-2 font-medium">Vence</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Cuota</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Capital</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Interés</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Pagado</th>
+                      <th className="py-1.5 text-right font-medium">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tnum">
+                    {e.plan.map((c) => {
+                      const hoyVence = c.estado !== 'pagado' && c.vence === hoy
+                      return (
+                        <tr key={c.numero} className="border-t border-hairline">
+                          <td className="py-2 pr-2 text-label-tertiary">{c.numero}</td>
+                          <td className="py-2 pr-2">{formatDia(c.vence)}</td>
+                          <td className="py-2 pr-2 text-right font-medium">{formatMoney(c.valor)}</td>
+                          <td className="py-2 pr-2 text-right text-label-secondary">{formatMoney(c.capital)}</td>
+                          <td className="py-2 pr-2 text-right text-label-secondary">{formatMoney(c.interes)}</td>
+                          <td className="py-2 pr-2 text-right">{c.pagado > 0 ? formatMoney(c.pagado) : '—'}</td>
+                          <td className={cn('py-2 text-right text-[12px] font-medium',
+                            c.estado === 'pagado' ? 'text-accent-green'
+                              : c.estado === 'vencido' ? 'text-accent-red'
+                              : hoyVence ? 'text-accent-orange'
+                              : c.estado === 'en-curso' ? 'text-label-secondary' : 'text-label-tertiary')}>
+                            {c.estado === 'pagado' ? 'Pagada' : c.estado === 'vencido' ? 'Vencida' : hoyVence ? 'Vence hoy'
+                              : c.estado === 'en-curso' ? (c.pagado > 0 ? 'Abonada' : 'En curso') : c.pagado > 0 ? 'Abonada' : 'Pendiente'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot className="tnum text-[12px] font-semibold">
+                    <tr className="border-t border-hairline">
+                      <td className="py-2 pr-2" colSpan={2}>Total</td>
+                      <td className="py-2 pr-2 text-right">{formatMoney(e.totalPactado)}</td>
+                      <td className="py-2 pr-2 text-right">{formatMoney(p.monto)}</td>
+                      <td className="py-2 pr-2 text-right">{formatMoney(e.totalPactado - p.monto)}</td>
+                      <td className="py-2 pr-2 text-right text-accent-green">{formatMoney(e.totalPactado - e.debe)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+
           {/* Mes a mes */}
+          {!enCuotas && <>
           <Etiqueta>Mes a mes</Etiqueta>
           <div className="-mx-5 mb-6 overflow-x-auto px-5">
             <table className="w-full min-w-[440px] text-[13px]">
@@ -246,6 +366,7 @@ export function DetallePrestamoSheet({ prestamo, onClose }: { prestamo: Prestamo
               </tbody>
             </table>
           </div>
+          </>}
 
           {/* Historial de pagos */}
           <Etiqueta>Pagos</Etiqueta>
