@@ -230,6 +230,7 @@ export interface Institution {
  */
 export const CO_INSTITUTIONS: Institution[] = [
   // Banca tradicional
+  { name: 'Banco Falabella', group: 'Banca tradicional', color: '#F2F2F7', fg: '#1E7A35', short: 'BF', logo: 'banco-falabella' },
   { name: 'Banco de Bogotá', group: 'Banca tradicional', color: '#00489A', short: 'BdB', logo: 'banco-bogota' },
   { name: 'Bancolombia', group: 'Banca tradicional', color: '#FDDA24', fg: '#1A1A1A', short: 'BC', logo: 'bancolombia' },
   { name: 'BBVA', group: 'Banca tradicional', color: '#004481', short: 'BB', logo: 'bbva' },
@@ -242,6 +243,7 @@ export const CO_INSTITUTIONS: Institution[] = [
   { name: 'Lulo Bank', group: 'Neobancos y billeteras', color: '#00D1B0', fg: '#0A2B26', short: 'LB', logo: 'lulo' },
   { name: 'Nequi', group: 'Neobancos y billeteras', color: '#DA0081', short: 'N', logo: 'nequi' },
   { name: 'Nu', group: 'Neobancos y billeteras', color: '#820AD1', short: 'nu', logo: 'nu' },
+  { name: 'Uno', group: 'Neobancos y billeteras', color: '#1F6BFF', short: 'uno', logo: 'uno' },
   { name: 'Ualá', group: 'Neobancos y billeteras', color: '#F2F2F7', fg: '#1B1B4B', short: 'uá', logo: 'uala' },
 
   // Pagos
