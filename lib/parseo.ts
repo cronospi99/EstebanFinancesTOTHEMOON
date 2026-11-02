@@ -306,6 +306,10 @@ const BANCOS: [RegExp, string][] = [
   [/rappicard/i, 'RappiCard'],
   [/rappi ?(pay|cuenta)/i, 'RappiCuenta'],
   [/\bdale!?\b/i, 'Dale!'],
+  [/falabella/i, 'Banco Falabella'],
+  // «uno» suelto es una palabra común («uno de los pagos»): solo cuenta como
+  // entidad cuando el texto dice de qué se trata.
+  [/\b(?:banco|app|cuenta|tarjeta) uno\b|\buno ?(?:bank|app)\b/i, 'Uno'],
 ]
 
 const MESES: Record<string, number> = {
